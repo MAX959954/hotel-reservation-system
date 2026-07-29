@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -29,6 +30,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiError> handleIllegalState(IllegalStateException ex) {
         return build(HttpStatus.BAD_REQUEST , ex.getMessage() , null);
+    }
+
+    // Without this, an AccessDeniedException thrown by a denied @PreAuthorize check
+    // falls through to the generic Exception handler below and comes back as a 500
+    // instead of the 403 Spring Security would otherwise produce.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex) {
+        return build(HttpStatus.FORBIDDEN , "Access denied" , null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
