@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-29T00:00:00Z",
+  "title": "Design System: Folio",
+  "extensions": {
+    "colorMeta": {
+      "brass": { "role": "primary", "displayName": "Warm Brass", "canonical": "#c99a4b", "tonalRamp": ["#241a12", "#3a2a17", "#5a3f21", "#8a6a37", "#c99a4b", "#e3b96b", "#f0d49a", "#f8ecd2"] },
+      "ink": { "role": "neutral", "displayName": "Oxblood Leather", "canonical": "#1c1310", "tonalRamp": ["#0d0908", "#1c1310", "#241a15", "#2c1b17", "#3a1f1c", "#4a362d", "#6b4f3f", "#8f6f56"] },
+      "paper": { "role": "neutral", "displayName": "Ledger Paper", "canonical": "#f2e8d3", "tonalRamp": ["#5a4a35", "#7a6548", "#9c8360", "#bfa47e", "#dcc9a2", "#e9dcbf", "#f2e8d3", "#f8f1e2"] },
+      "stamp": { "role": "tertiary", "displayName": "Ink Stamp Red", "canonical": "#8c2f39", "tonalRamp": ["#2b0e11", "#421620", "#5c1f29", "#732833", "#8c2f39", "#b23f4c", "#d15a67", "#e88a93"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Ledger Headline", "purpose": "Hero and section headlines, Spectral, occasionally italic." },
+      "body": { "displayName": "Ledger Body", "purpose": "Running copy inside page panels and sections." },
+      "label": { "displayName": "Typed Label", "purpose": "Nav, buttons, folio numbers, badges — always uppercase Courier Prime." }
+    },
+    "shadows": [
+      { "name": "hero-object", "value": "0 30px 60px -30px rgba(0,0,0,0.65), 0 2px 0 rgba(0,0,0,0.25)", "purpose": "Makes the hero ledger spread read as a physical object; the system's only shadow." }
+    ],
+    "motion": [
+      { "name": "open-book", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The hero ledger's one-time entrance — scale and settle, like a cover opening." }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Filled brass action button used for search, register, and bookings CTAs.",
+      "html": "<button class=\"ds-btn-primary\">Search the register</button>",
+      "css": ".ds-btn-primary { font-family: 'Courier Prime', monospace; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: #1c1310; background: #c99a4b; border: none; border-radius: 3px; padding: 0.55rem 1rem; cursor: pointer; transition: background 0.15s ease; } .ds-btn-primary:hover { background: #e3b96b; } .ds-btn-primary:focus-visible { outline: 2px solid #f4ead2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Stamp",
+      "kind": "custom",
+      "refersTo": "stamp-badge",
+      "description": "Rotated oxblood badge reserved for confirmed process status (searched/reserved/confirmed); never clickable.",
+      "html": "<span class=\"ds-stamp\">Confirmed</span>",
+      "css": ".ds-stamp { font-family: 'Courier Prime', monospace; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: #b23f4c; border: 2px solid #b23f4c; border-radius: 3px; padding: 0.4rem 0.75rem; display: inline-block; transform: rotate(-3deg); opacity: 0.92; }"
+    },
+    {
+      "name": "Ledger Search Input",
+      "kind": "input",
+      "refersTo": "lookup-line",
+      "description": "Borderless input on a single ruled line; the rule is the only chrome.",
+      "html": "<div class=\"ds-lookup-line\"><input class=\"ds-lookup-input\" type=\"text\" placeholder=\"e.g. Lisbon\" /></div>",
+      "css": ".ds-lookup-line { display: flex; border-bottom: 1px solid #5a4a35; padding-bottom: 0.4rem; } .ds-lookup-input { flex: 1; border: none; background: transparent; font-family: 'Spectral', serif; font-style: italic; font-size: 1.15rem; color: #241a12; } .ds-lookup-input:focus { outline: none; } .ds-lookup-input::placeholder { color: #5a4a35; opacity: 0.6; }"
+    },
+    {
+      "name": "Folio Card",
+      "kind": "card",
+      "refersTo": "folio-card",
+      "description": "Hotel listing card with real image or ledger-line blank fallback with an initial.",
+      "html": "<a class=\"ds-folio-card\" href=\"#\"><div class=\"ds-folio-blank\"><span>M</span></div><div class=\"ds-folio-body\"><h3>Hotel Meridian</h3><p class=\"ds-folio-place\">Lisbon, Portugal</p></div></a>",
+      "css": ".ds-folio-card { display: flex; flex-direction: column; text-decoration: none; color: inherit; background: #241a15; border: 1px solid #4a362d; border-radius: 6px; overflow: hidden; transition: border-color 0.15s ease, transform 0.15s ease; } .ds-folio-card:hover { border-color: #8a6a37; transform: translateY(-2px); } .ds-folio-blank { aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(#f2e8d3 0px, #f2e8d3 20px, #c9b78f 21px); } .ds-folio-blank span { font-family: 'Spectral', serif; font-style: italic; font-size: 2.4rem; color: #8a6a37; } .ds-folio-body { padding: 0.9rem 1rem 1.1rem; } .ds-folio-body h3 { font-family: 'Spectral', serif; font-size: 1.05rem; color: #f4ead2; margin: 0 0 0.2rem; } .ds-folio-place { font-family: 'Courier Prime', monospace; font-size: 0.78rem; color: #a9967a; margin: 0; }"
+    },
+    {
+      "name": "Register Nav Tab",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Uppercase mono nav link with a brass underline on hover/active; the CTA variant fills solid brass.",
+      "html": "<nav class=\"ds-tabs\"><a class=\"ds-tab\" href=\"#\">Search</a><a class=\"ds-tab ds-tab-cta\" href=\"#\">Register</a></nav>",
+      "css": ".ds-tabs { display: flex; align-items: center; gap: 1.25rem; } .ds-tab { font-family: 'Courier Prime', monospace; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a9967a; text-decoration: none; padding: 0.3rem 0; border-bottom: 1px solid transparent; transition: color 0.15s ease, border-color 0.15s ease; } .ds-tab:hover { color: #e3b96b; border-bottom-color: #8a6a37; } .ds-tab-cta { color: #1c1310; background: #c99a4b; border-bottom: none; padding: 0.35rem 0.85rem; border-radius: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Guest Register",
+    "overview": "Folio's world is a hotel front desk at evening: a leather-bound ledger open under lamp light, brass fittings, ink stamps recording what just happened. The system exists to make a marketplace of independently-run hotels feel like one trusted, hand-kept record rather than a template of cards over a stock photo. Density is moderate and deliberate — ruled lines, folio numbers, and tabbed indices carry structure that would otherwise need borders and boxes.\nThe ground is dark by design (leather and wood, not paper) — the scene is evening, not a bright morning desk — with ivory ledger-paper appearing only inside bounded \"page\" panels, never as the page background. Brass is the one committed accent, carrying primary actions and structure. Oxblood ink-stamp red is confirmed and deliberately rare: reserved for status and confirmation, never for ordinary buttons or links, so its appearance always means something happened (booked, searched, confirmed).",
+    "keyCharacteristics": [
+      "Dark leather-and-wood ground, never a light theme",
+      "Brass is the single committed accent; oxblood is reserved for status only",
+      "Ruled \"ledger-line\" texture stands in for card borders and dividers",
+      "Spectral (serif) carries voice; Courier Prime (mono) carries data, labels, and controls"
+    ],
+    "rules": [
+      { "name": "The Rare Ink Rule", "body": "Oxblood only ever labels a status or confirmation. It never colors a primary button, a link, or decoration — if oxblood appears, something was confirmed.", "section": "colors" },
+      { "name": "The Two-Voice Rule", "body": "Only two font families exist in the whole system. Reach for weight, italics, or the Spectral/Courier Prime switch for emphasis — never a third font.", "section": "typography" },
+      { "name": "The One Shadow Rule", "body": "Shadow exists to make the ledger itself feel like an object on a desk. Nothing else casts one; folio cards and buttons signal state through border-color and background shifts instead.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the page background dark (leather/wood tones); ledger paper is a bounded material inside \"page\" panels only.",
+      "Do use Warm Brass for every functional primary action.",
+      "Do use Courier Prime, uppercase and tracked, for every label, nav item, and button.",
+      "Do keep the hero ledger's asymmetric outer-corner rounding (6px) with a square center spine."
+    ],
+    "donts": [
+      "Don't use oxblood/stamp red for a clickable control, link, or decoration — it is reserved for the three named status stamps.",
+      "Don't let ledger paper (--paper) become a full-page or full-section background; it belongs only inside a bounded page panel.",
+      "Don't add a card shadow anywhere except the single hero-object shadow.",
+      "Don't introduce a third font family; every new UI need is solved inside Spectral/Courier Prime."
+    ]
+  }
+}
