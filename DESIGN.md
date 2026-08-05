@@ -91,7 +91,7 @@ A dark, warm, low-saturation ground with exactly one bright committed accent and
 - **Umber Border** (`#4a362d`): hairline dividers and card borders on the dark ground.
 
 ### Named Rules
-**The Rare Ink Rule.** Oxblood (`#8c2f39` / `#b23f4c`) only ever labels a status or confirmation (the three "Searched / Reserved / Confirmed" stamps). It never colors a primary button, a link, or decoration — if oxblood appears, something was confirmed.
+**The Rare Ink Rule.** Oxblood (`#8c2f39` / `#b23f4c`) only ever labels a status, a confirmation, or "this is the current selection" (the three process stamps; the active row in a Ledger Select). It never colors a primary button, a link, or plain decoration.
 
 ## Typography
 
@@ -140,16 +140,22 @@ Every control reads as a desk object being used — stamped, ruled, or brass-fit
 - **Quick-city tabs:** paper-colored pill, 1px `paper-line` border, sits inside the ledger's right page; hover shifts border to `brass-dim` and background to full `paper`.
 
 ### Cards / Containers
-- **Folio card (five-star listing):** `ink-raised` background, 1px `border` (umber), 6px radius, image or ledger-line "blank" fallback with a brass-toned initial when no photo exists. Hover lifts 2px and brightens the border to `brass-dim` — no shadow.
+- **Folio card (five-star listing):** photo-forward, 4:3 image filling the top of the card, `ink-raised` background, 1px `border` (umber), 6px radius. A small pill badge (dark translucent fill, brass-dim border, Courier Prime label) sits over the top-right corner of the photo carrying the star rating — the one place a badge overlays imagery in the system. Hover lifts the card 2px, brightens the border to `brass-dim`, and scales the photo 5% (`cubic-bezier(0.16, 1, 0.3, 1)`, 0.4s) — no shadow. When a hotel has no `imageUrl`, a verified generic interior/exterior photo fills the same slot rather than a placeholder graphic; it is decorative representative imagery, never presented as that specific property.
 
 ### Inputs / Fields
-- **Ledger search line:** borderless input sitting on a single bottom rule (`paper-ink-soft`), Spectral italic, no visible box — the ruled ledger line is the input chrome.
+- **Ruled-line input (system-wide pattern):** borderless input sitting on a single bottom rule, Spectral italic, no visible box — the ruled line itself is the input chrome. On paper panels the rule is `paper-ink-soft`; on the dark ground (auth forms) it's `border`, brightening to `brass` on focus. This is the only input treatment in the system — never a filled or bordered box.
 
 ### Navigation
 - **Style:** dark cover-tone bar, brass wordmark in italic Spectral, tabs in uppercase Courier Prime with a brass underline on hover/active. The register/CTA link is the one nav item filled solid brass.
 
+### Ledger Select (language / currency)
+A native `<details>`-based dropdown used for the nav's language and currency pickers. The closed trigger matches a plain nav tab (uppercase Courier Prime, brass on hover); opening it drops a small ledger-paper index card below — the one place the bounded "page" paper material appears inside the dark nav, framed like a card being pulled from the register rather than a generic web menu. Options list in Courier Prime; the active option is set in oxblood, not brass — a deliberate, narrow exception to the Rare Ink Rule for "currently selected," distinct from "confirmed."
+
 ### Ink Stamp (signature component)
 A rotated, bordered oxblood label reserved exclusively for confirmed status (search executed, room reserved, booking confirmed). Its rarity is what makes it legible as "something happened" rather than decoration.
+
+### Spine (whole-surface structural pattern)
+A slim vertical brass rule (`border-right: 1px solid brass-dim`) carrying the "Folio" wordmark rotated with `writing-mode: vertical-rl`, used as the layout's sole ornament on utility surfaces that don't need a hero (login, register). Replaces the boxed-card auth pattern with an asymmetric grid: spine column + a left-aligned, vertically-centered content column of ruled-line fields. Below 720px the spine collapses to a horizontal rule at the top with the wordmark un-rotated, matching the hero's pattern of dropping structural elements rather than shrinking them. Every page in the system is a numbered folio (hero = I/II, login = III, register = IV) — the spine and the folio numbers are the same "one continuous register" idea expressed two ways.
 
 ## Do's and Don'ts
 

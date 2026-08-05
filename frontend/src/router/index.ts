@@ -1,10 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useAuthModalStore } from '../stores/authModal'
 
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
-    guestOnly?: boolean
   }
 }
 
@@ -13,19 +13,8 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/hotels',
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('../views/LoginView.vue'),
-      meta: { guestOnly: true },
-    },
-    {
-      path: '/register',
-      name: 'register',
-      component: () => import('../views/RegisterView.vue'),
-      meta: { guestOnly: true },
+      name: 'home',
+      component: () => import('../views/HomeView.vue'),
     },
     {
       path: '/hotels',
@@ -56,11 +45,8 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
-  }
-
-  if (to.meta.guestOnly && auth.isAuthenticated) {
-    return { name: 'hotels' }
+    useAuthModalStore().open(to.fullPath)
+    return { name: 'home' }
   }
 })
 

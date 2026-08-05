@@ -24,7 +24,11 @@ export const roomsApi = {
       .get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/capacity/${guestCount}`)
       .then((r) => r.data)
   },
-  getAvailableForHotel(hotelId: number) {
-    return http.get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/available`).then((r) => r.data)
+  getAvailableForHotel(hotelId: number, checkIn: string, checkOut: string, guestCount: number) {
+    return http
+      .get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/available`, {
+        params: { checkIn, checkOut, guestCount },
+      })
+      .then((r) => r.data)
   },
 }

@@ -45,17 +45,33 @@
       "name": "Ledger Search Input",
       "kind": "input",
       "refersTo": "lookup-line",
-      "description": "Borderless input on a single ruled line; the rule is the only chrome.",
+      "description": "Borderless input on a single ruled line; the rule is the only chrome. System-wide pattern — on dark grounds (auth forms) the rule uses --border/--brass instead of the paper tones.",
       "html": "<div class=\"ds-lookup-line\"><input class=\"ds-lookup-input\" type=\"text\" placeholder=\"e.g. Lisbon\" /></div>",
       "css": ".ds-lookup-line { display: flex; border-bottom: 1px solid #5a4a35; padding-bottom: 0.4rem; } .ds-lookup-input { flex: 1; border: none; background: transparent; font-family: 'Spectral', serif; font-style: italic; font-size: 1.15rem; color: #241a12; } .ds-lookup-input:focus { outline: none; } .ds-lookup-input::placeholder { color: #5a4a35; opacity: 0.6; }"
+    },
+    {
+      "name": "Auth Spine",
+      "kind": "custom",
+      "refersTo": "spine",
+      "description": "Vertical brass rule with a rotated wordmark, used as the sole structural ornament on utility surfaces (login, register) instead of a boxed card.",
+      "html": "<div class=\"ds-auth-page\"><aside class=\"ds-spine\"><span class=\"ds-spine-mark\">Folio</span></aside><div class=\"ds-auth-content\">form goes here</div></div>",
+      "css": ".ds-auth-page { display: grid; grid-template-columns: minmax(96px, 16vw) 1fr; min-height: 100vh; } .ds-spine { border-right: 1px solid #8a6a37; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 3rem; } .ds-spine-mark { writing-mode: vertical-rl; font-family: 'Spectral', serif; font-style: italic; font-weight: 600; font-size: 1.15rem; color: #8a6a37; } @media (max-width: 720px) { .ds-auth-page { grid-template-columns: 1fr; } .ds-spine { border-right: none; border-bottom: 1px solid #8a6a37; writing-mode: horizontal-tb; } }"
     },
     {
       "name": "Folio Card",
       "kind": "card",
       "refersTo": "folio-card",
-      "description": "Hotel listing card with real image or ledger-line blank fallback with an initial.",
-      "html": "<a class=\"ds-folio-card\" href=\"#\"><div class=\"ds-folio-blank\"><span>M</span></div><div class=\"ds-folio-body\"><h3>Hotel Meridian</h3><p class=\"ds-folio-place\">Lisbon, Portugal</p></div></a>",
-      "css": ".ds-folio-card { display: flex; flex-direction: column; text-decoration: none; color: inherit; background: #241a15; border: 1px solid #4a362d; border-radius: 6px; overflow: hidden; transition: border-color 0.15s ease, transform 0.15s ease; } .ds-folio-card:hover { border-color: #8a6a37; transform: translateY(-2px); } .ds-folio-blank { aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(#f2e8d3 0px, #f2e8d3 20px, #c9b78f 21px); } .ds-folio-blank span { font-family: 'Spectral', serif; font-style: italic; font-size: 2.4rem; color: #8a6a37; } .ds-folio-body { padding: 0.9rem 1rem 1.1rem; } .ds-folio-body h3 { font-family: 'Spectral', serif; font-size: 1.05rem; color: #f4ead2; margin: 0 0 0.2rem; } .ds-folio-place { font-family: 'Courier Prime', monospace; font-size: 0.78rem; color: #a9967a; margin: 0; }"
+      "description": "Photo-forward hotel listing card: 4:3 image (real or verified generic fallback) with a star-rating pill overlaid top-right.",
+      "html": "<a class=\"ds-folio-card\" href=\"#\"><div class=\"ds-folio-image\"><img src=\"https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=800&q=80&auto=format&fit=crop\" alt=\"Hotel Meridian\" /><span class=\"ds-folio-rating\">★ 5</span></div><div class=\"ds-folio-body\"><h3>Hotel Meridian</h3><p class=\"ds-folio-place\">Lisbon, Portugal</p></div></a>",
+      "css": ".ds-folio-card { display: flex; flex-direction: column; text-decoration: none; color: inherit; background: #241a15; border: 1px solid #4a362d; border-radius: 6px; overflow: hidden; transition: border-color 0.15s ease, transform 0.15s ease; } .ds-folio-card:hover { border-color: #8a6a37; transform: translateY(-2px); } .ds-folio-image { position: relative; aspect-ratio: 4/3; overflow: hidden; background: #2c1b17; } .ds-folio-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s cubic-bezier(0.16,1,0.3,1); } .ds-folio-card:hover .ds-folio-image img { transform: scale(1.05); } .ds-folio-rating { position: absolute; top: 0.65rem; right: 0.65rem; font-family: 'Courier Prime', monospace; font-size: 0.72rem; color: #f4ead2; background: rgba(28,19,16,0.72); border: 1px solid #8a6a37; border-radius: 999px; padding: 0.2rem 0.55rem; } .ds-folio-body { padding: 0.9rem 1rem 1.1rem; } .ds-folio-body h3 { font-family: 'Spectral', serif; font-size: 1.05rem; color: #f4ead2; margin: 0 0 0.2rem; } .ds-folio-place { font-family: 'Courier Prime', monospace; font-size: 0.78rem; color: #a9967a; margin: 0; }"
+    },
+    {
+      "name": "Ledger Select",
+      "kind": "custom",
+      "refersTo": "ledger-select",
+      "description": "Native <details>-based dropdown for the nav's language/currency pickers; opens a small ledger-paper index card below a plain nav-tab trigger.",
+      "html": "<details class=\"ds-ledger-select\"><summary class=\"ds-ledger-select-trigger\">EN</summary><ul class=\"ds-ledger-select-menu\"><li><button class=\"ds-ledger-select-option active\">English</button></li><li><button class=\"ds-ledger-select-option\">Español</button></li></ul></details>",
+      "css": ".ds-ledger-select { position: relative; } .ds-ledger-select-trigger { font-family: 'Courier Prime', monospace; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a9967a; cursor: pointer; list-style: none; padding: 0.3rem 0.1rem; } .ds-ledger-select-trigger::-webkit-details-marker { display: none; } .ds-ledger-select-menu { position: absolute; top: calc(100% + 0.6rem); right: 0; min-width: 9.5rem; background: #f2e8d3; background-image: repeating-linear-gradient(#f2e8d3 0px, #f2e8d3 24px, #c9b78f 25px); border: 1px solid #8a6a37; border-radius: 3px; padding: 0.35rem; box-shadow: 0 12px 24px -12px rgba(0,0,0,0.6); list-style: none; margin: 0; } .ds-ledger-select-option { display: block; width: 100%; text-align: left; background: none; border: none; font-family: 'Courier Prime', monospace; font-size: 0.8rem; color: #241a12; padding: 0.3rem 0.5rem; cursor: pointer; } .ds-ledger-select-option.active { color: #8c2f39; font-weight: 700; }"
     },
     {
       "name": "Register Nav Tab",
@@ -76,7 +92,7 @@
       "Spectral (serif) carries voice; Courier Prime (mono) carries data, labels, and controls"
     ],
     "rules": [
-      { "name": "The Rare Ink Rule", "body": "Oxblood only ever labels a status or confirmation. It never colors a primary button, a link, or decoration — if oxblood appears, something was confirmed.", "section": "colors" },
+      { "name": "The Rare Ink Rule", "body": "Oxblood only ever labels a status, a confirmation, or the current selection in a Ledger Select. It never colors a primary button, a link, or plain decoration.", "section": "colors" },
       { "name": "The Two-Voice Rule", "body": "Only two font families exist in the whole system. Reach for weight, italics, or the Spectral/Courier Prime switch for emphasis — never a third font.", "section": "typography" },
       { "name": "The One Shadow Rule", "body": "Shadow exists to make the ledger itself feel like an object on a desk. Nothing else casts one; folio cards and buttons signal state through border-color and background shifts instead.", "section": "elevation" }
     ],

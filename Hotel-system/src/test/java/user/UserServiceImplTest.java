@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 
@@ -33,121 +34,189 @@ public class UserServiceImplTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private OtpService otpService;
+
+    @Mock
+    private GoogleTokenVerifier googleTokenVerifier;
+
     @InjectMocks
     private UserServiceImpl userService;
 
-    private RegisterRequest registerRequest;
-    private LogInRequest logInRequest;
     private User user;
 
     @BeforeEach
     void setUp() {
-        registerRequest = new RegisterRequest();
-        registerRequest.setFirstName("Jane");
-        registerRequest.setLastName("Doe");
-        registerRequest.setEmail("jane@example.com");
-        registerRequest.setPassword("password123");
-        registerRequest.setPhone("+123456789");
-
-        logInRequest = new LogInRequest();
-        logInRequest.setEmail("jane@example.com");
-        logInRequest.setPassword("password123");
-
         user = User.builder()
                 .id(1L)
                 .firstName("Jane")
                 .lastName("Doe")
                 .email("jane@example.com")
-                .password_hash("hashed")
-                .phone("+123456789")
+                .passwordHash("hashed")
                 .roles(Set.of(Roles.GUEST))
                 .emailVerified(true)
                 .enabled(true)
-                .accountStatus(AccountStatus.PENDING)
+                .accountStatus(AccountStatus.APPROVED)
                 .build();
     }
 
-    // ---------- register ----------
+    // ---------- requestOtp ----------
 
     @Test
-    void register_savesUserAndReturnsToken_whenValid() {
+    void requestOtp_delegatesToOtpService() {
+        userService.requestOtp("jane@example.com");
+
+        verify(otpService).requestCode("jane@example.com");
+    }
+
+    // ---------- verifyOtp ----------
+
+    @Test
+    void verifyOtp_logsInDirectly_whenAccountAlreadyExists() {
+        OtpVerifyPayload payload = new OtpVerifyPayload();
+        payload.setIdentifier("jane@example.com");
+        payload.setCode("123456");
+
+        given(otpService.verifyCode("jane@example.com", "123456")).willReturn("jane@example.com");
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+        given(jwtService.generateToken("jane@example.com", Set.of(Roles.GUEST))).willReturn("token_abc");
+
+        OtpVerifyResponse response = userService.verifyOtp(payload);
+
+        assertThat(response.isNewAccount()).isFalse();
+        assertThat(response.getAuth().getToken()).isEqualTo("token_abc");
+        assertThat(response.getAuth().getUserId()).isEqualTo(1L);
+        assertThat(response.getVerificationTicket()).isNull();
+    }
+
+    @Test
+    void verifyOtp_returnsVerificationTicket_whenNoAccountYet() {
+        OtpVerifyPayload payload = new OtpVerifyPayload();
+        payload.setIdentifier("new@example.com");
+        payload.setCode("123456");
+
+        given(otpService.verifyCode("new@example.com", "123456")).willReturn("new@example.com");
+        given(userRepository.findByEmail("new@example.com")).willReturn(Optional.empty());
+        given(jwtService.generateOtpTicket("new@example.com")).willReturn("ticket_abc");
+
+        OtpVerifyResponse response = userService.verifyOtp(payload);
+
+        assertThat(response.isNewAccount()).isTrue();
+        assertThat(response.getVerificationTicket()).isEqualTo("ticket_abc");
+        assertThat(response.getAuth()).isNull();
+    }
+
+    @Test
+    void verifyOtp_propagates_whenCodeInvalid() {
+        OtpVerifyPayload payload = new OtpVerifyPayload();
+        payload.setIdentifier("jane@example.com");
+        payload.setCode("000000");
+
+        given(otpService.verifyCode("jane@example.com", "000000"))
+                .willThrow(new IllegalStateException("Incorrect code."));
+
+        assertThatThrownBy(() -> userService.verifyOtp(payload))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Incorrect code.");
+    }
+
+    // ---------- completeRegistration ----------
+
+    @Test
+    void completeRegistration_savesUserAndReturnsToken_whenValid() {
+        CompleteRegistrationRequest request = new CompleteRegistrationRequest();
+        request.setVerificationTicket("ticket_abc");
+        request.setFirstName("Jane");
+        request.setLastName("Doe");
+        request.setDateOfBirth(LocalDate.of(1995, 4, 12));
+        request.setPassword("password123");
+
+        given(otpService.resolveVerifiedIdentifier("ticket_abc")).willReturn("jane@example.com");
         given(userRepository.existsByEmail("jane@example.com")).willReturn(false);
-        given(userRepository.existsByPhone("+123456789")).willReturn(false);
         given(passwordEncoder.encode("password123")).willReturn("hashed");
         given(jwtService.generateToken("jane@example.com", Set.of(Roles.GUEST))).willReturn("token_abc");
 
-        AuthResponse response = userService.register(registerRequest);
+        AuthResponse response = userService.completeRegistration(request);
 
         assertThat(response.getToken()).isEqualTo("token_abc");
         assertThat(response.getEmail()).isEqualTo("jane@example.com");
-        assertThat(response.getRoles()).containsExactly(Roles.GUEST);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         User saved = captor.getValue();
 
-        assertThat(saved.getPassword_hash()).isEqualTo("hashed");
-        assertThat(saved.getRoles()).containsExactly(Roles.GUEST);
-        assertThat(saved.getAccountStatus()).isEqualTo(AccountStatus.PENDING);
+        assertThat(saved.getEmail()).isEqualTo("jane@example.com");
+        assertThat(saved.getPasswordHash()).isEqualTo("hashed");
+        assertThat(saved.getDateOfBirth()).isEqualTo(LocalDate.of(1995, 4, 12));
         assertThat(saved.isEmailVerified()).isTrue();
         assertThat(saved.isEnabled()).isTrue();
     }
 
     @Test
-    void register_throws_whenEmailAlreadyInUse() {
+    void completeRegistration_throws_whenAccountAlreadyExists() {
+        CompleteRegistrationRequest request = new CompleteRegistrationRequest();
+        request.setVerificationTicket("ticket_abc");
+        request.setFirstName("Jane");
+        request.setLastName("Doe");
+        request.setDateOfBirth(LocalDate.of(1995, 4, 12));
+        request.setPassword("password123");
+
+        given(otpService.resolveVerifiedIdentifier("ticket_abc")).willReturn("jane@example.com");
         given(userRepository.existsByEmail("jane@example.com")).willReturn(true);
 
-        assertThatThrownBy(() -> userService.register(registerRequest))
+        assertThatThrownBy(() -> userService.completeRegistration(request))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Email already in use");
+                .hasMessageContaining("already exists");
 
         verify(userRepository, never()).save(any());
     }
 
-    @Test
-    void register_throws_whenPhoneAlreadyInUse() {
-        given(userRepository.existsByEmail("jane@example.com")).willReturn(false);
-        given(userRepository.existsByPhone("+123456789")).willReturn(true);
-
-        assertThatThrownBy(() -> userService.register(registerRequest))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Phone already in use");
-
-        verify(userRepository, never()).save(any());
-    }
-
-    // ---------- logIn ----------
+    // ---------- authenticateWithGoogle ----------
 
     @Test
-    void logIn_returnsToken_whenCredentialsValid() {
-        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
-        given(passwordEncoder.matches("password123", "hashed")).willReturn(true);
+    void authenticateWithGoogle_createsAccount_whenNoneExists() {
+        GoogleTokenVerifier.GoogleIdentity identity = GoogleTokenVerifier.GoogleIdentity.builder()
+                .email("jane@example.com")
+                .firstName("Jane")
+                .lastName("Doe")
+                .subject("google-sub-1")
+                .build();
+
+        given(googleTokenVerifier.verify("id_token_abc")).willReturn(identity);
+        given(userRepository.findByGoogleId("google-sub-1")).willReturn(Optional.empty());
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.empty());
         given(jwtService.generateToken("jane@example.com", Set.of(Roles.GUEST))).willReturn("token_abc");
 
-        AuthResponse response = userService.logIn(logInRequest);
+        AuthResponse response = userService.authenticateWithGoogle("id_token_abc");
 
         assertThat(response.getToken()).isEqualTo("token_abc");
-        assertThat(response.getEmail()).isEqualTo("jane@example.com");
-        assertThat(response.getRoles()).containsExactly(Roles.GUEST);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getGoogleId()).isEqualTo("google-sub-1");
+        assertThat(captor.getValue().getEmail()).isEqualTo("jane@example.com");
     }
 
     @Test
-    void logIn_throws_whenUserNotFound() {
-        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.empty());
+    void authenticateWithGoogle_linksExistingAccount_whenEmailMatches() {
+        GoogleTokenVerifier.GoogleIdentity identity = GoogleTokenVerifier.GoogleIdentity.builder()
+                .email("jane@example.com")
+                .firstName("Jane")
+                .lastName("Doe")
+                .subject("google-sub-1")
+                .build();
 
-        assertThatThrownBy(() -> userService.logIn(logInRequest))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("User not found");
-    }
-
-    @Test
-    void logIn_throws_whenPasswordInvalid() {
+        given(googleTokenVerifier.verify("id_token_abc")).willReturn(identity);
+        given(userRepository.findByGoogleId("google-sub-1")).willReturn(Optional.empty());
         given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
-        given(passwordEncoder.matches("password123", "hashed")).willReturn(false);
+        given(jwtService.generateToken("jane@example.com", Set.of(Roles.GUEST))).willReturn("token_abc");
 
-        assertThatThrownBy(() -> userService.logIn(logInRequest))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Invalid password");
+        userService.authenticateWithGoogle("id_token_abc");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getGoogleId()).isEqualTo("google-sub-1");
+        assertThat(captor.getValue()).isSameAs(user);
     }
 
     // ---------- loadUserByUsername ----------
@@ -170,6 +239,18 @@ public class UserServiceImplTest {
     @Test
     void loadUserByUsername_accountNonLocked_isFalse_whenLocked() {
         user.setAccountStatus(AccountStatus.LOCKED);
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+
+        UserDetails details = userService.loadUserByUsername("jane@example.com");
+
+        assertThat(details.isAccountNonLocked()).isFalse();
+    }
+
+    @Test
+    void loadUserByUsername_accountNonLocked_isFalse_whenSuspended() {
+        // Denylisting only LOCKED/BANNED would silently let this and DEACTIVATED/REJECTED/
+        // ANONYMIZED accounts through — the allowlist in loadUserByUsername must catch it too.
+        user.setAccountStatus(AccountStatus.SUSPENDED);
         given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
 
         UserDetails details = userService.loadUserByUsername("jane@example.com");

@@ -2,9 +2,13 @@ package user;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -22,6 +26,7 @@ public class OtpService {
     private final MailService mailService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${app.otp.expiry-minutes:10}")
     private long expiryMinutes;
@@ -34,7 +39,7 @@ public class OtpService {
         String normalized = normalize(identifier);
         LocalDateTime now = LocalDateTime.now();
 
-        List<OtpCode> recent = otpCodeRepository.findByIdentifierAndCreatedAtAfter(normalized, now.minusHours(1));
+        List<OtpCode> recent = otpCodeRepository.findByIdentifierAndCreatedAtAfterOrderByCreatedAtAsc(normalized, now.minusHours(1));
         if (!recent.isEmpty()) {
             LocalDateTime lastSentAt = recent.get(recent.size() - 1).getCreatedAt();
             if (lastSentAt.plusSeconds(resendCooldownSeconds).isAfter(now)) {
@@ -54,11 +59,21 @@ public class OtpService {
                 .build();
         otpCodeRepository.save(otp);
 
-        mailService.sendOtpCode(normalized, code);
+        // Published now but only delivered after the transaction commits (see
+        // sendOtpEmail below) — the OTP row must never outlive a mail send that
+        // never happened, but sending mail also has no business holding the
+        // connection this @Transactional method is using.
+        eventPublisher.publishEvent(new OtpCodeGeneratedEvent(normalized, code));
+    }
+
+    @Async("mailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendOtpEmail(OtpCodeGeneratedEvent event) {
+        mailService.sendOtpCode(event.identifier(), event.code());
     }
 
     /**
-     * @return a short-lived ticket proving {@code identifier} owns this code.
+     * @return the normalized identifier, once the code is confirmed to belong to it.
      */
     @Transactional
     public String verifyCode(String identifier, String code) {
@@ -84,7 +99,7 @@ public class OtpService {
         otp.setConsumed(true);
         otpCodeRepository.save(otp);
 
-        return jwtService.generateOtpTicket(normalized);
+        return normalized;
     }
 
     public String resolveVerifiedIdentifier(String ticket) {

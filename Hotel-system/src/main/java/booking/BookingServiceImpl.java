@@ -2,6 +2,7 @@ package booking;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import room.Room;
@@ -30,7 +31,10 @@ public class BookingServiceImpl implements BookingService{
         }
 
         Room room = findByRoomId(request.getRoomId());
-        User user = findByUserId (request.getUserId());
+        // The booking always belongs to whoever the JWT says is calling — never to a
+        // client-supplied ID, which would let any authenticated user book on someone
+        // else's account by editing the request body.
+        User user = currentUser();
 
         if (room.getStatus() != RoomStatus.AVAILABLE){
             throw new IllegalStateException("Room id not available");
@@ -47,7 +51,11 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Guest count exceeds room capacity of " + room.getCapacity());
         }
 
-        long nights = ChronoUnit.DAYS.between(request.getCheckIn() , request.getCheckOut());
+        // Nights is a calendar-date span (industry-standard "nights stayed"), not raw
+        // elapsed hours — check-in/check-out happen at different times of day (e.g. 3pm/
+        // 11am), so ChronoUnit.DAYS.between on the full timestamps would floor a 3-night
+        // stay (Mon 3pm -> Thu 11am, 68 hours) down to 2.
+        long nights = ChronoUnit.DAYS.between(request.getCheckIn().toLocalDate() , request.getCheckOut().toLocalDate());
         double totalPrirce = nights * room.getPrice_per_night();
 
         Booking booking = Booking.builder()
@@ -159,8 +167,10 @@ public class BookingServiceImpl implements BookingService{
         return roomRepository.findByIdForUpdate(roomId).orElseThrow(() -> new IllegalStateException("Room not found by that id " + roomId));
     }
 
-    private User findByUserId (Long userId ) {
-        return userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("User not found by that email"+ userId));
+    private User currentUser() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
     }
 
     private BookingResponse toResponse(Booking booking) {

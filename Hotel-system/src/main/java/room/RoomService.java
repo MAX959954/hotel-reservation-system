@@ -19,7 +19,7 @@ public interface RoomService {
 
     List<RoomResponse> getByHotelAndCapacity(Long hotelId , Integer guestCount);
 
-    List<RoomResponse> getAvailableRooms(Long hotelId , LocalDateTime checkIn , LocalDateTime checkOut);
+    List<RoomResponse> getAvailableRooms(Long hotelId , LocalDateTime checkIn , LocalDateTime checkOut , Integer guestCount);
 
     RoomResponse updateStatus(Long id , RoomStatus status);
 

@@ -64,8 +64,8 @@ public class RoomServiceImpl implements RoomService{
 
 
     @Override
-    public List<RoomResponse> getAvailableRooms(Long hotelId , LocalDateTime checkIn , LocalDateTime checkOut){
-        return roomRepository.findAvailableRooms(hotelId , checkIn , checkOut).stream().map(this :: toResponse).toList();
+    public List<RoomResponse> getAvailableRooms(Long hotelId , LocalDateTime checkIn , LocalDateTime checkOut , Integer guestCount){
+        return roomRepository.findAvailableRooms(hotelId , checkIn , checkOut , guestCount).stream().map(this :: toResponse).toList();
     }
 
     @Override

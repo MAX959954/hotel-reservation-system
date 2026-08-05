@@ -1,36 +1,37 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { bookingsApi } from '../api/bookings'
+import { useAuthStore } from '../stores/auth'
 import type { BookingResponse } from '../types/booking'
+
+const { t, locale } = useI18n()
+const auth = useAuthStore()
 
 const bookings = ref<BookingResponse[]>([])
 const loading = ref(false)
 const error = ref('')
 
-// TODO: fetching by userId requires the current user's numeric id, which the
-// auth store doesn't have yet (see TODO in HotelDetailView.vue). Wire this up
-// once /api/auth/login exposes it — currentUserId() throws in the meantime.
 async function loadBookings(userId: number) {
   loading.value = true
   error.value = ''
   try {
     bookings.value = await bookingsApi.getByUser(userId)
   } catch (err: any) {
-    error.value = err.response?.data?.message ?? err.message ?? 'Could not load bookings.'
+    error.value = err.response?.data?.message ?? err.message ?? t('bookings.errorFallback')
   } finally {
     loading.value = false
   }
 }
 
-function currentUserId(): number {
-  throw new Error('userId is not available on the auth store yet — see TODO in loadBookings()')
-}
-
 onMounted(() => {
-  try {
-    loadBookings(currentUserId())
-  } catch (err: any) {
-    error.value = err.message
+  // This route is requiresAuth-gated, so userId should always be set here; a stale
+  // pre-userId session (saved before this field existed) is the one edge case —
+  // logging out and back in repopulates it.
+  if (auth.userId) {
+    loadBookings(auth.userId)
+  } else {
+    error.value = t('bookings.errorFallback')
   }
 })
 
@@ -40,31 +41,34 @@ async function cancelBooking(id: number) {
     const booking = bookings.value.find((b) => b.id === id)
     if (booking) booking.bookingStatus = 'CANCELLED'
   } catch (err: any) {
-    error.value = err.response?.data?.message ?? 'Could not cancel booking.'
+    error.value = err.response?.data?.message ?? t('bookings.cancelErrorFallback')
   }
 }
 </script>
 
 <template>
   <div class="page">
-    <h1>My bookings</h1>
+    <h1>{{ t('bookings.title') }}</h1>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="loading">{{ t('bookings.loading') }}</p>
     <p v-else-if="error" class="error">{{ error }}</p>
-    <p v-else-if="bookings.length === 0">No bookings yet.</p>
+    <p v-else-if="bookings.length === 0">{{ t('bookings.none') }}</p>
 
     <ul class="booking-list">
       <li v-for="booking in bookings" :key="booking.id" class="booking-card">
         <div>
-          <strong>{{ booking.hotelName }}</strong> — room {{ booking.roomNumber }}
-          <div>{{ new Date(booking.checkIn).toLocaleString() }} → {{ new Date(booking.checkOut).toLocaleString() }}</div>
-          <div>Status: {{ booking.bookingStatus }}</div>
+          <strong>{{ booking.hotelName }}</strong> — {{ t('bookings.room', { number: booking.roomNumber }) }}
+          <div>
+            {{ new Date(booking.checkIn).toLocaleString(locale) }} →
+            {{ new Date(booking.checkOut).toLocaleString(locale) }}
+          </div>
+          <div>{{ t('bookings.status', { status: booking.bookingStatus }) }}</div>
         </div>
         <button
           v-if="booking.bookingStatus === 'PENDING' || booking.bookingStatus === 'CONFIRMED'"
           @click="cancelBooking(booking.id)"
         >
-          Cancel
+          {{ t('bookings.cancel') }}
         </button>
       </li>
     </ul>

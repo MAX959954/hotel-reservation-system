@@ -11,6 +11,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import testsupport.MinimalTestApplication;
 
+import java.time.LocalDate;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -40,85 +41,162 @@ class UserControllerTest {
                 .build();
     }
 
-    private RegisterRequest validRegisterRequest() {
-        RegisterRequest request = new RegisterRequest();
-        request.setFirstName("Jane");
-        request.setLastName("Doe");
-        request.setEmail("jane@example.com");
-        request.setPassword("password123");
-        request.setPhone("+123456789");
+    private OtpRequestPayload validOtpRequest() {
+        OtpRequestPayload request = new OtpRequestPayload();
+        request.setIdentifier("jane@example.com");
         return request;
     }
 
-    private LogInRequest validLogInRequest() {
-        LogInRequest request = new LogInRequest();
-        request.setEmail("jane@example.com");
+    private OtpVerifyPayload validOtpVerify() {
+        OtpVerifyPayload request = new OtpVerifyPayload();
+        request.setIdentifier("jane@example.com");
+        request.setCode("123456");
+        return request;
+    }
+
+    private CompleteRegistrationRequest validCompleteRegistration() {
+        CompleteRegistrationRequest request = new CompleteRegistrationRequest();
+        request.setVerificationTicket("ticket_abc");
+        request.setFirstName("Jane");
+        request.setLastName("Doe");
+        request.setDateOfBirth(LocalDate.of(1995, 4, 12));
         request.setPassword("password123");
         return request;
+    }
+
+    // ---------- /otp/request ----------
+
+    @Test
+    void requestOtp_returns202_whenRequestValid() throws Exception {
+        mockMvc.perform(post("/api/auth/otp/request")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validOtpRequest())))
+                .andExpect(status().isAccepted());
     }
 
     @Test
-    void register_returns201_whenRequestValid() throws Exception {
-        given(userService.register(any(RegisterRequest.class))).willReturn(sampleResponse());
+    void requestOtp_returns400_whenIdentifierNotAnEmail() throws Exception {
+        OtpRequestPayload invalid = validOtpRequest();
+        invalid.setIdentifier("not-an-email");
 
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/otp/request")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(validRegisterRequest())))
+                        .content(objectMapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---------- /otp/verify ----------
+
+    @Test
+    void verifyOtp_returns200_withAuth_whenAccountExists() throws Exception {
+        given(userService.verifyOtp(any(OtpVerifyPayload.class)))
+                .willReturn(OtpVerifyResponse.builder().newAccount(false).auth(sampleResponse()).build());
+
+        mockMvc.perform(post("/api/auth/otp/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validOtpVerify())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.newAccount").value(false))
+                .andExpect(jsonPath("$.auth.token").value("token_abc"));
+    }
+
+    @Test
+    void verifyOtp_returns200_withTicket_whenAccountIsNew() throws Exception {
+        given(userService.verifyOtp(any(OtpVerifyPayload.class)))
+                .willReturn(OtpVerifyResponse.builder().newAccount(true).verificationTicket("ticket_abc").build());
+
+        mockMvc.perform(post("/api/auth/otp/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validOtpVerify())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.newAccount").value(true))
+                .andExpect(jsonPath("$.verificationTicket").value("ticket_abc"));
+    }
+
+    @Test
+    void verifyOtp_returns400_whenCodeIsNot6Digits() throws Exception {
+        OtpVerifyPayload invalid = validOtpVerify();
+        invalid.setCode("12");
+
+        mockMvc.perform(post("/api/auth/otp/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void verifyOtp_returns400_whenCodeIncorrect() throws Exception {
+        given(userService.verifyOtp(any(OtpVerifyPayload.class)))
+                .willThrow(new IllegalStateException("Incorrect code."));
+
+        mockMvc.perform(post("/api/auth/otp/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validOtpVerify())))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---------- /complete-registration ----------
+
+    @Test
+    void completeRegistration_returns201_whenRequestValid() throws Exception {
+        given(userService.completeRegistration(any(CompleteRegistrationRequest.class))).willReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/auth/complete-registration")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validCompleteRegistration())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.token").value("token_abc"));
     }
 
     @Test
-    void register_returns400_whenPasswordTooShort() throws Exception {
-        RegisterRequest invalid = validRegisterRequest();
+    void completeRegistration_returns400_whenPasswordTooShort() throws Exception {
+        CompleteRegistrationRequest invalid = validCompleteRegistration();
         invalid.setPassword("short");
 
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/complete-registration")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    void register_returns400_whenEmailAlreadyInUse() throws Exception {
-        given(userService.register(any(RegisterRequest.class)))
-                .willThrow(new IllegalStateException("Email already in use : jane@example.com"));
+    void completeRegistration_returns400_whenUnderMinimumAge() throws Exception {
+        CompleteRegistrationRequest invalid = validCompleteRegistration();
+        invalid.setDateOfBirth(LocalDate.now().minusYears(17));
 
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/complete-registration")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(validRegisterRequest())))
+                        .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest());
     }
 
-    @Test
-    void logIn_returns200_whenCredentialsValid() throws Exception {
-        given(userService.logIn(any(LogInRequest.class))).willReturn(sampleResponse());
+    // ---------- /google ----------
 
-        mockMvc.perform(post("/api/auth/login")
+    @Test
+    void google_returns200_whenTokenValid() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest();
+        request.setIdToken("id_token_abc");
+
+        given(userService.authenticateWithGoogle("id_token_abc")).willReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/auth/google")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(validLogInRequest())))
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("jane@example.com"));
     }
 
     @Test
-    void logIn_returns400_whenPasswordInvalid() throws Exception {
-        given(userService.logIn(any(LogInRequest.class))).willThrow(new IllegalStateException("Invalid password"));
+    void google_returns400_whenTokenRejected() throws Exception {
+        GoogleAuthRequest request = new GoogleAuthRequest();
+        request.setIdToken("bad_token");
 
-        mockMvc.perform(post("/api/auth/login")
+        given(userService.authenticateWithGoogle("bad_token"))
+                .willThrow(new IllegalStateException("Google sign-in failed. Please try again."));
+
+        mockMvc.perform(post("/api/auth/google")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(validLogInRequest())))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void logIn_returns400_whenEmailBlank() throws Exception {
-        LogInRequest invalid = validLogInRequest();
-        invalid.setEmail("");
-
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(invalid)))
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 }

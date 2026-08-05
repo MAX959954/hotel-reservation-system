@@ -19,4 +19,6 @@ public class ReviewsResponse {
     private String comment;
     private boolean approved;
     private LocalDateTime createdAt;
+    private LocalDateTime stayCheckIn;
+    private LocalDateTime stayCheckOut;
 }

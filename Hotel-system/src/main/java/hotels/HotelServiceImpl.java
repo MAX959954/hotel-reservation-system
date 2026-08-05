@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 
 @Service
@@ -31,6 +32,7 @@ public class HotelServiceImpl implements HotelService{
                 .description(request.getDescription())
                 .image_url(request.getImageUrl())
                 .company(company)
+                .amenities(request.getAmenities() != null ? request.getAmenities() : new HashSet<>())
                 .build();
 
         return toResponse(hotelsRepository.save(hotel));
@@ -94,6 +96,7 @@ public class HotelServiceImpl implements HotelService{
                 .status(hotel.getStatus())
                 .companyId(hotel.getCompany().getId())
                 .companyName(hotel.getCompany().getName())
+                .amenities(hotel.getAmenities())
                 .build();
     }
 }

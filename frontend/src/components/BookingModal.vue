@@ -67,13 +67,12 @@ function apiErrorMessage(err: any, fallback: string): string {
 }
 
 async function reserve() {
-  if (!selectedRoom.value || !auth.userId) return
+  if (!selectedRoom.value || !auth.isAuthenticated) return
   reserveLoading.value = true
   reserveError.value = ''
   try {
     await bookingsApi.create({
       roomId: selectedRoom.value.id,
-      userId: auth.userId,
       checkIn: `${props.checkIn}T15:00:00`,
       checkOut: `${props.checkOut}T11:00:00`,
       guestCount: props.guestCount,

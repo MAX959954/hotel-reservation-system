@@ -50,12 +50,16 @@ async function renderGoogleButton() {
       callback: onGoogleCredential,
     })
     googleBtnHost.value.innerHTML = ''
+    // Rectangular + full measured width so Google's own button sits flush with the rest of
+    // the form instead of the default pill (a shape this system otherwise never uses).
+    const width = Math.round(googleBtnHost.value.getBoundingClientRect().width) || 320
     g.accounts.id.renderButton(googleBtnHost.value, {
       theme: 'filled_black',
-      shape: 'pill',
+      shape: 'rectangular',
       size: 'large',
       text: 'continue_with',
-      width: 320,
+      logo_alignment: 'center',
+      width,
     })
   } catch {
     // Google script failed to load (offline, blocked) — the rest of the modal still works.
@@ -342,20 +346,10 @@ onBeforeUnmount(() => {
             {{ identifyLoading ? t('auth.identify.sending') : t('auth.identify.continueButton') }}
           </button>
 
-          <div class="divider"><span>{{ t('auth.identify.or') }}</span></div>
-
-          <div ref="googleBtnHost" class="google-btn-host" v-show="googleClientId"></div>
-
-          <button type="button" class="social-btn" disabled>
-            <svg viewBox="0 0 384 512" width="16" height="16" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"
-              />
-            </svg>
-            <span>{{ t('auth.identify.appleButton') }}</span>
-            <span class="coming-soon">{{ t('auth.identify.comingSoon') }}</span>
-          </button>
+          <template v-if="googleClientId">
+            <div class="divider"><span>{{ t('auth.identify.or') }}</span></div>
+            <div ref="googleBtnHost" class="google-btn-host"></div>
+          </template>
         </form>
 
         <!-- Step 2: code -->
@@ -371,7 +365,7 @@ onBeforeUnmount(() => {
 
           <div class="code-cells">
             <input
-              v-for="(digit, i) in digits"
+              v-for="(_, i) in digits"
               :key="i"
               :ref="(el) => (digitRefs[i] = el as HTMLInputElement)"
               v-model="digits[i]"
@@ -677,30 +671,10 @@ onBeforeUnmount(() => {
 .google-btn-host {
   display: flex;
   justify-content: center;
-}
-
-.social-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  width: 100%;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.03em;
-  color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--border);
+  /* Clips Google's own button to this system's 3px button radius (its rectangular
+     shape ships slightly softer) so it reads as one family with brass-btn. */
   border-radius: 3px;
-  padding: 0.65rem 1rem;
-  cursor: not-allowed;
-}
-.coming-soon {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  opacity: 0.75;
+  overflow: hidden;
 }
 
 .code-cells {

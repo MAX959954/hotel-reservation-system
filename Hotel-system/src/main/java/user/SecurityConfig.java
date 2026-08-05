@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -40,6 +41,18 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Public browsing: hotel/room search and detail reads don't require
+                        // an account, matching how every OTA works — only booking does.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/hotels/{id}",
+                                "/api/hotels/city/**",
+                                "/api/hotels/country/**",
+                                "/api/hotels/rating/**",
+                                "/api/rooms/hotels/{hotelId}",
+                                "/api/rooms/hotels/{hotelId}/available",
+                                "/api/reviews/room/{roomId}/approved",
+                                "/api/reviews/room/{roomId}/rating"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

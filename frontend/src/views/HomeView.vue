@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { hotelsApi } from '../api/hotels'
 import { useAuthStore } from '../stores/auth'
+import { useAuthModalStore } from '../stores/authModal'
 import type { HotelResponse } from '../types/hotel'
 
 const router = useRouter()
 const auth = useAuthStore()
+const authModal = useAuthModalStore()
+const { t } = useI18n()
 
 const city = ref('')
 const featured = ref<HotelResponse[]>([])
@@ -14,6 +18,28 @@ const featuredLoading = ref(true)
 const featuredError = ref(false)
 
 const quickCities = ['Paris', 'Rome', 'Tokyo', 'New York']
+
+// Representative interiors/exteriors for entries with no imageUrl on file yet —
+// not photos of the specific property, so they never pair with a fabricated claim.
+const placeholderPhotos = [
+  'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1611048268330-53de574cae3b?w=800&q=80&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1568084680786-a84f91d1153c?w=800&q=80&auto=format&fit=crop',
+]
+
+function photoFor(hotel: HotelResponse) {
+  if (hotel.imageUrl) return hotel.imageUrl
+  return placeholderPhotos[hotel.id % placeholderPhotos.length]
+}
 
 function goSearch(cityName: string) {
   const trimmed = cityName.trim()
@@ -24,8 +50,6 @@ function goSearch(cityName: string) {
 function onSubmit() {
   goSearch(city.value)
 }
-
-const initials = (name: string) => name.trim().charAt(0).toUpperCase() || '?'
 
 const hasFeatured = computed(() => featured.value.length > 0)
 
@@ -50,9 +74,13 @@ onMounted(async () => {
     STORY: a traveler sees the register is genuinely shared across independent houses,
     looks up a city, and reserves with the same confidence as handing over a passport.
     FIRST VIEWPORT: an open two-page ledger spread — left page states the pitch, right
-    page holds a ruled city-search line ending in an ink-stamp submit; brass index tabs
-    beneath the spine offer quick cities.
+    page holds a ruled city-search line ending in a brass submit; quick-city tabs sit
+    under it on the same page, bound to the control they populate.
     FORM: own grounded direction, candidate 4 of 7 (guest-register ledger), seed 7031d284.
+    Staging dealt: reveal-transform-staged-reorganization-chambers, rejected — a
+    scrubbed, stage-gated reveal would bury the real, immediate city search behind an
+    intro sequence, contradicting the product's own "search in seconds" job; natural
+    scroll composition is the deliberate choice.
     FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
     review, the verdict, and DESIGN.md.
   -->
@@ -65,34 +93,30 @@ onMounted(async () => {
         </div>
 
         <div class="page page-left">
-          <p class="folio-no">Folio&nbsp;I</p>
-          <h1>Every stay,<br />entered by hand.</h1>
-          <p class="pitch">
-            Folio keeps one open register across hundreds of independently run hotels.
-            No single brand behind the desk — just every house that chose to be listed,
-            side by side, at its own rate.
-          </p>
+          <p class="folio-no">{{ t('home.folioOne') }}</p>
+          <h1>{{ t('home.heroTitleLine1') }}<br />{{ t('home.heroTitleLine2') }}</h1>
+          <p class="pitch">{{ t('home.pitch') }}</p>
         </div>
 
         <div class="page page-right">
-          <p class="folio-no">Folio&nbsp;II</p>
+          <p class="folio-no">{{ t('home.folioTwo') }}</p>
           <form class="lookup" @submit.prevent="onSubmit">
-            <label class="lookup-label" for="city-search">Entered under city</label>
+            <label class="lookup-label" for="city-search">{{ t('home.cityLabel') }}</label>
             <div class="lookup-line">
               <input
                 id="city-search"
                 v-model="city"
                 type="text"
-                placeholder="e.g. Lisbon"
+                :placeholder="t('home.cityPlaceholder')"
                 autocomplete="off"
                 required
               />
-              <button type="submit" class="stamp-btn">Search the register</button>
+              <button type="submit" class="brass-btn">{{ t('home.searchButton') }}</button>
             </div>
           </form>
 
           <div class="quick-tabs">
-            <span class="quick-label">Try</span>
+            <span class="quick-label">{{ t('home.tryLabel') }}</span>
             <button
               v-for="c in quickCities"
               :key="c"
@@ -109,31 +133,24 @@ onMounted(async () => {
 
     <section class="section">
       <div class="section-head">
-        <h2>The five-star ledger</h2>
-        <p class="section-sub">Genuine top-rated entries, pulled live from the register.</p>
+        <h2>{{ t('home.fiveStarTitle') }}</h2>
+        <p class="section-sub">{{ t('home.fiveStarSub') }}</p>
       </div>
 
-      <p v-if="featuredLoading" class="loading-note">Turning to that page…</p>
-      <p v-else-if="featuredError" class="empty-note">
-        The register couldn't be reached just now. Search a city above once the desk is back.
-      </p>
-      <p v-else-if="!hasFeatured" class="empty-note">
-        No five-star entries on file yet — search a city above to see who's in the register.
-      </p>
+      <p v-if="featuredLoading" class="loading-note">{{ t('home.turningPage') }}</p>
+      <p v-else-if="featuredError" class="empty-note">{{ t('home.unreachable') }}</p>
+      <p v-else-if="!hasFeatured" class="empty-note">{{ t('home.noFiveStar') }}</p>
 
       <ul v-else class="folio-grid">
         <li v-for="hotel in featured" :key="hotel.id">
           <router-link :to="`/hotels/${hotel.id}`" class="folio-card">
             <div class="folio-image">
-              <img v-if="hotel.imageUrl" :src="hotel.imageUrl" :alt="hotel.name" loading="lazy" />
-              <div v-else class="folio-blank" aria-hidden="true">
-                <span>{{ initials(hotel.name) }}</span>
-              </div>
+              <img :src="photoFor(hotel)" :alt="hotel.name" loading="lazy" />
+              <span class="folio-rating" aria-hidden="true">★ {{ hotel.startRating }}</span>
             </div>
             <div class="folio-body">
               <h3>{{ hotel.name }}</h3>
               <p class="folio-place">{{ hotel.city }}, {{ hotel.country }}</p>
-              <p class="folio-stars">{{ '★'.repeat(hotel.startRating) }}</p>
             </div>
           </router-link>
         </li>
@@ -142,56 +159,51 @@ onMounted(async () => {
 
     <section class="section section-tint">
       <div class="section-head">
-        <h2>One register, many houses</h2>
-        <p class="section-sub">
-          Every entry belongs to a different proprietor — independent hotels and small
-          chains, not one brand wearing many names. Compare rating, address, and rate
-          per night before you commit to a folio.
-        </p>
+        <h2>{{ t('home.positioningTitle') }}</h2>
+        <p class="section-sub">{{ t('home.positioningBody') }}</p>
       </div>
     </section>
 
     <section class="section">
       <div class="section-head">
-        <h2>How the register works</h2>
+        <h2>{{ t('home.howTitle') }}</h2>
       </div>
 
       <div class="steps">
         <div class="step">
-          <span class="ink-stamp">Searched</span>
-          <p>Look up a city and see who's entered under it.</p>
+          <span class="ink-stamp">{{ t('home.stepSearchedStamp') }}</span>
+          <p>{{ t('home.stepSearchedText') }}</p>
         </div>
         <div class="step">
-          <span class="ink-stamp">Reserved</span>
-          <p>Choose your room and dates, right on the folio.</p>
+          <span class="ink-stamp">{{ t('home.stepReservedStamp') }}</span>
+          <p>{{ t('home.stepReservedText') }}</p>
         </div>
         <div class="step">
-          <span class="ink-stamp">Confirmed</span>
-          <p>Your stay is inked in — cancel anytime before check-in.</p>
+          <span class="ink-stamp">{{ t('home.stepConfirmedStamp') }}</span>
+          <p>{{ t('home.stepConfirmedText') }}</p>
         </div>
       </div>
     </section>
 
     <section class="section section-cta">
       <template v-if="!auth.isAuthenticated">
-        <h2>Add your name to the register.</h2>
-        <p class="section-sub">Booking a stay means keeping your own page in the ledger.</p>
+        <h2>{{ t('home.ctaGuestTitle') }}</h2>
+        <p class="section-sub">{{ t('home.ctaGuestSub') }}</p>
         <div class="cta-row">
-          <router-link to="/register" class="stamp-btn">Register</router-link>
-          <router-link to="/login" class="cta-secondary">Already have a page? Log in</router-link>
+          <button type="button" class="brass-btn" @click="authModal.open()">{{ t('home.ctaRegister') }}</button>
         </div>
       </template>
       <template v-else>
-        <h2>Your ledger is open, {{ auth.email }}.</h2>
+        <h2>{{ t('home.ctaAuthTitle', { email: auth.email }) }}</h2>
         <div class="cta-row">
-          <router-link to="/bookings" class="stamp-btn">Go to my bookings</router-link>
+          <router-link to="/bookings" class="brass-btn">{{ t('home.ctaBookings') }}</router-link>
         </div>
       </template>
     </section>
 
     <footer class="desk-footer">
       <span class="brass-rule" aria-hidden="true" />
-      <p>Folio — a guest register for independently run hotels.</p>
+      <p>{{ t('home.footer') }}</p>
     </footer>
   </div>
 </template>
@@ -350,26 +362,24 @@ onMounted(async () => {
   opacity: 0.6;
 }
 
-.stamp-btn {
+.brass-btn {
   font-family: var(--mono);
   font-size: 0.78rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--stamp);
-  background: transparent;
-  border: 2px solid var(--stamp);
+  color: var(--ink);
+  background: var(--brass);
+  border: none;
   border-radius: 3px;
-  padding: 0.5rem 0.9rem;
+  padding: 0.55rem 1rem;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
-  transform: rotate(-2deg);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease;
 }
-.stamp-btn:hover {
-  background: var(--stamp);
-  color: var(--paper);
+.brass-btn:hover {
+  background: var(--brass-bright);
 }
 
 .quick-tabs {
@@ -439,8 +449,8 @@ onMounted(async () => {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.5rem;
 }
 .folio-card {
   display: flex;
@@ -458,32 +468,34 @@ onMounted(async () => {
   transform: translateY(-2px);
 }
 .folio-image {
+  position: relative;
   aspect-ratio: 4 / 3;
   background: var(--ink-cover);
+  overflow: hidden;
 }
 .folio-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.folio-blank {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-image: repeating-linear-gradient(
-    var(--paper) 0px,
-    var(--paper) 20px,
-    var(--paper-line) 21px
-  );
+.folio-card:hover .folio-image img {
+  transform: scale(1.05);
 }
-.folio-blank span {
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 2.4rem;
-  color: var(--brass-dim);
+.folio-rating {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--text-h);
+  background: rgba(28, 19, 16, 0.72);
+  border: 1px solid var(--brass-dim);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  backdrop-filter: blur(2px);
 }
 .folio-body {
   padding: 0.9rem 1rem 1.1rem;
@@ -500,11 +512,6 @@ onMounted(async () => {
   font-family: var(--mono);
   font-size: 0.78rem;
   color: var(--text-dim);
-}
-.folio-stars {
-  color: var(--brass);
-  font-size: 0.85rem;
-  margin-top: 0.15rem;
 }
 
 /* ---------- how it works ---------- */
@@ -559,15 +566,6 @@ onMounted(async () => {
   margin-top: 0.5rem;
   flex-wrap: wrap;
 }
-.cta-row .stamp-btn {
-  transform: none;
-}
-.cta-secondary {
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-
 /* ---------- footer ---------- */
 .desk-footer {
   padding-top: 2.5rem;

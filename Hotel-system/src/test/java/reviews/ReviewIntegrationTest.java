@@ -94,7 +94,7 @@ class ReviewIntegrationTest {
                 .firstName("Jane")
                 .lastName("Doe")
                 .email("jane.doe+" + System.nanoTime() + "@example.com")
-                .password_hash("hashed")
+                .passwordHash("hashed")
                 .phone("+1" + System.nanoTime() % 100000000L)
                 .roles(Set.of(Roles.GUEST))
                 .emailVerified(true)

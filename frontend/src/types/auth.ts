@@ -9,19 +9,21 @@ export type Role =
 export interface AuthResponse {
   token: string
   tokenType: string
+  userId: number
   email: string
   roles: Role[]
 }
 
-export interface RegisterRequest {
-  firstName: string
-  lastName: string
-  email: string
-  password: string
-  phone: string
+export interface OtpVerifyResponse {
+  newAccount: boolean
+  verificationTicket?: string
+  auth?: AuthResponse
 }
 
-export interface LogInRequest {
-  email: string
+export interface CompleteRegistrationRequest {
+  verificationTicket: string
+  firstName: string
+  lastName: string
+  dateOfBirth: string
   password: string
 }

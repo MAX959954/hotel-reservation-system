@@ -28,7 +28,6 @@ export interface BookingResponse {
 
 export interface BookingRequest {
   roomId: number
-  userId: number
   checkIn: string
   checkOut: string
   guestCount: number

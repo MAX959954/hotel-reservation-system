@@ -3,5 +3,17 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          comments: true,
+        },
+      },
+    }),
+  ],
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
 })

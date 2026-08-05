@@ -2,7 +2,11 @@ package user;
 
 public interface UserService {
 
-    AuthResponse register(RegisterRequest request);
+    void requestOtp(String identifier);
 
-    AuthResponse logIn(LogInRequest request);
+    OtpVerifyResponse verifyOtp(OtpVerifyPayload payload);
+
+    AuthResponse completeRegistration(CompleteRegistrationRequest request);
+
+    AuthResponse authenticateWithGoogle(String idToken);
 }

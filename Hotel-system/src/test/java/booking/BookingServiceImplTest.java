@@ -1,13 +1,17 @@
 package booking;
 
 import hotels.Hotels;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import room.Room;
 import room.RoomRepository;
 import room.RoomStatus;
@@ -62,14 +66,27 @@ public class BookingServiceImplTest {
                 .status(RoomStatus.AVAILABLE)
                 .hotel(hotel)
                 .build();
-        user = User.builder().id(1L).firstName("Jane").lastName("Doe").build();
+        user = User.builder().id(1L).firstName("Jane").lastName("Doe").email("jane@example.com").build();
 
         request = new BookingRequest();
         request.setRoomId(1L);
-        request.setUserId(1L);
         request.setCheckIn(LocalDateTime.now().plusDays(1));
         request.setCheckOut(LocalDateTime.now().plusDays(3));
         request.setGuestCount(2);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    // create() derives the booking's owner from the authenticated principal, not the
+    // request body — see BookingServiceImpl.currentUser(). Only tests that reach that
+    // point need this; tests that fail earlier (bad dates, room not found) don't call it.
+    private void authenticateAs(String email) {
+        Authentication authentication = Mockito.mock(Authentication.class);
+        given(authentication.getName()).willReturn(email);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
     private Booking bookingWithStatus(BookingStatus status) {
@@ -89,8 +106,9 @@ public class BookingServiceImplTest {
 
     @Test
     void create_savesBookingAndReturnsResponse_whenValid() {
+        authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
         given(bookingRepository.findOverlappingBookings(1L, request.getCheckIn(), request.getCheckOut()))
                 .willReturn(List.of());
         given(bookingRepository.save(any(Booking.class)))
@@ -107,6 +125,27 @@ public class BookingServiceImplTest {
         ArgumentCaptor<Booking> captor = ArgumentCaptor.forClass(Booking.class);
         verify(bookingRepository).save(captor.capture());
         assertThat(captor.getValue().getTotalPrice()).isEqualTo(200.0);
+    }
+
+    @Test
+    void create_pricesByCalendarNights_notElapsedHours() {
+        // A stay from Monday 3pm to Thursday 11am is 3 calendar nights but only 68
+        // elapsed hours — raw ChronoUnit.DAYS.between on the timestamps would floor
+        // that to 2 and undercharge by a full night.
+        LocalDateTime checkIn = LocalDateTime.now().plusDays(1).withHour(15).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime checkOut = checkIn.plusDays(3).withHour(11).withMinute(0);
+        request.setCheckIn(checkIn);
+        request.setCheckOut(checkOut);
+
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+        given(bookingRepository.findOverlappingBookings(1L, checkIn, checkOut)).willReturn(List.of());
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.create(request);
+
+        assertThat(response.getTotalPrice()).isEqualTo(300.0); // 3 nights * 100, not 2
     }
 
     @Test
@@ -131,8 +170,9 @@ public class BookingServiceImplTest {
 
     @Test
     void create_throws_whenUserNotFound() {
+        authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
-        given(userRepository.findById(1L)).willReturn(Optional.empty());
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> bookingService.create(request))
                 .isInstanceOf(IllegalStateException.class)
@@ -142,8 +182,9 @@ public class BookingServiceImplTest {
     @Test
     void create_throws_whenRoomNotAvailable() {
         room.setStatus(RoomStatus.OCCUPIED);
+        authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
 
         assertThatThrownBy(() -> bookingService.create(request))
                 .isInstanceOf(IllegalStateException.class)
@@ -152,8 +193,9 @@ public class BookingServiceImplTest {
 
     @Test
     void create_throws_whenOverlappingBookingExists() {
+        authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
         given(bookingRepository.findOverlappingBookings(1L, request.getCheckIn(), request.getCheckOut()))
                 .willReturn(List.of(bookingWithStatus(BookingStatus.CONFIRMED)));
 
@@ -165,8 +207,9 @@ public class BookingServiceImplTest {
     @Test
     void create_throws_whenGuestCountExceedsCapacity() {
         request.setGuestCount(5);
+        authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
         given(bookingRepository.findOverlappingBookings(1L, request.getCheckIn(), request.getCheckOut()))
                 .willReturn(List.of());
 

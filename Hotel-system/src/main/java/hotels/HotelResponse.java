@@ -4,6 +4,8 @@ package hotels;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Set;
+
 @Data
 @Builder
 public class HotelResponse {
@@ -21,4 +23,5 @@ public class HotelResponse {
     private Hotel_Status status;
     private Long companyId;
     private String companyName;
+    private Set<Amenity> amenities;
 }

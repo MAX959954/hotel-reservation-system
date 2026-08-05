@@ -1,40 +1,76 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
+  /* ground: evening front-desk leather/wood, not paper */
+  --ink: #1c1310;
+  --ink-raised: #241a15;
+  --ink-cover: #2c1b17;
+  --ink-cover-2: #3a1f1c;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* ledger paper, used only inside bounded "page" panels */
+  --paper: #f2e8d3;
+  --paper-2: #e9dcbf;
+  --paper-line: #c9b78f;
+  --paper-ink: #241a12;
+  --paper-ink-soft: #5a4a35;
 
-  font: 16px/145% var(--sans);
-  color-scheme: light dark;
+  /* brass — the committed accent */
+  --brass: #c99a4b;
+  --brass-bright: #e3b96b;
+  --brass-dim: #8a6a37;
+
+  /* ink-stamp red, reserved strictly for stamps/status */
+  --stamp: #8c2f39;
+  --stamp-bright: #b23f4c;
+
+  --text: #d8c9ae;
+  --text-dim: #a9967a;
+  --text-h: #f4ead2;
+  --border: #4a362d;
+
+  --serif: 'Spectral', 'Iowan Old Style', 'Palatino Linotype', serif;
+  --mono: 'Courier Prime', 'Courier New', ui-monospace, monospace;
+
+  font: 17px/1.55 var(--serif);
+  color-scheme: dark;
   color: var(--text);
-  background: var(--bg);
+  background: var(--ink);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(201, 154, 75, 0.08), transparent 60%),
+    var(--ink);
 }
 
 h1,
-h2 {
+h2,
+h3 {
   color: var(--text-h);
   font-weight: 500;
+  margin: 0;
+}
+
+p {
+  margin: 0;
 }
 
 a {
-  color: var(--accent, #6d28d9);
+  color: var(--brass-bright);
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--brass-dim);
+  color: var(--text-h);
 }

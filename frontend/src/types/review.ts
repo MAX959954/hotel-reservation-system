@@ -10,4 +10,6 @@ export interface ReviewResponse {
   comment: string
   approved: boolean
   createdAt: string
+  stayCheckIn: string
+  stayCheckOut: string
 }
