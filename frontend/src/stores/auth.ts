@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import type { AuthResponse, Role } from '../types/auth'
+import type { AuthResponse, Role } from '@/types/auth'
 
-const STORAGE_KEY = 'hotel-auth'
+const STORAGE_KEY = 'folio-auth'
 
 interface AuthState {
   token: string | null
@@ -49,18 +49,15 @@ export const useAuthStore = defineStore('auth', {
 
     setSession(res: AuthResponse) {
       this.token = res.token
-      this.tokenType = res.tokenType
+      this.tokenType = res.tokenType || 'Bearer'
       this.userId = res.userId
       this.email = res.email
-      this.roles = res.roles
+      this.roles = res.roles ?? []
       this.persist()
     },
 
     logout() {
-      this.token = null
-      this.userId = null
-      this.email = null
-      this.roles = []
+      this.$patch(emptyState())
       localStorage.removeItem(STORAGE_KEY)
     },
   },

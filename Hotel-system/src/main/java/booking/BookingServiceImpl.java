@@ -1,6 +1,7 @@
 package booking;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class BookingServiceImpl implements BookingService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "roomsAvailability" , allEntries = true)
     public BookingResponse create(BookingRequest request){
         if (!request.getCheckOut().isAfter(request.getCheckIn())){
             throw new IllegalStateException("Check-out must be after check-in");
@@ -99,6 +101,7 @@ public class BookingServiceImpl implements BookingService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" ,allEntries = true)
     public BookingResponse confirm(Long id) {
         Booking booking = findById(id);
 
@@ -114,6 +117,7 @@ public class BookingServiceImpl implements BookingService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
     public BookingResponse cancel(Long id) {
         Booking booking = findById(id);
 
@@ -129,6 +133,7 @@ public class BookingServiceImpl implements BookingService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
     public BookingResponse checkIn(Long id) {
         Booking booking = findById(id);
 
@@ -142,6 +147,7 @@ public class BookingServiceImpl implements BookingService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
     public BookingResponse complete(Long id) {
         Booking booking = findById(id);
 

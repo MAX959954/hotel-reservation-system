@@ -7,6 +7,19 @@ export type BookingStatus =
   | 'NO_SHOW'
   | 'PAYMENT_FAILED'
 
+/**
+ * Deliberately has no `userId`: the server takes the booking's owner from the JWT.
+ * Sending one from the client is ignored by design — see BookingServiceImpl.create.
+ */
+export interface BookingRequest {
+  roomId: number
+  /** `YYYY-MM-DDTHH:mm:ss` — LocalDateTime, no timezone suffix. */
+  checkIn: string
+  checkOut: string
+  guestCount: number
+  specialRequest?: string
+}
+
 export interface BookingResponse {
   id: number
   userId: number
@@ -24,12 +37,4 @@ export interface BookingResponse {
   confirmedAt: string | null
   cancelledAt: string | null
   createdAt: string
-}
-
-export interface BookingRequest {
-  roomId: number
-  checkIn: string
-  checkOut: string
-  guestCount: number
-  specialRequest?: string
 }

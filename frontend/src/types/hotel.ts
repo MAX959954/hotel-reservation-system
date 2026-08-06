@@ -2,10 +2,11 @@ export type HotelStatus =
   | 'ACTIVE'
   | 'INACTIVE'
   | 'UNDER_RENOVATION'
-  | 'COMINGS_SOON'
+  | 'COMING_SOON'
   | 'CLOSED'
   | 'SUSPENDED'
 
+/** Closed enum on the backend (hotels.Amenity) — 22 values, nothing else can arrive. */
 export type Amenity =
   | 'WIFI'
   | 'BREAKFAST'
@@ -36,13 +37,14 @@ export interface HotelResponse {
   city: string
   country: string
   address: string
+  /** Yes, `startRating` — that is the real API spelling, not a typo on our side. */
   startRating: number
-  phone: string
-  email: string
-  description: string
-  imageUrl: string
+  phone: string | null
+  email: string | null
+  description: string | null
+  imageUrl: string | null
   status: HotelStatus
   companyId: number
   companyName: string
-  amenities: Amenity[]
+  amenities: Amenity[] | null
 }

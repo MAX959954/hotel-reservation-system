@@ -3,6 +3,8 @@ package room;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ public class RoomServiceImpl implements RoomService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public RoomResponse create (RoomRequest request) {
         Hotels hotel = findHotelById(request.getHotelId());
         Room room = Room.builder()
@@ -64,12 +67,14 @@ public class RoomServiceImpl implements RoomService{
 
 
     @Override
+    @Cacheable(cacheNames = "roomsAvailability", key = "#hotelId + '-' + #checkIn + '-' + #checkOut + '-' + #guestCount")
     public List<RoomResponse> getAvailableRooms(Long hotelId , LocalDateTime checkIn , LocalDateTime checkOut , Integer guestCount){
         return roomRepository.findAvailableRooms(hotelId , checkIn , checkOut , guestCount).stream().map(this :: toResponse).toList();
     }
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public RoomResponse updateStatus(Long id , RoomStatus status){
         Room room  = findById(id);
         room.setStatus(status);
@@ -79,6 +84,7 @@ public class RoomServiceImpl implements RoomService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public RoomResponse update(Long id , RoomRequest request) {
         Room room = findById(id);
         Hotels hotel = findHotelById(request.getHotelId());
@@ -94,6 +100,7 @@ public class RoomServiceImpl implements RoomService{
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public void delete(Long id) {
         roomRepository.delete(findById(id));
     }

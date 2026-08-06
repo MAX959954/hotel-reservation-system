@@ -1,4 +1,11 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: hotel_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
   postgres:
     image: postgres:16
     container_name: hotel_db
@@ -23,6 +30,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -37,6 +46,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "8081:8080"
     restart: unless-stopped

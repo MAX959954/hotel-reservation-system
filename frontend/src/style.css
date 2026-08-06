@@ -1,76 +1,63 @@
-:root {
-  /* ground: evening front-desk leather/wood, not paper */
-  --ink: #1c1310;
-  --ink-raised: #241a15;
-  --ink-cover: #2c1b17;
-  --ink-cover-2: #3a1f1c;
+/* Must precede the Tailwind import: that one expands into rules, and a plain @import
+   is only legal before any rule. */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap');
 
-  /* ledger paper, used only inside bounded "page" panels */
-  --paper: #f2e8d3;
-  --paper-2: #e9dcbf;
-  --paper-line: #c9b78f;
-  --paper-ink: #241a12;
-  --paper-ink-soft: #5a4a35;
+@import "tailwindcss";
 
-  /* brass — the committed accent */
-  --brass: #c99a4b;
-  --brass-bright: #e3b96b;
-  --brass-dim: #8a6a37;
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  /* ink-stamp red, reserved strictly for stamps/status */
-  --stamp: #8c2f39;
-  --stamp-bright: #b23f4c;
-
-  --text: #d8c9ae;
-  --text-dim: #a9967a;
-  --text-h: #f4ead2;
-  --border: #4a362d;
-
-  --serif: 'Spectral', 'Iowan Old Style', 'Palatino Linotype', serif;
-  --mono: 'Courier Prime', 'Courier New', ui-monospace, monospace;
-
-  font: 17px/1.55 var(--serif);
-  color-scheme: dark;
-  color: var(--text);
-  background: var(--ink);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --color-ink: #0a0a0b;
+  --color-ink-2: #121215;
+  --color-ink-3: #1a1a1f;
+  --color-champagne: #d8b778;
+  --color-champagne-bright: #efd9a8;
+  --color-champagne-dim: #8a7449;
+  --color-bone: #f4f1ec;
+  --color-bone-dim: rgba(244, 241, 236, 0.62);
+  --color-hairline: rgba(244, 241, 236, 0.12);
 }
 
-* {
-  box-sizing: border-box;
+:root {
+  font-family: var(--font-sans);
+  background-color: var(--color-ink);
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(201, 154, 75, 0.08), transparent 60%),
-    var(--ink);
+  overflow-x: hidden;
+  background-color: var(--color-ink);
+  color: var(--color-bone);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2,
-h3 {
-  color: var(--text-h);
-  font-weight: 500;
-  margin: 0;
+/* Ken Burns drift for hero stills */
+@keyframes kenburns {
+  0%   { transform: scale(1.08) translate3d(0, 0, 0); }
+  100% { transform: scale(1.22) translate3d(-1.5%, -2%, 0); }
+}
+.animate-kenburns { animation: kenburns 22s ease-out infinite alternate; }
+
+/* Focus ring — champagne, per the quality bar. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-champagne);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-p {
-  margin: 0;
+/* Native date/number controls render near-invisible on a dark ground otherwise. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.55);
+  cursor: pointer;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.4;
 }
 
-a {
-  color: var(--brass-bright);
-}
-
-button {
-  font-family: inherit;
-}
-
-::selection {
-  background: var(--brass-dim);
-  color: var(--text-h);
+@media (prefers-reduced-motion: reduce) {
+  .animate-kenburns { animation: none; }
+  * { scroll-behavior: auto !important; }
 }

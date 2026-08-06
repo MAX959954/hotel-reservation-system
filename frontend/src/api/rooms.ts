@@ -1,34 +1,21 @@
 import { http } from './http'
-import type { RoomResponse, RoomStatus, RoomType } from '../types/room'
+import type { RoomResponse } from '@/types/room'
 
 export const roomsApi = {
-  getById(id: number) {
-    return http.get<RoomResponse>(`/api/rooms/${id}`).then((r) => r.data)
+  async getByHotel(hotelId: number | string): Promise<RoomResponse[]> {
+    const { data } = await http.get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}`)
+    return data
   },
-  getByHotel(hotelId: number) {
-    return http.get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}`).then((r) => r.data)
-  },
-  getByType(type: RoomType) {
-    return http.get<RoomResponse[]>(`/api/rooms/type/${type}`).then((r) => r.data)
-  },
-  getByStatus(status: RoomStatus) {
-    return http.get<RoomResponse[]>(`/api/rooms/status/${status}`).then((r) => r.data)
-  },
-  getByHotelAndStatus(hotelId: number, status: RoomStatus) {
-    return http
-      .get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/status/${status}`)
-      .then((r) => r.data)
-  },
-  getByHotelAndCapacity(hotelId: number, guestCount: number) {
-    return http
-      .get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/capacity/${guestCount}`)
-      .then((r) => r.data)
-  },
-  getAvailableForHotel(hotelId: number, checkIn: string, checkOut: string, guestCount: number) {
-    return http
-      .get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/available`, {
-        params: { checkIn, checkOut, guestCount },
-      })
-      .then((r) => r.data)
+
+  async getAvailable(
+    hotelId: number | string,
+    checkIn: string,
+    checkOut: string,
+    guestCount?: number,
+  ): Promise<RoomResponse[]> {
+    const { data } = await http.get<RoomResponse[]>(`/api/rooms/hotels/${hotelId}/available`, {
+      params: { checkIn, checkOut, ...(guestCount ? { guestCount } : {}) },
+    })
+    return data
   },
 }
