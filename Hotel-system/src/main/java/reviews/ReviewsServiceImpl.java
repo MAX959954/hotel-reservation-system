@@ -113,6 +113,8 @@ public class ReviewsServiceImpl implements ReviewsService {
                 .comment(reviews.getComment())
                 .approved(reviews.isApproved())
                 .createdAt(reviews.getCreated_at())
+                .stayCheckIn(reviews.getBooking().getCheck_in())
+                .stayCheckOut(reviews.getBooking().getCheck_out())
                 .build();
     }
 

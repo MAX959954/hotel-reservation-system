@@ -56,8 +56,9 @@ public class RoomController {
     @GetMapping("/hotels/{hotelId}/available")
     public ResponseEntity<List<RoomResponse>> getAvailableRooms(@PathVariable Long hotelId ,
                                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime checkIn ,
-                                                                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime checkOut ) {
-        return ResponseEntity.ok(roomService.getAvailableRooms(hotelId , checkIn  , checkOut));
+                                                                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime checkOut ,
+                                                                @RequestParam(required = false) Integer guestCount ) {
+        return ResponseEntity.ok(roomService.getAvailableRooms(hotelId , checkIn  , checkOut , guestCount));
     }
 
     @PatchMapping("/{id}/status")

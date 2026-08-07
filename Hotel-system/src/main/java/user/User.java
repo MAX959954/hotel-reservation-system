@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -30,17 +31,23 @@ public class User {
     @Column(name = "lastName" , nullable = false)
     private String lastName;
 
-    @Column(name = "password_hash" , nullable = false)
-    private String password_hash;
+    @Column(name = "password_hash")
+    private String passwordHash;
 
     @Column(name = "email" , nullable = false , length = 255)
     private String email;
 
-    @Column(name = "phone" , nullable = false , length = 45)
+    @Column(name = "phone" , length = 45)
     private String phone;
 
     @Column(name = "avatar_url" , length = 500)
-    private String avatar_url;
+    private String avatarUrl;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "google_id", unique = true)
+    private String googleId;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
@@ -63,24 +70,26 @@ public class User {
     @Builder.Default
     private boolean enabled = false;
 
+    // APPROVED, not PENDING: both signup paths (OTP + Google) verify the email before an
+    // account exists, so there's no separate review step to wait on — see AccountStatus.
     @Enumerated(EnumType.STRING)
     @Builder.Default
-    private AccountStatus accountStatus = AccountStatus.PENDING;
+    private AccountStatus accountStatus = AccountStatus.APPROVED;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime created_at;
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updated_at;
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate () {
-        created_at = LocalDateTime.now();
-        updated_at = LocalDateTime.now();
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate () {
-        updated_at = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 }

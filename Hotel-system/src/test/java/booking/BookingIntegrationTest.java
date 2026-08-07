@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 import room.Room;
@@ -28,8 +29,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 // Crosses room/booking/user/hotel repositories against a real (H2) database,
 // exercising the overlap-detection query that BookingServiceImplTest can only
 // stub around.
+// create() derives the booking's owner from the authenticated principal (see
+// BookingServiceImpl.currentUser()), so this needs a populated SecurityContext even
+// though it never goes through MockMvc — @WithMockUser's listener sets that up for
+// direct service calls too. Username must match the guest's email created below.
 @SpringBootTest(classes = HotelSystemApplication.class)
 @ActiveProfiles("test")
+@WithMockUser(username = "jane.doe@example.com")
 @Transactional
 class BookingIntegrationTest {
 
@@ -91,7 +97,7 @@ class BookingIntegrationTest {
                 .firstName("Jane")
                 .lastName("Doe")
                 .email("jane.doe@example.com")
-                .password_hash("hashed")
+                .passwordHash("hashed")
                 .phone("+100000001")
                 .roles(Set.of(Roles.GUEST))
                 .emailVerified(true)
@@ -102,7 +108,6 @@ class BookingIntegrationTest {
     private BookingRequest requestFor(LocalDateTime checkIn, LocalDateTime checkOut) {
         BookingRequest request = new BookingRequest();
         request.setRoomId(room.getId());
-        request.setUserId(guest.getId());
         request.setCheckIn(checkIn);
         request.setCheckOut(checkOut);
         request.setGuestCount(2);

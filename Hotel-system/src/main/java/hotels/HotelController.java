@@ -47,6 +47,11 @@ public class HotelController {
         return ResponseEntity.ok(hotelService.getByRating(rating));
     }
 
+    @GetMapping("/type/{propertyType}")
+    public ResponseEntity<List<HotelResponse>> getByPropertyType(@PathVariable PropertyType propertyType) {
+        return ResponseEntity.ok(hotelService.getByPropertyType(propertyType));
+    }
+
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForHotel(#id , 'OWNER' , 'MANAGER')")
     public ResponseEntity<HotelResponse> updateStatus(@PathVariable Long id, @RequestParam Hotel_Status status) {

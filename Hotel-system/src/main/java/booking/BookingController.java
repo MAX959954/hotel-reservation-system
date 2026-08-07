@@ -45,6 +45,15 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getByStatus(status));
     }
 
+    // The owner/manager panel's entry point: every booking across a company's hotels,
+    // optionally narrowed to one status (e.g. the PENDING queue that needs confirming).
+    @GetMapping("/company/{companyId}")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRole(#companyId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    public ResponseEntity<List<BookingResponse>> getByCompany(@PathVariable Long companyId,
+                                                               @RequestParam(required = false) BookingStatus status) {
+        return ResponseEntity.ok(bookingService.getByCompany(companyId, status));
+    }
+
     @GetMapping("/user/{userId}/status/{status}")
     @PreAuthorize("hasAnyRole('ADMIN') or @companyAuth.isSelf(#userId)")
     public ResponseEntity<List<BookingResponse>> getByUserAndStatus(@PathVariable Long userId, @PathVariable BookingStatus status) {
@@ -52,25 +61,25 @@ public class BookingController {
     }
 
     @PatchMapping("/{id}/confirm")
-    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<BookingResponse> confirm(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.confirm(id));
     }
 
     @PatchMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST') or @companyAuth.isBookingOwner(#id)")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST') or @companyAuth.isBookingOwner(#id)")
     public ResponseEntity<BookingResponse> cancel(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.cancel(id));
     }
 
     @PatchMapping("/{id}/checkIn")
-    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<BookingResponse> checkIn(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.checkIn(id));
     }
 
     @PatchMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<BookingResponse> complete(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.complete(id));
     }

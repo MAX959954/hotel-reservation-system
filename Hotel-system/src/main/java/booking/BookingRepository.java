@@ -21,4 +21,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                                           @Param("checkOut") LocalDateTime checkOut);
 
     List<Booking> findByUserIdAndBookingStatus(Long userId, BookingStatus status);
+
+    List<Booking> findByRoom_Hotel_Company_Id(Long companyId);
+
+    List<Booking> findByRoom_Hotel_Company_IdAndBookingStatus(Long companyId, BookingStatus status);
 }

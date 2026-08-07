@@ -1,40 +1,63 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
+/* Must precede the Tailwind import: that one expands into rules, and a plain @import
+   is only legal before any rule. */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap');
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+@import "tailwindcss";
 
-  font: 16px/145% var(--sans);
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #0a0a0b;
+  --color-ink-2: #121215;
+  --color-ink-3: #1a1a1f;
+  --color-champagne: #d8b778;
+  --color-champagne-bright: #efd9a8;
+  --color-champagne-dim: #8a7449;
+  --color-bone: #f4f1ec;
+  --color-bone-dim: rgba(244, 241, 236, 0.62);
+  --color-hairline: rgba(244, 241, 236, 0.12);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-  }
+:root {
+  font-family: var(--font-sans);
+  background-color: var(--color-ink);
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
+  background-color: var(--color-ink);
+  color: var(--color-bone);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2 {
-  color: var(--text-h);
-  font-weight: 500;
+/* Ken Burns drift for hero stills */
+@keyframes kenburns {
+  0%   { transform: scale(1.08) translate3d(0, 0, 0); }
+  100% { transform: scale(1.22) translate3d(-1.5%, -2%, 0); }
+}
+.animate-kenburns { animation: kenburns 22s ease-out infinite alternate; }
+
+/* Focus ring — champagne, per the quality bar. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-champagne);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-a {
-  color: var(--accent, #6d28d9);
+/* Native date/number controls render near-invisible on a dark ground otherwise. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.55);
+  cursor: pointer;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-kenburns { animation: none; }
+  * { scroll-behavior: auto !important; }
 }

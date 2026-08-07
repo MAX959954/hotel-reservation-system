@@ -17,14 +17,34 @@ public class UserController {
 
     private final UserService userService;
 
-    @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register (@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(userService.register(request));
+    @PostMapping("/otp/request")
+    public ResponseEntity<Void> requestOtp(@Valid @RequestBody OtpRequestPayload payload) {
+        userService.requestOtp(payload.getIdentifier());
+        return ResponseEntity.accepted().build();
     }
 
+    // First factor of sign-in. On success this sends the same kind of code /otp/request
+    // does — the client continues at POST /otp/verify exactly as registration does, since
+    // OtpService.sendLoginCode writes the same OtpCode rows requestCode does.
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> logIn (@Valid @RequestBody LogInRequest request) {
-        return ResponseEntity.ok(userService.logIn(request));
+    public ResponseEntity<Void> login(@Valid @RequestBody LoginRequest request) {
+        userService.login(request);
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<OtpVerifyResponse> verifyOtp(@Valid @RequestBody OtpVerifyPayload payload) {
+        return ResponseEntity.ok(userService.verifyOtp(payload));
+    }
+
+    @PostMapping("/complete-registration")
+    public ResponseEntity<AuthResponse> completeRegistration(@Valid @RequestBody CompleteRegistrationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.completeRegistration(request));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> google(@Valid @RequestBody GoogleAuthRequest request) {
+        return ResponseEntity.ok(userService.authenticateWithGoogle(request.getIdToken()));
     }
 
 }

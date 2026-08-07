@@ -1,20 +1,34 @@
 import { http } from './http'
-import type { HotelResponse } from '../types/hotel'
+import type { HotelResponse, PropertyType } from '@/types/hotel'
 
 export const hotelsApi = {
-  getById(id: number) {
-    return http.get<HotelResponse>(`/api/hotels/${id}`).then((r) => r.data)
+  async getById(id: number | string): Promise<HotelResponse> {
+    const { data } = await http.get<HotelResponse>(`/api/hotels/${id}`)
+    return data
   },
-  getByCity(city: string) {
-    return http.get<HotelResponse[]>(`/api/hotels/city/${city}`).then((r) => r.data)
+
+  async getByCity(city: string): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/city/${encodeURIComponent(city)}`)
+    return data
   },
-  getByCountry(country: string) {
-    return http.get<HotelResponse[]>(`/api/hotels/country/${country}`).then((r) => r.data)
+
+  async getByCountry(country: string): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/country/${encodeURIComponent(country)}`)
+    return data
   },
-  getByCompany(companyId: number) {
-    return http.get<HotelResponse[]>(`/api/hotels/company/${companyId}`).then((r) => r.data)
+
+  async getByRating(rating: number): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/rating/${rating}`)
+    return data
   },
-  getByRating(rating: number) {
-    return http.get<HotelResponse[]>(`/api/hotels/rating/${rating}`).then((r) => r.data)
+
+  async getByCompany(companyId: number): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/company/${companyId}`)
+    return data
+  },
+
+  async getByType(propertyType: PropertyType): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/type/${propertyType}`)
+    return data
   },
 }

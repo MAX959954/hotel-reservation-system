@@ -1,799 +1,524 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthModalStore } from '../stores/authModal'
-import { useAuthStore } from '../stores/auth'
-import { authApi } from '../api/auth'
+import { ArrowLeft, Loader2, Lock, Mail, X } from 'lucide-vue-next'
+import { authApi } from '@/api/auth'
+import { apiErrorMessage } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
+import { useAuthModalStore } from '@/stores/authModal'
+import { todayIso } from '@/lib/dates'
 
-const { t } = useI18n()
 const router = useRouter()
-const modal = useAuthModalStore()
 const auth = useAuthStore()
+const modal = useAuthModalStore()
 
-const panelRef = ref<HTMLElement | null>(null)
-const firstFieldRef = ref<HTMLElement | null>(null)
+const busy = ref(false)
+const error = ref('')
+/** Set only for the specific "an account already exists" error, so the form can offer a
+ *  direct way to switch to sign-in instead of just printing the sentence at the user. */
+const suggestSignIn = ref(false)
 
-// ---------- step 1: identify ----------
-const identifierInput = ref('')
-const identifyLoading = ref(false)
-const identifyError = ref('')
+const email = ref('')
+const password = ref('')
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-const googleBtnHost = ref<HTMLElement | null>(null)
-let googleScriptPromise: Promise<void> | null = null
-
-function loadGoogleScript() {
-  if (googleScriptPromise) return googleScriptPromise
-  googleScriptPromise = new Promise((resolve, reject) => {
-    if (document.getElementById('google-identity-script')) return resolve()
-    const script = document.createElement('script')
-    script.id = 'google-identity-script'
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load Google script'))
-    document.head.appendChild(script)
-  })
-  return googleScriptPromise
-}
-
-async function renderGoogleButton() {
-  if (!googleClientId || !googleBtnHost.value) return
-  try {
-    await loadGoogleScript()
-    const g = (window as any).google
-    if (!g?.accounts?.id) return
-    g.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: onGoogleCredential,
-    })
-    googleBtnHost.value.innerHTML = ''
-    g.accounts.id.renderButton(googleBtnHost.value, {
-      theme: 'filled_black',
-      shape: 'pill',
-      size: 'large',
-      text: 'continue_with',
-      width: 320,
-    })
-  } catch {
-    // Google script failed to load (offline, blocked) — the rest of the modal still works.
-  }
-}
-
-async function onGoogleCredential(response: { credential: string }) {
-  identifyError.value = ''
-  identifyLoading.value = true
-  try {
-    const res = await authApi.google(response.credential)
-    auth.setSession(res)
-    finishAndClose()
-  } catch (err: any) {
-    identifyError.value = err.response?.data?.message ?? t('auth.identify.errorFallback')
-  } finally {
-    identifyLoading.value = false
-  }
-}
-
-async function onIdentifySubmit() {
-  identifyError.value = ''
-  identifyLoading.value = true
-  try {
-    await authApi.requestOtp(identifierInput.value.trim())
-    modal.goToCode(identifierInput.value.trim())
-  } catch (err: any) {
-    identifyError.value = err.response?.data?.message ?? t('auth.identify.errorFallback')
-  } finally {
-    identifyLoading.value = false
-  }
-}
-
-// ---------- step 2: code ----------
-const digits = ref(['', '', '', '', '', ''])
-const digitRefs = ref<(HTMLInputElement | null)[]>([])
-const codeLoading = ref(false)
-const codeError = ref('')
-const resendCooldown = ref(30)
-let resendTimer: ReturnType<typeof setInterval> | null = null
-
-function startResendCooldown() {
-  resendCooldown.value = 30
-  if (resendTimer) clearInterval(resendTimer)
-  resendTimer = setInterval(() => {
-    if (resendCooldown.value > 0) resendCooldown.value -= 1
-    else if (resendTimer) clearInterval(resendTimer)
-  }, 1000)
-}
-
-function onDigitInput(index: number, event: Event) {
-  const input = event.target as HTMLInputElement
-  const value = input.value.replace(/\D/g, '')
-  digits.value[index] = value.slice(-1)
-  if (value && index < 5) {
-    digitRefs.value[index + 1]?.focus()
-  }
-  if (digits.value.every((d) => d !== '')) {
-    submitCode()
-  }
-}
-
-function onDigitKeydown(index: number, event: KeyboardEvent) {
-  if (event.key === 'Backspace' && !digits.value[index] && index > 0) {
-    digitRefs.value[index - 1]?.focus()
-  }
-}
-
-function onDigitPaste(event: ClipboardEvent) {
-  const pasted = event.clipboardData?.getData('text').replace(/\D/g, '').slice(0, 6)
-  if (!pasted) return
-  event.preventDefault()
-  for (let i = 0; i < 6; i++) {
-    digits.value[i] = pasted[i] ?? ''
-  }
-  const lastFilled = Math.min(pasted.length, 6) - 1
-  digitRefs.value[Math.max(lastFilled, 0)]?.focus()
-  if (pasted.length === 6) submitCode()
-}
-
-async function submitCode() {
-  const code = digits.value.join('')
-  if (code.length !== 6) return
-  codeError.value = ''
-  codeLoading.value = true
-  try {
-    const res = await authApi.verifyOtp(modal.identifier, code)
-    if (res.newAccount && res.verificationTicket) {
-      modal.goToRegister(res.verificationTicket)
-    } else if (res.auth) {
-      auth.setSession(res.auth)
-      finishAndClose()
-    }
-  } catch (err: any) {
-    codeError.value = err.response?.data?.message ?? t('auth.code.errorFallback')
-    digits.value = ['', '', '', '', '', '']
-    digitRefs.value[0]?.focus()
-  } finally {
-    codeLoading.value = false
-  }
-}
-
-async function onResend() {
-  if (resendCooldown.value > 0) return
-  codeError.value = ''
-  try {
-    await authApi.requestOtp(modal.identifier)
-    startResendCooldown()
-  } catch (err: any) {
-    codeError.value = err.response?.data?.message ?? t('auth.code.errorFallback')
-  }
-}
-
-function onBackToIdentify() {
-  modal.backToIdentify()
-  digits.value = ['', '', '', '', '', '']
-  codeError.value = ''
-}
-
-// ---------- step 3: register ----------
 const firstName = ref('')
 const lastName = ref('')
 const dateOfBirth = ref('')
-const password = ref('')
-const showPassword = ref(false)
-const registerLoading = ref(false)
-const registerError = ref('')
+const confirmPassword = ref('')
 
-const strength = computed(() => {
-  const pw = password.value
-  if (!pw) return { level: 0, label: '' }
-  let score = 0
-  if (pw.length >= 8) score++
-  if (pw.length >= 12) score++
-  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
-  if (/\d/.test(pw)) score++
-  if (/[^A-Za-z0-9]/.test(pw)) score++
+const codeDigits = ref<string[]>(['', '', '', '', '', ''])
+const codeInputs = ref<HTMLInputElement[]>([])
 
-  let level: number
-  if (score <= 1) level = 1
-  else if (score === 2) level = 2
-  else if (score <= 4) level = 3
-  else level = 4
+const resendIn = ref(0)
+let resendTimer: ReturnType<typeof setInterval> | null = null
 
-  const labels = ['', t('auth.register.strengthWeak'), t('auth.register.strengthFair'), t('auth.register.strengthGood'), t('auth.register.strengthStrong')]
-  return { level, label: labels[level] }
+const code = computed(() => codeDigits.value.join(''))
+const emailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()))
+
+/** Mirrors the server's @MinAge(18) so the user is not told "no" only after a round-trip. */
+const ageValid = computed(() => {
+  if (!dateOfBirth.value) return false
+  const dob = new Date(`${dateOfBirth.value}T00:00:00`)
+  if (Number.isNaN(dob.getTime())) return false
+  const cutoff = new Date()
+  cutoff.setFullYear(cutoff.getFullYear() - 18)
+  return dob <= cutoff
 })
 
-async function onRegisterSubmit() {
-  registerError.value = ''
-  registerLoading.value = true
+const passwordStrength = computed(() => {
+  const v = password.value
+  let score = 0
+  if (v.length >= 8) score++
+  if (v.length >= 12) score++
+  if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++
+  if (/\d/.test(v)) score++
+  if (/[^A-Za-z0-9]/.test(v)) score++
+  return Math.min(score, 4)
+})
+const strengthLabel = computed(() => ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][passwordStrength.value])
+
+const passwordsMatch = computed(() => confirmPassword.value.length > 0 && confirmPassword.value === password.value)
+
+const signinValid = computed(() => emailValid.value && password.value.length > 0)
+const registerValid = computed(
+  () =>
+    emailValid.value &&
+    firstName.value.trim() &&
+    lastName.value.trim() &&
+    ageValid.value &&
+    password.value.length >= 8 &&
+    passwordsMatch.value,
+)
+
+watch(
+  () => modal.open,
+  (open) => {
+    if (open) {
+      error.value = ''
+      suggestSignIn.value = false
+      email.value = ''
+      password.value = ''
+      confirmPassword.value = ''
+      firstName.value = ''
+      lastName.value = ''
+      dateOfBirth.value = ''
+      codeDigits.value = ['', '', '', '', '', '']
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      stopResendTimer()
+    }
+  },
+)
+
+function startResendTimer() {
+  resendIn.value = 30
+  stopResendTimer()
+  resendTimer = setInterval(() => {
+    resendIn.value -= 1
+    if (resendIn.value <= 0) stopResendTimer()
+  }, 1000)
+}
+function stopResendTimer() {
+  if (resendTimer) clearInterval(resendTimer)
+  resendTimer = null
+}
+
+onUnmounted(() => {
+  stopResendTimer()
+  document.body.style.overflow = ''
+})
+
+/** Sign-in: password is checked here; a code is only ever sent once it's correct. */
+async function submitSignin() {
+  if (!signinValid.value || busy.value) return
+  busy.value = true
+  error.value = ''
   try {
-    const res = await authApi.completeRegistration({
-      verificationTicket: modal.verificationTicket!,
+    await authApi.login(email.value.trim(), password.value)
+    await advanceToCode()
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'Could not sign in. Try again.')
+  } finally {
+    busy.value = false
+  }
+}
+
+/** Register: everything is collected up front; the code step that follows only confirms
+ *  the email address, it doesn't ask for any of this again. */
+async function submitRegister() {
+  if (!registerValid.value || busy.value) return
+  busy.value = true
+  error.value = ''
+  suggestSignIn.value = false
+  try {
+    await authApi.requestOtp(email.value.trim())
+    await advanceToCode()
+  } catch (e) {
+    const message = apiErrorMessage(e, 'Could not send the code. Try again.')
+    error.value = message
+    suggestSignIn.value = /sign in with your password instead/i.test(message)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function advanceToCode() {
+  modal.identifier = email.value.trim()
+  modal.step = 'code'
+  startResendTimer()
+  await nextTick()
+  codeInputs.value[0]?.focus()
+}
+
+function switchToSignIn() {
+  modal.intent = 'signin'
+  error.value = ''
+  suggestSignIn.value = false
+  password.value = ''
+}
+
+async function resend() {
+  if (resendIn.value > 0 || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    if (modal.intent === 'signin') {
+      await authApi.login(email.value.trim(), password.value)
+    } else {
+      await authApi.requestOtp(modal.identifier)
+    }
+    startResendTimer()
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function setCodeInput(el: unknown, index: number) {
+  if (el instanceof HTMLInputElement) codeInputs.value[index] = el
+}
+
+function onDigit(index: number, event: Event) {
+  const input = event.target as HTMLInputElement
+  const value = input.value.replace(/\D/g, '')
+
+  if (value.length > 1) {
+    const chars = value.slice(0, 6).split('')
+    chars.forEach((c, i) => {
+      if (index + i < 6) codeDigits.value[index + i] = c
+    })
+    const next = Math.min(index + chars.length, 5)
+    codeInputs.value[next]?.focus()
+  } else {
+    codeDigits.value[index] = value
+    if (value && index < 5) codeInputs.value[index + 1]?.focus()
+  }
+
+  input.value = codeDigits.value[index] ?? ''
+  if (code.value.length === 6) submitCode()
+}
+
+function onDigitKeydown(index: number, event: KeyboardEvent) {
+  if (event.key === 'Backspace' && !codeDigits.value[index] && index > 0) {
+    codeInputs.value[index - 1]?.focus()
+  }
+}
+
+async function submitCode() {
+  if (code.value.length !== 6 || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const res = await authApi.verifyOtp(modal.identifier, code.value)
+
+    if (modal.intent === 'signin') {
+      // login() only ever sends a code for an existing, password-verified account, so
+      // this is always the "already a member" branch — but check res.auth rather than
+      // assume, since trusting a response shape you haven't looked at is how the last
+      // few bugs in this app happened.
+      if (res.auth) {
+        finish(res.auth)
+        return
+      }
+      throw new Error('Unexpected response completing sign-in.')
+    }
+
+    // Registration: the details were already collected in the form step, so this call
+    // needs no further input from the user.
+    if (!res.newAccount || !res.verificationTicket) {
+      throw new Error('Unexpected response completing registration.')
+    }
+    const auth2 = await authApi.completeRegistration({
+      verificationTicket: res.verificationTicket,
       firstName: firstName.value.trim(),
       lastName: lastName.value.trim(),
       dateOfBirth: dateOfBirth.value,
       password: password.value,
     })
-    auth.setSession(res)
-    finishAndClose()
-  } catch (err: any) {
-    registerError.value = err.response?.data?.message ?? t('auth.register.errorFallback')
+    finish(auth2)
+  } catch (e) {
+    const message = apiErrorMessage(e)
+    error.value = message
+    codeDigits.value = ['', '', '', '', '', '']
+    // "Verification expired — start again." means the ticket behind this code is gone;
+    // the form step can no longer complete anything, so send the user all the way back.
+    if (/expired/i.test(message) && /start again/i.test(message)) {
+      modal.step = 'form'
+    } else {
+      await nextTick()
+      codeInputs.value[0]?.focus()
+    }
   } finally {
-    registerLoading.value = false
+    busy.value = false
   }
 }
 
-// ---------- shared ----------
-function finishAndClose() {
-  const redirect = modal.redirectTo
-  modal.close()
-  if (redirect) router.push(redirect)
+function finish(session: Parameters<typeof auth.setSession>[0]) {
+  auth.setSession(session)
+  const intended = modal.intendedRoute
+  modal.close(true)
+  if (intended) router.push(intended)
 }
 
-function onOverlayClick() {
-  modal.close()
+function close() {
+  modal.close(false)
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    modal.close()
-    return
-  }
-  if (event.key === 'Tab' && panelRef.value) {
-    const focusables = panelRef.value.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), a[href]',
-    )
-    if (focusables.length === 0) return
-    const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
-  }
+function backToForm() {
+  error.value = ''
+  suggestSignIn.value = false
+  modal.step = 'form'
 }
-
-watch(
-  () => modal.step,
-  async () => {
-    codeError.value = ''
-    identifyError.value = ''
-    registerError.value = ''
-    if (modal.step === 'code') {
-      digits.value = ['', '', '', '', '', '']
-      startResendCooldown()
-    }
-    await nextTick()
-    firstFieldRef.value?.focus()
-    if (modal.step === 'identify') {
-      identifierInput.value = ''
-      await nextTick()
-      renderGoogleButton()
-    }
-  },
-)
-
-watch(
-  () => modal.isOpen,
-  async (open) => {
-    if (open) {
-      identifierInput.value = ''
-      firstName.value = ''
-      lastName.value = ''
-      dateOfBirth.value = ''
-      password.value = ''
-      await nextTick()
-      firstFieldRef.value?.focus()
-      if (modal.step === 'identify') renderGoogleButton()
-    }
-  },
-)
-
-onMounted(() => {
-  document.addEventListener('keydown', onKeydown)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown)
-  if (resendTimer) clearInterval(resendTimer)
-})
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="modal.isOpen" class="overlay" @mousedown.self="onOverlayClick">
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-to-class="opacity-0"
+    >
       <div
-        ref="panelRef"
-        class="panel"
+        v-if="modal.open"
+        class="fixed inset-0 z-50 bg-ink/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
         role="dialog"
         aria-modal="true"
-        :aria-label="t('auth.modalLabel')"
+        aria-labelledby="auth-modal-title"
+        @click.self="close"
+        @keydown.esc="close"
       >
-        <button type="button" class="close-btn" :aria-label="t('auth.close')" @click="modal.close()">
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-            <path d="M1 1l14 14M15 1L1 15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-          </svg>
-        </button>
-
-        <!-- Step 1: identify -->
-        <form v-if="modal.step === 'identify'" class="step" @submit.prevent="onIdentifySubmit">
-          <p class="folio-no">{{ t('auth.folioMark') }}</p>
-          <h2>{{ t('auth.identify.title') }}</h2>
-          <p class="subtitle">{{ t('auth.identify.subtitle') }}</p>
-
-          <label class="field">
-            <span class="field-label">{{ t('auth.identify.emailLabel') }}</span>
-            <input
-              ref="firstFieldRef"
-              v-model="identifierInput"
-              type="email"
-              required
-              autocomplete="email"
-              placeholder="you@example.com"
-            />
-          </label>
-
-          <p v-if="identifyError" class="error">{{ identifyError }}</p>
-
-          <button type="submit" class="brass-btn" :disabled="identifyLoading">
-            {{ identifyLoading ? t('auth.identify.sending') : t('auth.identify.continueButton') }}
-          </button>
-
-          <div class="divider"><span>{{ t('auth.identify.or') }}</span></div>
-
-          <div ref="googleBtnHost" class="google-btn-host" v-show="googleClientId"></div>
-
-          <button type="button" class="social-btn" disabled>
-            <svg viewBox="0 0 384 512" width="16" height="16" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"
-              />
-            </svg>
-            <span>{{ t('auth.identify.appleButton') }}</span>
-            <span class="coming-soon">{{ t('auth.identify.comingSoon') }}</span>
-          </button>
-        </form>
-
-        <!-- Step 2: code -->
-        <form v-else-if="modal.step === 'code'" class="step" @submit.prevent="submitCode">
-          <button type="button" class="back-btn" :aria-label="t('auth.back')" @click="onBackToIdentify">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path d="M10 2L4 8l6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-          <p class="folio-no">{{ t('auth.folioMark') }}</p>
-          <h2>{{ t('auth.code.title') }}</h2>
-          <p class="subtitle">{{ t('auth.code.subtitle', { identifier: modal.identifier }) }}</p>
-
-          <div class="code-cells">
-            <input
-              v-for="(digit, i) in digits"
-              :key="i"
-              :ref="(el) => (digitRefs[i] = el as HTMLInputElement)"
-              v-model="digits[i]"
-              class="code-cell"
-              type="text"
-              inputmode="numeric"
-              pattern="\d*"
-              maxlength="1"
-              autocomplete="one-time-code"
-              :disabled="codeLoading"
-              @input="onDigitInput(i, $event)"
-              @keydown="onDigitKeydown(i, $event)"
-              @paste="onDigitPaste"
-            />
-          </div>
-
-          <p v-if="codeError" class="error">{{ codeError }}</p>
-
-          <button type="submit" class="brass-btn" :disabled="codeLoading">
-            {{ codeLoading ? t('auth.code.verifying') : t('auth.code.verifyButton') }}
-          </button>
-
-          <p class="resend">
-            <button type="button" class="link-btn" :disabled="resendCooldown > 0" @click="onResend">
-              {{ resendCooldown > 0 ? t('auth.code.resendIn', { seconds: resendCooldown }) : t('auth.code.resend') }}
-            </button>
-          </p>
-        </form>
-
-        <!-- Step 3: register -->
-        <form v-else class="step" @submit.prevent="onRegisterSubmit">
-          <button type="button" class="back-btn" :aria-label="t('auth.back')" @click="modal.backToIdentify()">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path d="M10 2L4 8l6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-          <p class="folio-no">{{ t('auth.folioMark') }}</p>
-          <h2>{{ t('auth.register.title') }}</h2>
-          <p class="subtitle">{{ t('auth.register.subtitle') }}</p>
-
-          <div class="name-row">
-            <label class="field">
-              <span class="field-label">{{ t('auth.register.firstName') }}</span>
-              <input ref="firstFieldRef" v-model="firstName" type="text" required autocomplete="given-name" />
-            </label>
-            <label class="field">
-              <span class="field-label">{{ t('auth.register.lastName') }}</span>
-              <input v-model="lastName" type="text" required autocomplete="family-name" />
-            </label>
-          </div>
-
-          <label class="field">
-            <span class="field-label">{{ t('auth.register.dateOfBirth') }}</span>
-            <input v-model="dateOfBirth" type="date" required autocomplete="bday" />
-          </label>
-
-          <label class="field">
-            <span class="field-label">
-              {{ t('auth.register.password') }}
-              <button type="button" class="show-toggle" @click="showPassword = !showPassword">
-                {{ showPassword ? t('auth.register.hide') : t('auth.register.show') }}
+        <div
+          class="w-full max-w-md rounded-[1.75rem] bg-ink-2/90 backdrop-blur-2xl border border-hairline p-6 md:p-8 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)] my-8"
+        >
+          <div class="flex items-start justify-between gap-4 mb-6">
+            <div class="flex items-center gap-3">
+              <button
+                v-if="modal.step === 'code'"
+                type="button"
+                class="text-bone-dim hover:text-bone transition-colors"
+                aria-label="Back"
+                @click="backToForm"
+              >
+                <ArrowLeft class="w-4 h-4" />
               </button>
-            </span>
-            <input
-              v-model="password"
-              :type="showPassword ? 'text' : 'password'"
-              required
-              minlength="8"
-              autocomplete="new-password"
-            />
-          </label>
-
-          <div v-if="password" class="strength" :class="`strength-${strength.level}`">
-            <span class="strength-bar">
-              <span v-for="n in 4" :key="n" class="strength-seg" :class="{ filled: n <= strength.level }" />
-            </span>
-            <span class="strength-label">{{ t('auth.register.strengthPrefix') }} {{ strength.label }}</span>
+              <h2 id="auth-modal-title" class="font-display text-2xl text-bone">
+                <template v-if="modal.step === 'form'">{{
+                  modal.intent === 'register' ? 'Create your account' : 'Sign in to Folio'
+                }}</template>
+                <template v-else>Check your inbox</template>
+              </h2>
+            </div>
+            <button type="button" class="text-bone-dim hover:text-bone transition-colors" aria-label="Close" @click="close">
+              <X class="w-5 h-5" />
+            </button>
           </div>
 
-          <p v-if="registerError" class="error">{{ registerError }}</p>
+          <!-- Sign in: email + password. A code follows once the password checks out. -->
+          <form
+            v-if="modal.step === 'form' && modal.intent === 'signin'"
+            class="flex flex-col gap-4"
+            @submit.prevent="submitSignin"
+          >
+            <label class="flex items-center gap-3 border-b border-hairline pb-2 focus-within:border-champagne transition-colors">
+              <Mail class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
+              <span class="sr-only">Email address</span>
+              <input
+                v-model="email"
+                type="email"
+                required
+                autocomplete="email"
+                placeholder="you@example.com"
+                class="bg-transparent outline-none text-sm text-bone placeholder:text-bone-dim/60 w-full font-light py-1"
+              />
+            </label>
+            <label class="flex items-center gap-3 border-b border-hairline pb-2 focus-within:border-champagne transition-colors">
+              <Lock class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
+              <span class="sr-only">Password</span>
+              <input
+                v-model="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="Password"
+                class="bg-transparent outline-none text-sm text-bone placeholder:text-bone-dim/60 w-full font-light py-1"
+              />
+            </label>
 
-          <p class="terms">{{ t('auth.register.terms') }}</p>
+            <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
 
-          <button type="submit" class="brass-btn" :disabled="registerLoading">
-            {{ registerLoading ? t('auth.register.creating') : t('auth.register.createButton') }}
-          </button>
-        </form>
+            <button
+              type="submit"
+              :disabled="!signinValid || busy"
+              class="mt-2 flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
+              Continue
+            </button>
+
+            <p class="text-xs font-light text-bone-dim text-center">
+              New to Folio?
+              <button type="button" class="text-champagne hover:text-champagne-bright transition-colors" @click="modal.intent = 'register'">
+                Create an account
+              </button>
+            </p>
+          </form>
+
+          <!-- Register: name, email, date of birth, password, confirm password. -->
+          <form
+            v-else-if="modal.step === 'form'"
+            class="flex flex-col gap-4"
+            @submit.prevent="submitRegister"
+          >
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">First name</span>
+                <input
+                  v-model="firstName"
+                  type="text"
+                  required
+                  autocomplete="given-name"
+                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Last name</span>
+                <input
+                  v-model="lastName"
+                  type="text"
+                  required
+                  autocomplete="family-name"
+                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+                />
+              </label>
+            </div>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Email</span>
+              <input
+                v-model="email"
+                type="email"
+                required
+                autocomplete="email"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+              />
+            </label>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Date of birth</span>
+              <input
+                v-model="dateOfBirth"
+                type="date"
+                required
+                :max="todayIso()"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+              />
+              <span v-if="dateOfBirth && !ageValid" class="text-xs text-rose-300">
+                You must be at least 18 years old to book with us.
+              </span>
+            </label>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Password</span>
+              <input
+                v-model="password"
+                type="password"
+                required
+                minlength="8"
+                autocomplete="new-password"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+              />
+              <div class="flex items-center gap-2 mt-1">
+                <div class="flex-1 h-1 rounded-full bg-bone/10 overflow-hidden">
+                  <div
+                    class="h-full rounded-full bg-champagne transition-all duration-300"
+                    :style="{ width: `${(passwordStrength / 4) * 100}%` }"
+                  />
+                </div>
+                <span class="text-[11px] font-light text-bone-dim w-16 text-right">{{ strengthLabel }}</span>
+              </div>
+            </label>
+
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Confirm password</span>
+              <input
+                v-model="confirmPassword"
+                type="password"
+                required
+                autocomplete="new-password"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+              />
+              <span v-if="confirmPassword && !passwordsMatch" class="text-xs text-rose-300">
+                Passwords don't match.
+              </span>
+            </label>
+
+            <p v-if="error" class="text-xs text-rose-300">
+              {{ error }}
+              <button
+                v-if="suggestSignIn"
+                type="button"
+                class="text-champagne hover:text-champagne-bright transition-colors underline underline-offset-2"
+                @click="switchToSignIn"
+              >
+                Sign in instead
+              </button>
+            </p>
+
+            <button
+              type="submit"
+              :disabled="!registerValid || busy"
+              class="mt-2 flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
+              Continue
+            </button>
+
+            <p class="text-xs font-light text-bone-dim text-center">
+              Already have an account?
+              <button type="button" class="text-champagne hover:text-champagne-bright transition-colors" @click="switchToSignIn">
+                Sign in
+              </button>
+            </p>
+          </form>
+
+          <!-- Code — common to both flows. -->
+          <form v-else class="flex flex-col gap-4" @submit.prevent="submitCode">
+            <p class="text-sm font-light text-bone-dim">
+              Sent to <span class="text-bone">{{ modal.identifier }}</span>. It expires in 10 minutes.
+            </p>
+            <div class="flex gap-2 justify-between">
+              <input
+                v-for="(_, i) in codeDigits"
+                :key="i"
+                :ref="(el) => setCodeInput(el, i)"
+                :value="codeDigits[i]"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                :aria-label="`Digit ${i + 1}`"
+                class="w-12 h-14 text-center rounded-xl bg-bone/5 border border-hairline text-xl text-bone font-display outline-none focus:border-champagne transition-colors"
+                @input="onDigit(i, $event)"
+                @keydown="onDigitKeydown(i, $event)"
+              />
+            </div>
+            <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
+            <div class="flex items-center justify-between text-xs font-light text-bone-dim">
+              <button
+                type="button"
+                :disabled="resendIn > 0 || busy"
+                class="hover:text-bone transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="resend"
+              >
+                {{ resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code' }}
+              </button>
+              <Loader2 v-if="busy" class="w-4 h-4 animate-spin text-champagne" aria-hidden="true" />
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
-
-<style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 6, 4, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  z-index: 200;
-  animation: fade-in 0.2s ease both;
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.panel {
-  position: relative;
-  width: 100%;
-  max-width: 400px;
-  max-height: calc(100vh - 3rem);
-  overflow-y: auto;
-  background: var(--ink-raised);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  /* Reuses the system's one shadow token (see DESIGN.md "One Shadow Rule") — the modal
-     is, like the hero ledger, an object resting above the desk rather than a card. */
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.65), 0 2px 0 rgba(0, 0, 0, 0.25);
-  padding: 2.5rem 2rem 2rem;
-  animation: settle 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes settle {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .overlay,
-  .panel {
-    animation: none;
-  }
-}
-
-.close-btn,
-.back-btn {
-  position: absolute;
-  top: 1.1rem;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 0.35rem;
-  line-height: 0;
-  transition: color 0.15s ease;
-}
-.close-btn {
-  right: 1.1rem;
-}
-.back-btn {
-  left: 1.1rem;
-}
-.close-btn:hover,
-.back-btn:hover {
-  color: var(--brass-bright);
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  gap: 1.4rem;
-}
-
-.folio-no {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 0 1.6rem -0.6rem 0;
-}
-
-.step h2 {
-  font-family: var(--serif);
-  font-size: clamp(1.4rem, 3vw, 1.7rem);
-  font-weight: 600;
-  color: var(--text-h);
-  padding-right: 1.5rem;
-}
-
-.subtitle {
-  font-family: var(--serif);
-  font-size: 0.95rem;
-  color: var(--text-dim);
-  margin-top: -0.6rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.field-label {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.field input {
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 1.05rem;
-  color: var(--text-h);
-  padding: 0.35rem 0;
-  transition: border-color 0.15s ease;
-  width: 100%;
-}
-.field input::placeholder {
-  color: var(--text-dim);
-  opacity: 0.6;
-}
-.field input:focus-visible {
-  outline: none;
-  border-bottom-color: var(--brass);
-}
-.field input[type='date'] {
-  color-scheme: dark;
-}
-
-.name-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.show-toggle {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--brass-bright);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.brass-btn {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: var(--brass);
-  border: none;
-  border-radius: 3px;
-  padding: 0.7rem 1rem;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.brass-btn:hover:not(:disabled) {
-  background: var(--brass-bright);
-}
-.brass-btn:disabled {
-  background: var(--brass-dim);
-  cursor: not-allowed;
-}
-
-.error {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: var(--stamp-bright);
-  margin: -0.8rem 0 0;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin: -0.4rem 0;
-  color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-.google-btn-host {
-  display: flex;
-  justify-content: center;
-}
-
-.social-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  width: 100%;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.03em;
-  color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0.65rem 1rem;
-  cursor: not-allowed;
-}
-.coming-soon {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  opacity: 0.75;
-}
-
-.code-cells {
-  display: flex;
-  gap: 0.6rem;
-  justify-content: center;
-}
-.code-cell {
-  width: 2.4rem;
-  height: 3rem;
-  text-align: center;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 1.5rem;
-  color: var(--text-h);
-  transition: border-color 0.15s ease;
-}
-.code-cell:focus-visible {
-  outline: none;
-  border-bottom-color: var(--brass);
-}
-
-.resend {
-  text-align: center;
-  margin: -0.6rem 0 0;
-}
-.link-btn {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--brass-bright);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.link-btn:disabled {
-  color: var(--text-dim);
-  cursor: default;
-}
-
-.strength {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: -0.8rem;
-}
-.strength-bar {
-  display: flex;
-  gap: 0.25rem;
-}
-.strength-seg {
-  width: 1.4rem;
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-}
-.strength-seg.filled {
-  background: var(--brass-dim);
-}
-.strength-3 .strength-seg.filled,
-.strength-4 .strength-seg.filled {
-  background: var(--brass);
-}
-.strength-4 .strength-seg.filled {
-  background: var(--brass-bright);
-}
-.strength-label {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-}
-
-.terms {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  color: var(--text-dim);
-  margin: -0.6rem 0 0;
-}
-
-@media (max-width: 480px) {
-  .panel {
-    padding: 2.25rem 1.25rem 1.5rem;
-  }
-  .code-cell {
-    width: 2.1rem;
-  }
-  .name-row {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

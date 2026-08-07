@@ -8,6 +8,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Data
@@ -41,6 +43,11 @@ public class Hotels {
     @Builder.Default
     private Hotel_Status status = Hotel_Status.ACTIVE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "property_type", nullable = false)
+    @Builder.Default
+    private PropertyType propertyType = PropertyType.HOTEL;
+
     @Column(name = "phone", nullable = false)
     private String phone;
 
@@ -73,5 +80,15 @@ public class Hotels {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "company_id", nullable = false)
     private Companies company;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @Enumerated(EnumType.STRING)
+    @CollectionTable(
+            name = "hotel_amenities",
+            joinColumns = @JoinColumn(name = "hotel_id")
+    )
+    @Column(name = "amenity")
+    @Builder.Default
+    private Set<Amenity> amenities = new HashSet<>();
 
 }

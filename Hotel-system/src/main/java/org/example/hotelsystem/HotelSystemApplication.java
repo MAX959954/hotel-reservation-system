@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "org.example.hotelsystem",
+        "config",
         "user",
         "companyuser",
         "companies",

@@ -54,7 +54,6 @@ class BookingControllerTest {
     private BookingRequest validRequest() {
         BookingRequest request = new BookingRequest();
         request.setRoomId(1L);
-        request.setUserId(1L);
         request.setCheckIn(LocalDateTime.now().plusDays(1));
         request.setCheckOut(LocalDateTime.now().plusDays(3));
         request.setGuestCount(2);

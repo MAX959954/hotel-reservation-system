@@ -1,4 +1,11 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: hotel_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
   postgres:
     image: postgres:16
     container_name: hotel_db
@@ -23,6 +30,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -31,9 +40,21 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env)}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see .env)}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - hotel_uploads_data:/app/uploads
     ports:
-      - "8080:8080"
+      - "8081:8080"
     restart: unless-stopped
 
 volumes:
   hotel_db_data:
+  hotel_uploads_data:

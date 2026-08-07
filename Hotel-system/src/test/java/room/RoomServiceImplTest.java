@@ -191,12 +191,23 @@ public class RoomServiceImplTest {
     void getAvailableRooms_returnsRooms() {
         LocalDateTime checkIn = LocalDateTime.now();
         LocalDateTime checkOut = checkIn.plusDays(2);
-        given(roomRepository.findAvailableRooms(1L, checkIn, checkOut)).willReturn(List.of(room));
+        given(roomRepository.findAvailableRooms(1L, checkIn, checkOut, null)).willReturn(List.of(room));
 
-        List<RoomResponse> responses = roomService.getAvailableRooms(1L, checkIn, checkOut);
+        List<RoomResponse> responses = roomService.getAvailableRooms(1L, checkIn, checkOut, null);
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getId()).isEqualTo(1L);
+    }
+
+    @Test
+    void getAvailableRooms_filtersByGuestCount_whenProvided() {
+        LocalDateTime checkIn = LocalDateTime.now();
+        LocalDateTime checkOut = checkIn.plusDays(2);
+        given(roomRepository.findAvailableRooms(1L, checkIn, checkOut, 5)).willReturn(List.of());
+
+        List<RoomResponse> responses = roomService.getAvailableRooms(1L, checkIn, checkOut, 5);
+
+        assertThat(responses).isEmpty();
     }
 
     // ---------- updateStatus ----------

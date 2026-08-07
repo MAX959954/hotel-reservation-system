@@ -39,6 +39,33 @@ public class JwtService {
         return extractEmail(token).equals(email) && !isTokenExpired(token);
     }
 
+    // Short-lived ticket proving "this identifier just passed OTP verification" — separate
+    // from the account JWT above (no roles/session), just enough to carry that fact from
+    // the /otp/verify call to the /complete-registration call a moment later.
+    private static final String OTP_TICKET_PURPOSE = "otp_verified";
+    private static final long OTP_TICKET_TTL_MS = 10 * 60 * 1000;
+
+    public String generateOtpTicket(String identifier) {
+        return Jwts.builder()
+                .subject(identifier)
+                .claim("purpose", OTP_TICKET_PURPOSE)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + OTP_TICKET_TTL_MS))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public String extractOtpTicketIdentifier(String ticket) {
+        Claims claims = extractClaims(ticket);
+        if (!OTP_TICKET_PURPOSE.equals(claims.get("purpose", String.class))) {
+            throw new io.jsonwebtoken.JwtException("Not a verification ticket");
+        }
+        if (claims.getExpiration().before(new Date())) {
+            throw new io.jsonwebtoken.JwtException("Verification ticket expired");
+        }
+        return claims.getSubject();
+    }
+
     private boolean isTokenExpired(String token ) {
         return extractClaims(token).getExpiration().before(new Date());
     }

@@ -16,8 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import reviews.ReviewsRequest;
 import reviews.ReviewsResponse;
 import reviews.ReviewsService;
+import user.MailService;
 import user.JwtService;
-import user.RegisterRequest;
+import user.OtpRequestPayload;
 import user.Roles;
 import user.User;
 import user.UserRepository;
@@ -59,6 +60,9 @@ class SecurityAuthorizationTest {
     @MockBean
     private ReviewsService reviewsService;
 
+    @MockBean
+    private MailService mailService;
+
     private String guestToken;
     private String adminToken;
 
@@ -68,7 +72,7 @@ class SecurityAuthorizationTest {
                 .firstName("Gail")
                 .lastName("Guest")
                 .email("gail.guest@example.com")
-                .password_hash("hashed")
+                .passwordHash("hashed")
                 .phone("+100000001")
                 .roles(Set.of(Roles.GUEST))
                 .emailVerified(true)
@@ -81,7 +85,7 @@ class SecurityAuthorizationTest {
                 .firstName("Alice")
                 .lastName("Admin")
                 .email("alice.admin@example.com")
-                .password_hash("hashed")
+                .passwordHash("hashed")
                 .phone("+100000002")
                 .roles(Set.of(Roles.ADMIN))
                 .emailVerified(true)
@@ -150,17 +154,13 @@ class SecurityAuthorizationTest {
     }
 
     @Test
-    void registerEndpoint_isPermitAll_withoutToken() throws Exception {
-        RegisterRequest request = new RegisterRequest();
-        request.setFirstName("New");
-        request.setLastName("User");
-        request.setEmail("new.user@example.com");
-        request.setPassword("password123");
-        request.setPhone("+100000099");
+    void otpRequestEndpoint_isPermitAll_withoutToken() throws Exception {
+        OtpRequestPayload request = new OtpRequestPayload();
+        request.setIdentifier("new.user@example.com");
 
-        mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/otp/request")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isAccepted());
     }
 }

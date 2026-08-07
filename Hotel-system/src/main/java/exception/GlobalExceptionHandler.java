@@ -9,6 +9,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
@@ -61,6 +62,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiError> handleNoResourceFound(NoResourceFoundException ex) {
         return build(HttpStatus.NOT_FOUND , "No such endpoint" , null);
+    }
+
+    // Thrown by Spring itself before the controller runs, when a multipart upload exceeds
+    // spring.servlet.multipart.max-file-size — without this it falls through to the
+    // generic 500 handler below instead of a message the client can actually show.
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Image must be 5 MB or smaller.", null);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

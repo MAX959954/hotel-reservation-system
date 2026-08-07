@@ -14,9 +14,6 @@ public class BookingRequest {
     private Long roomId;
 
     @NotNull
-    private Long userId;
-
-    @NotNull
     @Future
     private LocalDateTime checkIn;
 

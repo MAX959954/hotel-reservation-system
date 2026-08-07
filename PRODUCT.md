@@ -23,8 +23,8 @@ A multi-company marketplace, not a single hotel chain's site: hotels in the back
 - Backend is a separate Spring Boot service (`Hotel-system/`) exposing REST endpoints consumed via `frontend/src/api/*` (axios).
 - Search today is by city (`GET /api/hotels/city/:city`); also available by country, company, and rating.
 - Hotel detail shows available rooms for that hotel (`GET /api/rooms/available/:hotelId` equivalent) and lets a logged-in user open a booking form (check-in, check-out, guest count) per room.
-- Auth is JWT-based (Pinia `auth` store); `requiresAuth` / `guestOnly` route guards already exist for `/bookings`, `/login`, `/register`.
-- Known gap (not to be papered over by new UI): the auth store doesn't yet expose the current user's numeric id, so `BookingsView` and the booking-submit flow in `HotelDetailView` throw until a `/api/auth/me` endpoint or JWT claim is added. This doesn't block a main/landing page, which only needs to route into search.
+- Auth is JWT-based (Pinia `auth` store) via a single global `AuthModal` popup, not dedicated `/login`/`/register` pages — email or phone entry, a 6-digit code, then (for new accounts) name/DOB/password with a strength meter; Google sign-in is also wired. There is no password-based login anymore — the code is the only way in, every time. A `requiresAuth` route guard on `/bookings` opens the modal instead of redirecting to a page.
+- `AuthResponse` (and the persisted `auth` store) now carries the current user's numeric `userId` alongside `email`/`roles`, set at login/register/Google time — `BookingsView` and the booking-submit flow in `HotelDetailView` consume it directly.
 
 ## Capabilities and Constraints
 
@@ -40,7 +40,7 @@ No confirmed brand. "Hotel Reservations" in the current nav is a placeholder, no
 
 ## Evidence on Hand
 
-No real hotel photography, copy, testimonials, or press exists. `HotelResponse.imageUrl` is a real field or the design will need placeholder imagery; do not fabricate specific hotel names, testimonials, or customer counts as if real.
+No real per-hotel photography, copy, testimonials, or press exists. `HotelResponse.imageUrl` is a real field, populated per-property when a hotel operator supplies one; entries without it fall back to a small pool of verified, generic Unsplash interior/exterior photos (not a photo of that specific property — decorative representative imagery, not a factual claim). Do not fabricate specific hotel names, testimonials, or customer counts as if real.
 
 ## Product Principles
 

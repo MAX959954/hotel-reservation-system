@@ -1,32 +1,38 @@
 package user;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.Map;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.util.Collections;
 
 /**
- * Verifies a Google Identity Services ID token by asking Google directly rather than
- * pulling in a Google API client library — one HTTPS round trip to Google's own
- * tokeninfo endpoint, which validates the signature and expiry for us.
+ * Verifies a Google Identity Services ID token locally against Google's published JWKS
+ * (via GoogleIdTokenVerifier, which caches and refreshes the keys itself) rather than
+ * calling the tokeninfo endpoint on every login — that endpoint is rate-limited and
+ * meant for debugging, not production traffic.
  */
 @Slf4j
 @Service
 public class GoogleTokenVerifier {
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final GoogleIdTokenVerifier verifier;
 
-    @Value("${google.oauth.client-id:}")
-    private String expectedClientId;
+    public GoogleTokenVerifier(@Value("${google.oauth.client-id:}") String expectedClientId) {
+        this.verifier = expectedClientId.isBlank()
+                ? null
+                : new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), GsonFactory.getDefaultInstance())
+                        .setAudience(Collections.singletonList(expectedClientId))
+                        .build();
+    }
 
     @Data
     @Builder
@@ -38,46 +44,35 @@ public class GoogleTokenVerifier {
     }
 
     public GoogleIdentity verify(String idToken) {
-        if (expectedClientId == null || expectedClientId.isBlank()) {
+        if (verifier == null) {
             throw new IllegalStateException("Google sign-in isn't configured yet.");
         }
 
-        Map<String, Object> claims;
+        GoogleIdToken googleIdToken;
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                throw new IllegalStateException("Google sign-in failed. Please try again.");
-            }
-            claims = objectMapper.readValue(response.body(), Map.class);
-        } catch (IllegalStateException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            log.warn("Google token verification request failed", ex);
+            googleIdToken = verifier.verify(idToken);
+        } catch (GeneralSecurityException | IOException | IllegalArgumentException ex) {
+            log.warn("Google token verification failed", ex);
             throw new IllegalStateException("Google sign-in failed. Please try again.");
         }
 
-        String audience = (String) claims.get("aud");
-        if (!expectedClientId.equals(audience)) {
+        if (googleIdToken == null) {
             throw new IllegalStateException("Google sign-in failed. Please try again.");
         }
-        if (!"true".equals(String.valueOf(claims.get("email_verified")))) {
+
+        GoogleIdToken.Payload payload = googleIdToken.getPayload();
+        if (!Boolean.TRUE.equals(payload.getEmailVerified())) {
             throw new IllegalStateException("This Google account's email isn't verified.");
         }
 
-        String email = (String) claims.get("email");
-        String givenName = (String) claims.getOrDefault("given_name", "");
-        String familyName = (String) claims.getOrDefault("family_name", "");
-        String subject = (String) claims.get("sub");
+        String givenName = (String) payload.getOrDefault("given_name", "");
+        String familyName = (String) payload.getOrDefault("family_name", "");
 
         return GoogleIdentity.builder()
-                .email(email)
+                .email(payload.getEmail())
                 .firstName(givenName)
                 .lastName(familyName)
-                .subject(subject)
+                .subject(payload.getSubject())
                 .build();
     }
 }

@@ -13,4 +13,7 @@ public interface CompanyUserService {
     void remove(Long id);
 
     List<CompanyUserResponse> getByCompany(Long companyId);
+
+    /** Every company membership (any status) for whoever the JWT says is calling. */
+    List<CompanyUserResponse> getMine();
 }

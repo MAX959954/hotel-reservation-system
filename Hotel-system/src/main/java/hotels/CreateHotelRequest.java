@@ -7,6 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.Set;
+
 @Data
 public class CreateHotelRequest {
     @NotBlank
@@ -39,4 +41,9 @@ public class CreateHotelRequest {
 
     @NotNull
     private Long companyId;
+
+    /** Defaults to HOTEL in the service layer when omitted — see HotelServiceImpl.create. */
+    private PropertyType propertyType;
+
+    private Set<Amenity> amenities;
 }

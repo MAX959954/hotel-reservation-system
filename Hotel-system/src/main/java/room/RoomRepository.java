@@ -29,9 +29,12 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
 
     List<Room> findByHotelIdAndCapacityGreaterThanEqual( Long hotelId, Integer guestCount);
 
-    @Query("SELECT r FROM Room r WHERE r.hotel.id = :hotelId AND r.id NOT IN " +
+    @Query("SELECT r FROM Room r WHERE r.hotel.id = :hotelId " +
+            "AND (:guestCount IS NULL OR r.capacity >= :guestCount) " +
+            "AND r.id NOT IN " +
             "(SELECT b.room.id FROM Booking b WHERE b.check_in < :checkOut AND b.check_out > :checkIn)")
     List<Room> findAvailableRooms(@Param("hotelId") Long hotelId,
                                   @Param("checkIn") LocalDateTime checkIn,
-                                  @Param("checkOut") LocalDateTime checkOut);
+                                  @Param("checkOut") LocalDateTime checkOut,
+                                  @Param("guestCount") Integer guestCount);
 }

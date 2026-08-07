@@ -1,25 +1,42 @@
 import { http } from './http'
-import type { BookingRequest, BookingResponse, BookingStatus } from '../types/booking'
+import type { BookingRequest, BookingResponse, BookingStatus } from '@/types/booking'
 
 export const bookingsApi = {
-  create(payload: BookingRequest) {
-    return http.post<BookingResponse>('/api/bookings', payload).then((r) => r.data)
+  async create(request: BookingRequest): Promise<BookingResponse> {
+    const { data } = await http.post<BookingResponse>('/api/bookings', request)
+    return data
   },
-  getById(id: number) {
-    return http.get<BookingResponse>(`/api/bookings/${id}`).then((r) => r.data)
+
+  async getByUser(userId: number): Promise<BookingResponse[]> {
+    const { data } = await http.get<BookingResponse[]>(`/api/bookings/user/${userId}`)
+    return data
   },
-  getByUser(userId: number) {
-    return http.get<BookingResponse[]>(`/api/bookings/user/${userId}`).then((r) => r.data)
+
+  /** Every booking across a company's hotels — the owner/manager panel's data source. */
+  async getByCompany(companyId: number, status?: BookingStatus): Promise<BookingResponse[]> {
+    const { data } = await http.get<BookingResponse[]>(`/api/bookings/company/${companyId}`, {
+      params: status ? { status } : undefined,
+    })
+    return data
   },
-  getByUserAndStatus(userId: number, status: BookingStatus) {
-    return http
-      .get<BookingResponse[]>(`/api/bookings/user/${userId}/status/${status}`)
-      .then((r) => r.data)
+
+  async confirm(id: number): Promise<BookingResponse> {
+    const { data } = await http.patch<BookingResponse>(`/api/bookings/${id}/confirm`)
+    return data
   },
-  confirm(id: number) {
-    return http.patch<BookingResponse>(`/api/bookings/${id}/confirm`).then((r) => r.data)
+
+  async checkIn(id: number): Promise<BookingResponse> {
+    const { data } = await http.patch<BookingResponse>(`/api/bookings/${id}/checkIn`)
+    return data
   },
-  cancel(id: number) {
-    return http.patch<BookingResponse>(`/api/bookings/${id}/cancel`).then((r) => r.data)
+
+  async complete(id: number): Promise<BookingResponse> {
+    const { data } = await http.patch<BookingResponse>(`/api/bookings/${id}/complete`)
+    return data
+  },
+
+  async cancel(id: number): Promise<BookingResponse> {
+    const { data } = await http.patch<BookingResponse>(`/api/bookings/${id}/cancel`)
+    return data
   },
 }

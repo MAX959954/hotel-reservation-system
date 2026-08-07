@@ -3,6 +3,7 @@ package companyuser;
 import companies.Companies;
 import companies.CompaniesRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import user.User;
@@ -70,6 +71,14 @@ public class CompanyUserServiceImpl implements CompanyUserService {
     @Override
     public List<CompanyUserResponse> getByCompany(Long companyId) {
         return companyUserRepository.findByCompanyId(companyId).stream().map(this :: toResponse).toList();
+    }
+
+    @Override
+    public List<CompanyUserResponse> getMine() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+        return companyUserRepository.findByUserId(user.getId()).stream().map(this :: toResponse).toList();
     }
 
     private CompanyUser findById(Long id) {

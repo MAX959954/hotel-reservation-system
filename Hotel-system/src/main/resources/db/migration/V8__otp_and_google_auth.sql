@@ -8,6 +8,10 @@ ALTER TABLE users ALTER COLUMN phone DROP NOT NULL;
 ALTER TABLE users ADD COLUMN google_id VARCHAR(255);
 ALTER TABLE users ADD CONSTRAINT uq_users_google_id UNIQUE (google_id);
 
+-- Collected at signup in the new account-creation step; nullable because Google-linked
+-- accounts and the 7 existing pre-migration users never provided one.
+ALTER TABLE users ADD COLUMN date_of_birth DATE;
+
 -- Email was only uniqued at the application layer before; the new flow depends on it
 -- being the account key for the code-based login/register branch, so enforce it in the DB.
 ALTER TABLE users ADD CONSTRAINT uq_users_email UNIQUE (email);

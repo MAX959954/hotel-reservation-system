@@ -22,6 +22,7 @@ public class CompleteRegistrationRequest {
 
     @NotNull
     @Past(message = "must be in the past")
+    @MinAge(value = 18, message = "You must be at least 18 years old to book with us.")
     private LocalDate dateOfBirth;
 
     @NotBlank

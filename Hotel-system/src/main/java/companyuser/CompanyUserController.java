@@ -45,4 +45,11 @@ public class CompanyUserController {
         return ResponseEntity.ok(companyUserService.getByCompany(companyId));
     }
 
+    // The manage-bookings panel's first call: which companies (if any) am I staff on,
+    // so the frontend knows whether to show it at all and which company to default to.
+    @GetMapping("/me")
+    public ResponseEntity<List<CompanyUserResponse>> getMine() {
+        return ResponseEntity.ok(companyUserService.getMine());
+    }
+
 }

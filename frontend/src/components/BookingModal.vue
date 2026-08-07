@@ -1,612 +1,243 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { bookingsApi } from '../api/bookings'
-import { useAuthStore } from '../stores/auth'
-import { useCurrencyStore } from '../stores/currency'
-import type { RoomResponse } from '../types/room'
+import { computed, ref, watch } from 'vue'
+import { CheckCircle2, Loader2, X } from 'lucide-vue-next'
+import { bookingsApi } from '@/api/bookings'
+import { apiErrorMessage } from '@/api/http'
+import { useCurrencyStore } from '@/stores/currency'
+import type { RoomResponse } from '@/types/room'
+import { roomTypeLabel } from '@/types/room'
+import type { BookingResponse } from '@/types/booking'
+import {
+  CHECK_IN_TIME,
+  CHECK_OUT_TIME,
+  addDaysIso,
+  nightsBetween,
+  todayIso,
+  toLocalDateTime,
+} from '@/lib/dates'
 
 const props = defineProps<{
+  open: boolean
+  room: RoomResponse | null
   hotelName: string
-  rooms: RoomResponse[]
-  checkIn: string
-  checkOut: string
-  guestCount: number
-  initialRoomId?: number | null
+  initialCheckIn?: string
+  initialCheckOut?: string
+  initialGuests?: number
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; booked: [booking: BookingResponse] }>()
 
-const { t } = useI18n()
-const auth = useAuthStore()
 const currency = useCurrencyStore()
 
-type Step = 'pick' | 'review' | 'done'
-const step = ref<Step>('pick')
-const panelRef = ref<HTMLElement | null>(null)
+const checkIn = ref(todayIso())
+const checkOut = ref(addDaysIso(todayIso(), 2))
+const guestCount = ref(1)
+const specialRequest = ref('')
 
-const selectedRoom = ref<RoomResponse | null>(
-  props.initialRoomId ? props.rooms.find((r) => r.id === props.initialRoomId) ?? null : null,
+const busy = ref(false)
+const error = ref('')
+const created = ref<BookingResponse | null>(null)
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) return
+    created.value = null
+    error.value = ''
+    // Both dates are @Future on the server, so today would be rejected — start tomorrow.
+    checkIn.value = props.initialCheckIn || addDaysIso(todayIso(), 1)
+    checkOut.value = props.initialCheckOut || addDaysIso(todayIso(), 3)
+    guestCount.value = props.initialGuests || 1
+    specialRequest.value = ''
+  },
 )
 
-const nights = computed(() => {
-  const ms = new Date(props.checkOut).getTime() - new Date(props.checkIn).getTime()
-  return Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24)))
+const nights = computed(() => nightsBetween(checkIn.value, checkOut.value))
+const total = computed(() => (props.room ? nights.value * props.room.pricePerNight : 0))
+
+const capacityError = computed(() => {
+  if (!props.room) return ''
+  if (guestCount.value < 1) return 'At least one guest.'
+  if (guestCount.value > props.room.capacity)
+    return `This room sleeps ${props.room.capacity}.`
+  return ''
 })
-const total = computed(() => (selectedRoom.value ? selectedRoom.value.pricePerNight * nights.value : 0))
 
-const acronyms: Record<string, string> = { WIFI: 'WiFi', TV: 'TV', EV: 'EV' }
-function humanize(value: string) {
-  return value
-    .split('_')
-    .map((w) => acronyms[w] ?? w[0].toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ')
-}
+const dateError = computed(() => {
+  if (!checkIn.value || !checkOut.value) return 'Pick both dates.'
+  if (checkIn.value <= todayIso()) return 'Check-in must be a future date.'
+  if (nights.value < 1) return 'Check-out must be after check-in.'
+  return ''
+})
 
-function selectRoom(room: RoomResponse) {
-  selectedRoom.value = room
-}
+const valid = computed(() => !capacityError.value && !dateError.value && !!props.room)
 
-function goToReview() {
-  if (!selectedRoom.value) return
-  step.value = 'review'
-}
-function goToPick() {
-  step.value = 'pick'
-  reserveError.value = ''
-}
-
-const specialRequest = ref('')
-const reserveLoading = ref(false)
-const reserveError = ref('')
-
-function apiErrorMessage(err: any, fallback: string): string {
-  const errors = err.response?.data?.errors
-  if (Array.isArray(errors) && errors.length > 0) return errors.join(' ')
-  return err.response?.data?.message ?? fallback
-}
-
-async function reserve() {
-  if (!selectedRoom.value || !auth.userId) return
-  reserveLoading.value = true
-  reserveError.value = ''
+async function submit() {
+  if (!valid.value || !props.room || busy.value) return
+  busy.value = true
+  error.value = ''
   try {
-    await bookingsApi.create({
-      roomId: selectedRoom.value.id,
-      userId: auth.userId,
-      checkIn: `${props.checkIn}T15:00:00`,
-      checkOut: `${props.checkOut}T11:00:00`,
-      guestCount: props.guestCount,
-      specialRequest: specialRequest.value.trim() || undefined,
+    const booking = await bookingsApi.create({
+      roomId: props.room.id,
+      checkIn: toLocalDateTime(checkIn.value, CHECK_IN_TIME),
+      checkOut: toLocalDateTime(checkOut.value, CHECK_OUT_TIME),
+      guestCount: guestCount.value,
+      ...(specialRequest.value.trim() ? { specialRequest: specialRequest.value.trim() } : {}),
     })
-    step.value = 'done'
-  } catch (err: any) {
-    reserveError.value = apiErrorMessage(err, t('hotelDetail.reserve.errorFallback'))
+    created.value = booking
+    emit('booked', booking)
+  } catch (e) {
+    error.value = apiErrorMessage(e, 'Could not complete the booking.')
   } finally {
-    reserveLoading.value = false
+    busy.value = false
   }
 }
-
-function onOverlayClick() {
-  emit('close')
-}
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    emit('close')
-    return
-  }
-  if (event.key === 'Tab' && panelRef.value) {
-    const focusables = panelRef.value.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]',
-    )
-    if (focusables.length === 0) return
-    const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
-  }
-}
-
-watch(step, async () => {
-  await nextTick()
-  panelRef.value?.querySelector<HTMLElement>('button, input, textarea')?.focus()
-})
-
-onMounted(() => {
-  document.addEventListener('keydown', onKeydown)
-  if (step.value === 'pick' && selectedRoom.value) {
-    // Arrived via a specific room's "Book" button — skip straight to review.
-    step.value = 'review'
-  }
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="overlay" @mousedown.self="onOverlayClick">
-      <div ref="panelRef" class="panel" role="dialog" aria-modal="true" :aria-label="t('hotelDetail.reserve.modalLabel')">
-        <button
-          v-if="step !== 'done'"
-          type="button"
-          class="close-btn"
-          :aria-label="t('auth.close')"
-          @click="emit('close')"
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="open && room"
+        class="fixed inset-0 z-50 bg-ink/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="booking-modal-title"
+        @click.self="emit('close')"
+        @keydown.esc="emit('close')"
+      >
+        <div
+          class="w-full max-w-lg rounded-[1.75rem] bg-ink-2/90 backdrop-blur-2xl border border-hairline p-6 md:p-8 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)] my-8"
         >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-            <path d="M1 1l14 14M15 1L1 15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-          </svg>
-        </button>
-
-        <!-- Step: pick a room -->
-        <div v-if="step === 'pick'" class="step">
-          <p class="folio-no">{{ t('auth.folioMark') }}</p>
-          <h2>{{ t('hotelDetail.reserve.modalTitle') }}</h2>
-          <p class="subtitle">
-            {{ t('hotelDetail.reserve.modalSubtitle', { checkIn, checkOut, guests: guestCount }) }}
-          </p>
-
-          <ul class="room-options">
-            <li v-for="room in rooms" :key="room.id">
-              <button
-                type="button"
-                class="room-option"
-                :class="{ selected: selectedRoom?.id === room.id }"
-                @click="selectRoom(room)"
-              >
-                <span class="room-option-main">
-                  <strong>{{ humanize(room.type) }}</strong>
-                  <span class="room-option-meta">
-                    {{ t('hotelDetail.reserve.roomCapacity', { capacity: room.capacity, floor: room.floor }) }}
-                  </span>
-                </span>
-                <span class="room-option-price">
-                  {{ currency.format(room.pricePerNight * nights) }}
-                  <span class="per-stay">{{ t('hotelDetail.reserve.total') }}</span>
-                </span>
-              </button>
-            </li>
-          </ul>
-
-          <div class="modal-footer">
-            <span v-if="selectedRoom" class="footer-total">
-              {{ currency.format(total) }} {{ t('hotelDetail.reserve.total').toLowerCase() }}
-            </span>
-            <span v-else class="footer-total footer-total-empty">{{ t('hotelDetail.reserve.pickARoom') }}</span>
-            <button type="button" class="brass-btn" :disabled="!selectedRoom" @click="goToReview">
-              {{ t('hotelDetail.reserve.next') }}
+          <div class="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 id="booking-modal-title" class="font-display text-2xl text-bone">
+                {{ created ? 'Request received' : 'Reserve this room' }}
+              </h2>
+              <p class="text-xs font-light text-bone-dim mt-1">
+                {{ roomTypeLabel(room.type) }} · Room {{ room.number }} · {{ hotelName }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-bone-dim hover:text-bone transition-colors"
+              aria-label="Close"
+              @click="emit('close')"
+            >
+              <X class="w-5 h-5" />
             </button>
           </div>
-        </div>
 
-        <!-- Step: review & reserve -->
-        <div v-else-if="step === 'review' && selectedRoom" class="step">
-          <button type="button" class="back-btn" :aria-label="t('auth.back')" @click="goToPick">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path d="M10 2L4 8l6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-          <p class="folio-no">{{ t('auth.folioMark') }}</p>
-          <h2>{{ t('hotelDetail.reserve.reviewTitle') }}</h2>
-
-          <dl class="review-summary">
-            <div class="review-row">
-              <dt>{{ t('hotelDetail.reserve.hotelLabel') }}</dt>
-              <dd>{{ hotelName }}</dd>
+          <!-- Confirmation. The server returns PENDING; calling it "confirmed" here would
+               tell the guest something the backend has not actually done yet. -->
+          <div v-if="created" class="flex flex-col gap-4">
+            <div class="flex items-center gap-3 rounded-2xl bg-bone/5 border border-hairline p-4">
+              <CheckCircle2 class="w-6 h-6 text-champagne shrink-0" aria-hidden="true" />
+              <div>
+                <p class="text-sm text-bone">
+                  Booking #{{ created.id }} — status
+                  <span class="text-champagne">{{ created.bookingStatus }}</span>
+                </p>
+                <p class="text-xs font-light text-bone-dim mt-0.5">
+                  The property still needs to confirm it.
+                </p>
+              </div>
             </div>
-            <div class="review-row">
-              <dt>{{ t('hotelDetail.reserve.roomLabel') }}</dt>
-              <dd>{{ humanize(selectedRoom.type) }} · {{ t('hotelDetail.roomMeta', { number: selectedRoom.number, capacity: selectedRoom.capacity }) }}</dd>
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-light text-bone-dim">Total</span>
+              <span class="font-display text-2xl text-bone">{{ currency.format(created.totalPrice) }}</span>
             </div>
-            <div class="review-row">
-              <dt>{{ t('hotelDetail.reserve.datesLabel') }}</dt>
-              <dd>{{ checkIn }} → {{ checkOut }}</dd>
-            </div>
-            <div class="review-row">
-              <dt>{{ t('hotelDetail.guests') }}</dt>
-              <dd>{{ guestCount }}</dd>
-            </div>
-          </dl>
-
-          <label class="field">
-            <span class="field-label">{{ t('hotelDetail.reserve.specialRequestLabel') }}</span>
-            <textarea
-              v-model="specialRequest"
-              rows="2"
-              :placeholder="t('hotelDetail.reserve.specialRequestPlaceholder')"
-            />
-          </label>
-
-          <div class="price-breakdown">
-            <div class="price-row">
-              <span>{{ t('hotelDetail.reserve.priceBreakdownNights', { nights, rate: currency.format(selectedRoom.pricePerNight) }) }}</span>
-              <span>{{ currency.format(total) }}</span>
-            </div>
-            <div class="price-row price-row-total">
-              <span>{{ t('hotelDetail.reserve.total') }}</span>
-              <span>{{ currency.format(total) }}</span>
-            </div>
+            <RouterLink
+              to="/bookings"
+              class="mt-2 text-center rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors"
+              @click="emit('close')"
+            >
+              View my bookings
+            </RouterLink>
           </div>
 
-          <p v-if="reserveError" class="error">{{ reserveError }}</p>
+          <form v-else class="flex flex-col gap-4" @submit.prevent="submit">
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex flex-col gap-1">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check in</span>
+                <input
+                  v-model="checkIn"
+                  type="date"
+                  :min="addDaysIso(todayIso(), 1)"
+                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check out</span>
+                <input
+                  v-model="checkOut"
+                  type="date"
+                  :min="addDaysIso(checkIn, 1)"
+                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+                />
+              </label>
+            </div>
+            <p v-if="dateError" class="text-xs text-rose-300 -mt-2">{{ dateError }}</p>
 
-          <button type="button" class="brass-btn" :disabled="reserveLoading" @click="reserve">
-            {{ reserveLoading ? t('hotelDetail.reserve.reserving') : t('hotelDetail.reserve.reserveButton') }}
-          </button>
-          <p class="no-charge-note">{{ t('hotelDetail.reserve.noChargeNote') }}</p>
-        </div>
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">
+                Guests (sleeps {{ room.capacity }})
+              </span>
+              <input
+                v-model.number="guestCount"
+                type="number"
+                min="1"
+                :max="room.capacity"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+              />
+              <span v-if="capacityError" class="text-xs text-rose-300">{{ capacityError }}</span>
+            </label>
 
-        <!-- Step: reserved -->
-        <div v-else-if="step === 'done'" class="step done-step">
-          <span class="ink-stamp">{{ t('home.stepReservedStamp') }}</span>
-          <h2>{{ t('hotelDetail.reserve.successTitle') }}</h2>
-          <p class="subtitle">{{ t('hotelDetail.reserve.successBody', { hotelName }) }}</p>
-          <div class="done-actions">
-            <router-link to="/bookings" class="brass-btn" @click="emit('close')">
-              {{ t('hotelDetail.reserve.viewBookings') }}
-            </router-link>
-            <button type="button" class="link-btn" @click="emit('close')">
-              {{ t('auth.close') }}
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">
+                Anything we should know? <span class="normal-case tracking-normal">(optional)</span>
+              </span>
+              <textarea
+                v-model="specialRequest"
+                rows="2"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 resize-none transition-colors"
+              />
+            </label>
+
+            <div
+              class="flex items-baseline justify-between border-t border-hairline pt-4 mt-2"
+              aria-live="polite"
+            >
+              <span class="text-sm font-light text-bone-dim">
+                {{ nights }} {{ nights === 1 ? 'night' : 'nights' }} ×
+                {{ currency.format(room.pricePerNight) }}
+              </span>
+              <span class="text-right">
+                <span class="font-display text-3xl text-bone block">{{ currency.format(total) }}</span>
+                <span v-if="currency.estimate(total)" class="text-[11px] font-light text-bone-dim">
+                  {{ currency.estimate(total) }}
+                </span>
+              </span>
+            </div>
+
+            <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
+
+            <button
+              type="submit"
+              :disabled="!valid || busy"
+              class="flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
+              Reserve
             </button>
-          </div>
+          </form>
         </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
-
-<style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 6, 4, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  z-index: 200;
-  animation: fade-in 0.2s ease both;
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.panel {
-  position: relative;
-  width: 100%;
-  max-width: 440px;
-  max-height: calc(100vh - 3rem);
-  overflow-y: auto;
-  background: var(--ink-raised);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.65), 0 2px 0 rgba(0, 0, 0, 0.25);
-  padding: 2.5rem 2rem 2rem;
-  animation: settle 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes settle {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .overlay,
-  .panel {
-    animation: none;
-  }
-}
-
-.close-btn,
-.back-btn {
-  position: absolute;
-  top: 1.1rem;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 0.35rem;
-  line-height: 0;
-  transition: color 0.15s ease;
-}
-.close-btn {
-  right: 1.1rem;
-}
-.back-btn {
-  left: 1.1rem;
-}
-.close-btn:hover,
-.back-btn:hover {
-  color: var(--brass-bright);
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  gap: 1.4rem;
-}
-
-.folio-no {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 0 1.6rem -0.6rem 0;
-}
-
-.step h2 {
-  font-family: var(--serif);
-  font-size: clamp(1.3rem, 3vw, 1.55rem);
-  font-weight: 600;
-  color: var(--text-h);
-  padding-right: 1.5rem;
-}
-
-.subtitle {
-  font-family: var(--mono);
-  font-size: 0.82rem;
-  color: var(--text-dim);
-  margin-top: -0.6rem;
-}
-
-/* ---------- room picker ---------- */
-.room-options {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-height: 40vh;
-  overflow-y: auto;
-}
-.room-option {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0.85rem 1rem;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.room-option:hover {
-  border-color: var(--brass-dim);
-}
-.room-option.selected {
-  border-color: var(--brass);
-  background: rgba(201, 154, 75, 0.08);
-}
-.room-option-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-.room-option-main strong {
-  font-family: var(--serif);
-  font-size: 1rem;
-  color: var(--text-h);
-}
-.room-option-meta {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-}
-.room-option-price {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.92rem;
-  color: var(--text-h);
-  text-align: right;
-  white-space: nowrap;
-}
-.per-stay {
-  display: block;
-  font-size: 0.64rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-.footer-total {
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  color: var(--text-h);
-}
-.footer-total-empty {
-  color: var(--text-dim);
-}
-
-/* ---------- review ---------- */
-.review-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin: 0;
-}
-.review-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.88rem;
-}
-.review-row dt {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.review-row dd {
-  margin: 0;
-  color: var(--text-h);
-  text-align: right;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.field-label {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.field textarea {
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 0.95rem;
-  color: var(--text-h);
-  padding: 0.35rem 0;
-  resize: vertical;
-  transition: border-color 0.15s ease;
-}
-.field textarea::placeholder {
-  color: var(--text-dim);
-  opacity: 0.6;
-}
-.field textarea:focus-visible {
-  outline: none;
-  border-bottom-color: var(--brass);
-}
-
-.price-breakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--border);
-}
-.price-row {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 0.82rem;
-  color: var(--text-dim);
-}
-.price-row-total {
-  font-size: 0.9rem;
-  color: var(--text-h);
-  font-weight: 600;
-}
-
-.error {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: var(--stamp-bright);
-  margin: 0;
-}
-
-.brass-btn {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: var(--brass);
-  border: none;
-  border-radius: 3px;
-  padding: 0.7rem 1rem;
-  cursor: pointer;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  transition: background 0.15s ease;
-}
-.brass-btn:hover:not(:disabled) {
-  background: var(--brass-bright);
-}
-.brass-btn:disabled {
-  background: var(--brass-dim);
-  cursor: not-allowed;
-}
-
-.no-charge-note {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-align: center;
-  margin: 0;
-}
-
-/* ---------- done ---------- */
-.done-step {
-  align-items: center;
-  text-align: center;
-  padding: 1rem 0;
-}
-.done-step .ink-stamp {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--stamp-bright);
-  border: 2px solid var(--stamp-bright);
-  border-radius: 3px;
-  padding: 0.4rem 0.75rem;
-  transform: rotate(-2deg);
-  opacity: 0.92;
-}
-.done-step h2 {
-  padding-right: 0;
-}
-.done-actions {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  margin-top: 0.5rem;
-}
-.link-btn {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-.link-btn:hover {
-  color: var(--brass-bright);
-}
-
-@media (max-width: 480px) {
-  .panel {
-    padding: 2.25rem 1.25rem 1.5rem;
-  }
-}
-</style>

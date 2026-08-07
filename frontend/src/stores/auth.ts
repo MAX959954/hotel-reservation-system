@@ -1,23 +1,29 @@
 import { defineStore } from 'pinia'
-import { authApi } from '../api/auth'
-import type { LogInRequest, RegisterRequest, Role } from '../types/auth'
+import type { AuthResponse, Role } from '@/types/auth'
 
-const STORAGE_KEY = 'hotel-auth'
+const STORAGE_KEY = 'folio-auth'
 
 interface AuthState {
   token: string | null
   tokenType: string
+  userId: number | null
   email: string | null
   roles: Role[]
+  /** Not part of AuthResponse — populated separately from the profile once it's fetched. */
+  avatarUrl: string | null
+}
+
+function emptyState(): AuthState {
+  return { token: null, tokenType: 'Bearer', userId: null, email: null, roles: [], avatarUrl: null }
 }
 
 function loadState(): AuthState {
   const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return { token: null, tokenType: 'Bearer', email: null, roles: [] }
+  if (!raw) return emptyState()
   try {
-    return JSON.parse(raw) as AuthState
+    return { ...emptyState(), ...(JSON.parse(raw) as Partial<AuthState>) }
   } catch {
-    return { token: null, tokenType: 'Bearer', email: null, roles: [] }
+    return emptyState()
   }
 }
 
@@ -36,34 +42,33 @@ export const useAuthStore = defineStore('auth', {
         JSON.stringify({
           token: this.token,
           tokenType: this.tokenType,
+          userId: this.userId,
           email: this.email,
           roles: this.roles,
+          avatarUrl: this.avatarUrl,
         }),
       )
     },
 
-    async login(payload: LogInRequest) {
-      const res = await authApi.login(payload)
+    setSession(res: AuthResponse) {
       this.token = res.token
-      this.tokenType = res.tokenType
+      this.tokenType = res.tokenType || 'Bearer'
+      this.userId = res.userId
       this.email = res.email
-      this.roles = res.roles
+      this.roles = res.roles ?? []
+      // Not carried on AuthResponse — cleared here so a different account signing in on
+      // the same browser doesn't briefly show the previous user's photo until refetched.
+      this.avatarUrl = null
       this.persist()
     },
 
-    async register(payload: RegisterRequest) {
-      const res = await authApi.register(payload)
-      this.token = res.token
-      this.tokenType = res.tokenType
-      this.email = res.email
-      this.roles = res.roles
+    setAvatar(url: string | null) {
+      this.avatarUrl = url
       this.persist()
     },
 
     logout() {
-      this.token = null
-      this.email = null
-      this.roles = []
+      this.$patch(emptyState())
       localStorage.removeItem(STORAGE_KEY)
     },
   },

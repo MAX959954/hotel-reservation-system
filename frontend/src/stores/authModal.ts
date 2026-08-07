@@ -1,49 +1,59 @@
 import { defineStore } from 'pinia'
 
-export type AuthModalStep = 'identify' | 'code' | 'register'
+/**
+ * Two steps for both flows now that a password is the first factor: `form` collects
+ * credentials (sign in: email + password; register: name + email + DOB + password) and,
+ * on success, sends the email code; `code` collects that code and finishes — logging in
+ * directly for sign-in, or silently calling complete-registration with the details
+ * already gathered in `form` for a new account.
+ */
+export type AuthStep = 'form' | 'code'
+
+/** Which of the two very different `form` steps to render and which endpoint it submits to. */
+export type AuthIntent = 'signin' | 'register'
 
 interface AuthModalState {
-  isOpen: boolean
-  step: AuthModalStep
+  open: boolean
+  step: AuthStep
+  intent: AuthIntent
   identifier: string
   verificationTicket: string | null
-  redirectTo: string | null
+  /** Where to continue once sign-in succeeds — set by the router guard. */
+  intendedRoute: string | null
+  /** Resolved once the user is authenticated, so callers can await a sign-in. */
+  resolver: ((success: boolean) => void) | null
 }
 
 export const useAuthModalStore = defineStore('authModal', {
   state: (): AuthModalState => ({
-    isOpen: false,
-    step: 'identify',
+    open: false,
+    step: 'form',
+    intent: 'signin',
     identifier: '',
     verificationTicket: null,
-    redirectTo: null,
+    intendedRoute: null,
+    resolver: null,
   }),
 
   actions: {
-    open(redirectTo?: string) {
-      this.isOpen = true
-      this.step = 'identify'
+    /** Opens the modal and resolves to whether the user ended up signed in. */
+    prompt(intendedRoute: string | null = null, intent: AuthIntent = 'signin'): Promise<boolean> {
+      this.open = true
+      this.step = 'form'
+      this.intent = intent
       this.identifier = ''
       this.verificationTicket = null
-      this.redirectTo = redirectTo ?? null
+      this.intendedRoute = intendedRoute
+      return new Promise<boolean>((resolve) => {
+        this.resolver = resolve
+      })
     },
 
-    close() {
-      this.isOpen = false
-    },
-
-    goToCode(identifier: string) {
-      this.identifier = identifier
-      this.step = 'code'
-    },
-
-    goToRegister(verificationTicket: string) {
-      this.verificationTicket = verificationTicket
-      this.step = 'register'
-    },
-
-    backToIdentify() {
-      this.step = 'identify'
+    close(success = false) {
+      this.open = false
+      this.resolver?.(success)
+      this.resolver = null
+      this.step = 'form'
       this.verificationTicket = null
     },
   },

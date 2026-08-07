@@ -18,6 +18,9 @@ public interface BookingService {
 
     List<BookingResponse> getByUserAndStatus(Long userId , BookingStatus status);
 
+    /** @param status null returns every booking for the company, not just one status. */
+    List<BookingResponse> getByCompany(Long companyId , BookingStatus status);
+
     BookingResponse confirm(Long id);
 
     BookingResponse cancel(Long id);
