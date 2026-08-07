@@ -2,9 +2,18 @@ import axios, { AxiosError } from 'axios'
 import type { ApiError } from '@/types/auth'
 import { useAuthStore } from '@/stores/auth'
 
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080',
+  baseURL: API_BASE_URL,
 })
+
+/** Uploaded assets (avatars, ...) come back from the API as server-relative paths
+ *  like `/uploads/avatars/xxx.png` — this makes them loadable from an `<img>`. */
+export function resolveUploadUrl(path: string | null | undefined): string | null {
+  if (!path) return null
+  return `${API_BASE_URL}${path}`
+}
 
 http.interceptors.request.use((config) => {
   const auth = useAuthStore()

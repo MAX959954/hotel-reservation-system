@@ -16,6 +16,11 @@ const hotelsStore = useHotelsStore()
 const MAX_CARDS = 6
 const MIN_CARDS_FOR_STREAM = 3
 
+/** Matches the `perspective` on the stage element; the depth term in updateActive needs it. */
+const PERSPECTIVE = 1200
+/** A challenger must win by this much to take over, so the two never flicker at a crossover. */
+const HANDOVER_MARGIN = 1.02
+
 const stays = ref<HotelResponse[]>([])
 const loading = ref(true)
 const loadError = ref('')
@@ -154,27 +159,52 @@ function buildTimeline(isMobile: boolean) {
     if (frozen) return
     currentProgress += (targetProgress - currentProgress) * 0.08
     tl.progress(gsap.utils.clamp(0, 1, currentProgress))
-    updateActive(currentProgress, n)
+    updateActive(cards)
   }
   gsap.ticker.add(tickerFn)
 }
 
-function updateActive(progress: number, n: number) {
-  const time = progress * timelineDuration(n)
-  let best = 0
-  let bestDist = Infinity
-  for (let i = 0; i < n; i++) {
-    const dist = Math.abs(time - sliceMidpoint(i, n))
-    if (dist < bestDist) {
-      bestDist = dist
+/**
+ * Picks whichever card actually dominates the screen, read back from the values GSAP has
+ * applied — never recomputed from slice arithmetic.
+ *
+ * The arithmetic version was the bug: it chose the card nearest its slice *midpoint*, but
+ * mid-flight is not "in front of the camera" — a card keeps travelling toward the viewer
+ * for the rest of its slice and is largest at the end. So the clickable card was often a
+ * small one behind the large one being looked at, and since inactive cards are
+ * pointer-events:none the click fell through and opened a hotel nobody picked.
+ *
+ * `scale * opacity` is not enough either: under `perspective: P` a card's rendered size is
+ * `scale * P / (P - z)`, and that depth term carries most of it — at P = 1200 a card at
+ * z = 850 is magnified about 3.4x, which `scale` alone never sees.
+ */
+function updateActive(cards: HTMLElement[]) {
+  let best: number | null = null
+  let bestScore = 0
+  let incumbentScore = 0
+
+  cards.forEach((card, i) => {
+    const opacity = Number(gsap.getProperty(card, 'opacity'))
+    if (!(opacity > 0.5)) return
+    const z = Number(gsap.getProperty(card, 'z'))
+    const scale = Number(gsap.getProperty(card, 'scale'))
+    const score = scale * (PERSPECTIVE / (PERSPECTIVE - z)) * opacity
+
+    if (i === activeIndex.value) incumbentScore = score
+    if (score > bestScore) {
+      bestScore = score
       best = i
     }
-  }
+  })
+
+  if (best === activeIndex.value) return
+  // Hold the current card unless the challenger is clearly ahead — but hand over at once
+  // if the incumbent has dropped out of contention entirely.
+  if (incumbentScore > 0 && bestScore < incumbentScore * HANDOVER_MARGIN) return
+
   // Written only on change: assigning every frame would re-render the list at 60fps.
-  if (activeIndex.value !== best) {
-    activeIndex.value = best
-    armed.value = false
-  }
+  activeIndex.value = best
+  armed.value = false
 }
 
 function teardown() {

@@ -1,22 +1,31 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Loader2, RotateCw } from 'lucide-vue-next'
+import { CreditCard, Loader2, RotateCw } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
+import PaymentModal from '@/components/PaymentModal.vue'
 import { bookingsApi } from '@/api/bookings'
+import { paymentsApi } from '@/api/payments'
 import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
 import type { BookingResponse, BookingStatus } from '@/types/booking'
+import type { PaymentMethod, PaymentResponse } from '@/types/payment'
 
 const auth = useAuthStore()
 const currency = useCurrencyStore()
 
 const bookings = ref<BookingResponse[]>([])
+/** Keyed by booking id — only populated for bookings that could plausibly have a payment
+ *  (see `load`), so a missing key means "not checked", not "definitely unpaid". */
+const payments = ref<Record<number, PaymentResponse>>({})
 const loading = ref(true)
 const error = ref('')
 const cancellingId = ref<number | null>(null)
+
+const payingBooking = ref<BookingResponse | null>(null)
+const paymentModalOpen = ref(false)
 
 const STATUS_CLASSES: Record<BookingStatus, string> = {
   PENDING: 'text-amber-300/90 bg-amber-300/10 border-amber-300/20',
@@ -28,9 +37,23 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  CREDIT_CARD: 'Credit card',
+  DEBIT_CARD: 'Debit card',
+  BANK_TRANSFER: 'Bank transfer',
+  CASH: 'Cash on arrival',
+  CRYPTO: 'Crypto',
+}
+
 /** The server refuses to cancel exactly these two, so the button would only ever 400. */
 function canCancel(status: BookingStatus) {
   return status !== 'COMPLETED' && status !== 'CANCELLED'
+}
+
+// Matches PaymentServiceImpl.pay(): it 400s for anything but a CONFIRMED booking, so a
+// "Pay now" button on any other status would only ever fail.
+function canPay(booking: BookingResponse) {
+  return booking.bookingStatus === 'CONFIRMED' && !payments.value[booking.id]
 }
 
 async function load() {
@@ -39,11 +62,32 @@ async function load() {
   error.value = ''
   try {
     bookings.value = await bookingsApi.getByUser(auth.userId)
+    // Only bookings that ever reach CONFIRMED can have a payment — asking for the rest
+    // would just be a guaranteed-empty round trip for every PENDING/CANCELLED booking.
+    const candidates = bookings.value.filter((b) =>
+      ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(b.bookingStatus),
+    )
+    const results = await Promise.all(candidates.map((b) => paymentsApi.getByBooking(b.id)))
+    const next: Record<number, PaymentResponse> = {}
+    candidates.forEach((b, i) => {
+      const payment = results[i]
+      if (payment) next[b.id] = payment
+    })
+    payments.value = next
   } catch (e) {
     error.value = apiErrorMessage(e, 'Could not load your bookings.')
   } finally {
     loading.value = false
   }
+}
+
+function openPay(booking: BookingResponse) {
+  payingBooking.value = booking
+  paymentModalOpen.value = true
+}
+
+function onPaid(receipt: PaymentResponse) {
+  payments.value = { ...payments.value, [receipt.bookingId]: receipt }
 }
 
 async function cancel(booking: BookingResponse) {
@@ -134,21 +178,47 @@ onMounted(load)
 
           <div class="flex flex-col items-end gap-3">
             <span class="font-display text-2xl text-bone">{{ currency.format(booking.totalPrice) }}</span>
-            <button
-              v-if="canCancel(booking.bookingStatus)"
-              type="button"
-              :disabled="cancellingId === booking.id"
-              class="flex items-center gap-2 rounded-full border border-hairline px-4 py-2 text-xs font-light text-bone-dim hover:text-bone hover:border-rose-300/40 transition-colors disabled:opacity-50"
-              @click="cancel(booking)"
+
+            <span
+              v-if="payments[booking.id]"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-champagne bg-champagne/10 border border-champagne/25"
             >
-              <Loader2 v-if="cancellingId === booking.id" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-              Cancel
-            </button>
+              <CreditCard class="w-3 h-3" aria-hidden="true" />
+              Paid · {{ METHOD_LABELS[payments[booking.id].method] }}
+            </span>
+
+            <div class="flex items-center gap-2">
+              <button
+                v-if="canCancel(booking.bookingStatus)"
+                type="button"
+                :disabled="cancellingId === booking.id"
+                class="flex items-center gap-2 rounded-full border border-hairline px-4 py-2 text-xs font-light text-bone-dim hover:text-bone hover:border-rose-300/40 transition-colors disabled:opacity-50"
+                @click="cancel(booking)"
+              >
+                <Loader2 v-if="cancellingId === booking.id" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                Cancel
+              </button>
+              <button
+                v-if="canPay(booking)"
+                type="button"
+                class="flex items-center gap-2 rounded-full bg-champagne text-ink px-4 py-2 text-xs font-medium hover:bg-champagne-bright transition-colors"
+                @click="openPay(booking)"
+              >
+                Pay now
+              </button>
+            </div>
           </div>
         </article>
       </div>
     </main>
 
     <SiteFooter />
+
+    <PaymentModal
+      :open="paymentModalOpen"
+      :booking="payingBooking"
+      @close="paymentModalOpen = false"
+      @paid="onPaid"
+    />
   </div>
 </template>

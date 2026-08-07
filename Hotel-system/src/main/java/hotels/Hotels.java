@@ -43,6 +43,11 @@ public class Hotels {
     @Builder.Default
     private Hotel_Status status = Hotel_Status.ACTIVE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "property_type", nullable = false)
+    @Builder.Default
+    private PropertyType propertyType = PropertyType.HOTEL;
+
     @Column(name = "phone", nullable = false)
     private String phone;
 

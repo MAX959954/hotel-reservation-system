@@ -217,7 +217,12 @@ async function submit() {
                 {{ nights }} {{ nights === 1 ? 'night' : 'nights' }} ×
                 {{ currency.format(room.pricePerNight) }}
               </span>
-              <span class="font-display text-3xl text-bone">{{ currency.format(total) }}</span>
+              <span class="text-right">
+                <span class="font-display text-3xl text-bone block">{{ currency.format(total) }}</span>
+                <span v-if="currency.estimate(total)" class="text-[11px] font-light text-bone-dim">
+                  {{ currency.estimate(total) }}
+                </span>
+              </span>
             </div>
 
             <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>

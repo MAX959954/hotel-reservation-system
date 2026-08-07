@@ -22,7 +22,7 @@ public class HotelServiceImpl implements HotelService{
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating"}, allEntries = true)
+    @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     public  HotelResponse create(CreateHotelRequest request) {
         Companies company = companiesRepository.findById(request.getCompanyId()).orElseThrow(() -> new IllegalStateException("Company not found"+ request.getCompanyId()));
 
@@ -37,6 +37,7 @@ public class HotelServiceImpl implements HotelService{
                 .description(request.getDescription())
                 .image_url(request.getImageUrl())
                 .company(company)
+                .propertyType(request.getPropertyType() != null ? request.getPropertyType() : PropertyType.HOTEL)
                 .amenities(request.getAmenities() != null ? request.getAmenities() : new HashSet<>())
                 .build();
 
@@ -74,10 +75,16 @@ public class HotelServiceImpl implements HotelService{
     }
 
     @Override
+    @Cacheable(cacheNames = "hotelsByType", key = "#propertyType")
+    public List<HotelResponse> getByPropertyType(PropertyType propertyType) {
+        return hotelsRepository.findByPropertyType(propertyType).stream().map(this :: toResponse).toList();
+    }
+
+    @Override
     @Transactional
     @Caching(evict = {
             @CacheEvict(cacheNames = "hotelById", key = "#id"),
-            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating"}, allEntries = true)
+            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     })
     public HotelResponse updateStatus(Long id , Hotel_Status status) {
         Hotels hotel =  findById(id);
@@ -89,7 +96,7 @@ public class HotelServiceImpl implements HotelService{
     @Transactional
     @Caching(evict = {
             @CacheEvict(cacheNames = "hotelById", key = "#id"),
-            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating"}, allEntries = true)
+            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     })
     public void delete(Long id) {
         hotelsRepository.delete(findById(id));
@@ -112,6 +119,7 @@ public class HotelServiceImpl implements HotelService{
                 .description(hotel.getDescription())
                 .imageUrl(hotel.getImage_url())
                 .status(hotel.getStatus())
+                .propertyType(hotel.getPropertyType())
                 .companyId(hotel.getCompany().getId())
                 .companyName(hotel.getCompany().getName())
                 // Copied into a plain set on purpose. hotel.getAmenities() is a Hibernate

@@ -22,6 +22,11 @@ export interface OtpVerifyResponse {
   auth?: AuthResponse
 }
 
+export interface LoginRequest {
+  identifier: string
+  password: string
+}
+
 export interface CompleteRegistrationRequest {
   verificationTicket: string
   firstName: string

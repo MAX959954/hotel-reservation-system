@@ -38,9 +38,13 @@ const error = ref('')
 const bookingRoom = ref<RoomResponse | null>(null)
 const bookingOpen = ref(false)
 
-const checkIn = computed(() => String(route.query.checkIn ?? addDaysIso(todayIso(), 1)))
-const checkOut = computed(() => String(route.query.checkOut ?? addDaysIso(todayIso(), 3)))
-const guests = computed(() => Number(route.query.guests ?? 1))
+// `||`, not `??`: an empty-string checkIn/checkOut reaches this page whenever it's
+// opened from a browse that never had a date search (see HotelsView's RouterLink), and
+// `??` only falls back on null/undefined — an empty string would sail through and
+// produce an unparsable "T15:00:00" (no date) for the backend.
+const checkIn = computed(() => String(route.query.checkIn || '') || addDaysIso(todayIso(), 1))
+const checkOut = computed(() => String(route.query.checkOut || '') || addDaysIso(todayIso(), 3))
+const guests = computed(() => Number(route.query.guests) || 1)
 
 async function load() {
   error.value = ''
@@ -185,6 +189,9 @@ watch(() => route.params.id, load)
               <p class="text-right">
                 <span class="font-display text-2xl text-bone">{{ currency.format(room.pricePerNight) }}</span>
                 <span class="text-xs text-bone-dim"> / night</span>
+                <span v-if="currency.estimate(room.pricePerNight)" class="block text-[11px] font-light text-bone-dim">
+                  {{ currency.estimate(room.pricePerNight) }}
+                </span>
               </p>
               <button
                 type="button"

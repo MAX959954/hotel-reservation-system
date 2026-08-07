@@ -11,12 +11,38 @@ const router = createRouter({
   scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
   routes: [
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
-    { path: '/hotels', name: 'hotels', component: () => import('@/views/HotelsView.vue') },
+    {
+      path: '/hotels',
+      name: 'hotels',
+      component: () => import('@/views/HotelsView.vue'),
+      meta: { catalogLabel: 'Stays' },
+    },
     { path: '/hotels/:id', name: 'hotel', component: () => import('@/views/HotelDetailView.vue') },
+    {
+      // Same component as /hotels, filtered server-side to PropertyType.APARTMENT — a
+      // real column as of migration V10, not a label pretending to be a filter.
+      path: '/apartments',
+      name: 'apartments',
+      component: () => import('@/views/HotelsView.vue'),
+      meta: { catalogLabel: 'Apartments', defaultType: 'APARTMENT' },
+    },
+    { path: '/journal', name: 'journal', component: () => import('@/views/JournalView.vue') },
     {
       path: '/bookings',
       name: 'bookings',
       component: () => import('@/views/BookingsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/manage/bookings',
+      name: 'manage-bookings',
+      component: () => import('@/views/ManageBookingsView.vue'),
       meta: { requiresAuth: true },
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },

@@ -23,6 +23,7 @@ public class OtpService {
     private static final int MAX_REQUESTS_PER_HOUR = 5;
 
     private final OtpCodeRepository otpCodeRepository;
+    private final UserRepository userRepository;
     private final MailService mailService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -34,9 +35,34 @@ public class OtpService {
     @Value("${app.otp.resend-cooldown-seconds:30}")
     private long resendCooldownSeconds;
 
+    /**
+     * Entry point for the registration flow's own OTP step — anyone can hit this
+     * unauthenticated, so it must refuse addresses that already have an account. Now that
+     * sign-in requires a password (see UserServiceImpl.login), letting this endpoint hand
+     * out a login-capable code for an *existing* address regardless of password would
+     * quietly recreate the old passwordless login as an unauthenticated bypass.
+     */
     @Transactional
     public void requestCode(String identifier) {
         String normalized = normalize(identifier);
+        if (userRepository.existsByEmail(normalized)) {
+            throw new IllegalStateException("An account already exists for this address — sign in with your password instead.");
+        }
+        generateAndSendCode(normalized);
+    }
+
+    /**
+     * Entry point for the second factor of password login — only reachable from
+     * UserServiceImpl.login() after the password has already been checked, never directly
+     * from a controller. No existence guard here: the caller already confirmed the account
+     * exists as part of verifying the password.
+     */
+    @Transactional
+    public void sendLoginCode(String normalizedIdentifier) {
+        generateAndSendCode(normalizedIdentifier);
+    }
+
+    private void generateAndSendCode(String normalized) {
         LocalDateTime now = LocalDateTime.now();
 
         List<OtpCode> recent = otpCodeRepository.findByIdentifierAndCreatedAtAfterOrderByCreatedAtAsc(normalized, now.minusHours(1));

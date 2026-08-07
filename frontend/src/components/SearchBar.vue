@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { CalendarDays, MapPin, Search, Users } from 'lucide-vue-next'
 import { addDaysIso, todayIso } from '@/lib/dates'
+import { QUICK_CITIES } from '@/lib/cities'
 
 const router = useRouter()
 
@@ -10,8 +11,6 @@ const city = ref('')
 const checkIn = ref(addDaysIso(todayIso(), 1))
 const checkOut = ref(addDaysIso(todayIso(), 3))
 const guests = ref(2)
-
-const quickCities = ['Porto', 'Kyoto', 'Lisbon', 'Barcelona']
 
 function submit() {
   const target = city.value.trim()
@@ -94,7 +93,7 @@ function pickCity(name: string) {
 
     <div class="flex flex-wrap items-center justify-center gap-2 mt-4">
       <button
-        v-for="name in quickCities"
+        v-for="name in QUICK_CITIES"
         :key="name"
         type="button"
         class="px-3 py-1.5 rounded-full text-xs font-light text-bone-dim bg-bone/5 border border-hairline hover:border-champagne-dim hover:text-bone transition-colors"

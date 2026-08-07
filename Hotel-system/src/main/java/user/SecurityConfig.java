@@ -30,8 +30,10 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
 
-    // Vite's default dev server port; override via CORS_ALLOWED_ORIGINS for other setups (e.g. Vue CLI's 8080, staging).
-    @Value("${cors.allowed-origins:http://localhost:5173}")
+    // Vite's default dev server port, both loopback forms since "localhost" and "127.0.0.1"
+    // are different CORS origins even though they reach the same server — override via
+    // CORS_ALLOWED_ORIGINS for other setups (e.g. Vue CLI's 8080, staging).
+    @Value("${cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
     private List<String> allowedOrigins;
 
     @Bean
@@ -48,11 +50,15 @@ public class SecurityConfig {
                                 "/api/hotels/city/**",
                                 "/api/hotels/country/**",
                                 "/api/hotels/rating/**",
+                                "/api/hotels/type/**",
                                 "/api/rooms/hotels/{hotelId}",
                                 "/api/rooms/hotels/{hotelId}/available",
                                 "/api/reviews/room/{roomId}/approved",
                                 "/api/reviews/room/{roomId}/rating"
                         ).permitAll()
+                        // Uploaded avatars are public images, same trust level as the hotel
+                        // photos the frontend bundles — GET is open, uploading (POST) is not.
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

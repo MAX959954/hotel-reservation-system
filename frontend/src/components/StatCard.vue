@@ -23,14 +23,18 @@ onMounted(() => {
       </span>
     </div>
 
-    <button
-      type="button"
+    <!-- No cross-hotel reviews page exists yet, so this points at the same catalog
+         everyone browses from — with no city/type filter it's already sorted by star
+         rating descending (see HotelsView's loadAll), which is the closest honest match
+         to "read reviews" without inventing a page or fabricating a review feed. -->
+    <RouterLink
+      to="/hotels"
       class="flex items-center bg-bone rounded-full pl-1.5 pr-5 py-1.5 gap-2 hover:bg-champagne-bright transition-colors self-start group"
     >
       <span class="bg-ink/10 p-1 rounded-full flex items-center justify-center">
         <ArrowUpRight class="w-3.5 h-3.5 text-ink" aria-hidden="true" />
       </span>
       <span class="text-[13px] font-medium text-ink">Read reviews</span>
-    </button>
+    </RouterLink>
   </div>
 </template>

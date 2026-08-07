@@ -9,18 +9,21 @@ const router = useRouter()
 const root = ref<HTMLElement | null>(null)
 let ctx: gsap.Context | null = null
 
+// Both filter on the real property_type column (migration V10) — neither panel needs an
+// arbitrary city anymore now that "hotel" and "apartment" are an actual distinction in
+// the data, not just a label.
 const panels = [
   {
     title: 'Hotels',
     blurb: 'Front desks, restaurants, and someone who knows the city.',
     image: FALLBACK_IMAGES[1],
-    city: 'Porto',
+    route: { name: 'hotels', query: { type: 'HOTEL' } },
   },
   {
     title: 'Apartments',
     blurb: 'Your own kitchen, your own hours, for a longer stay.',
     image: FALLBACK_IMAGES[6],
-    city: 'Lisbon',
+    route: { name: 'apartments' },
   },
 ]
 
@@ -41,10 +44,6 @@ onUnmounted(() => {
   ctx?.revert()
   ctx = null
 })
-
-function open(city: string) {
-  router.push({ name: 'hotels', query: { city } })
-}
 </script>
 
 <template>
@@ -56,7 +55,7 @@ function open(city: string) {
         data-panel
         type="button"
         class="relative h-[70vh] rounded-[2rem] overflow-hidden group cursor-pointer border border-hairline text-left"
-        @click="open(panel.city)"
+        @click="router.push(panel.route)"
       >
         <img
           :src="panel.image"

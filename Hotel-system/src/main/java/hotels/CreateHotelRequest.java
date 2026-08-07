@@ -42,5 +42,8 @@ public class CreateHotelRequest {
     @NotNull
     private Long companyId;
 
+    /** Defaults to HOTEL in the service layer when omitted — see HotelServiceImpl.create. */
+    private PropertyType propertyType;
+
     private Set<Amenity> amenities;
 }

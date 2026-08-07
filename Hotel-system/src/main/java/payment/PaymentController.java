@@ -16,17 +16,24 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
+    // Without this, any authenticated user could pay against — or read — a booking that
+    // isn't theirs, just by guessing an id. The booking's own guest is allowed through
+    // isBookingOwner; staff is allowed through the same company-scoped check used
+    // everywhere else in this controller.
     @PostMapping
+    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> pay(@Valid @RequestBody PaymentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.pay(request));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(paymentService.getById(id));
     }
 
     @GetMapping("/booking/{bookingId}")
+    @PreAuthorize("@companyAuth.isBookingOwner(#bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> getByBookingId(@PathVariable Long bookingId) {
         return ResponseEntity.ok(paymentService.getByBookingId(bookingId));
     }

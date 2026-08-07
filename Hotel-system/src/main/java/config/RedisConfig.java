@@ -62,7 +62,7 @@ public class RedisConfig {
 
         Map<String, RedisCacheConfiguration> caches = new HashMap<>();
         caches.put("hotelById", base.serializeValuesWith(pair(mapper, hotel)));
-        for (String name : List.of("hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating")) {
+        for (String name : List.of("hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType")) {
             caches.put(name, base.serializeValuesWith(pair(mapper, hotelList)));
         }
         // Availability turns over on every booking, cancel and check-in, so it gets a much

@@ -16,6 +16,8 @@ public interface HotelService {
 
     List<HotelResponse> getByCompany(Long companyId);
 
+    List<HotelResponse> getByPropertyType(PropertyType propertyType);
+
     HotelResponse updateStatus(Long id , Hotel_Status status);
 
     void delete(Long id);

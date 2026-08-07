@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { HotelResponse } from '@/types/hotel'
+import type { HotelResponse, PropertyType } from '@/types/hotel'
 
 export const hotelsApi = {
   async getById(id: number | string): Promise<HotelResponse> {
@@ -24,6 +24,11 @@ export const hotelsApi = {
 
   async getByCompany(companyId: number): Promise<HotelResponse[]> {
     const { data } = await http.get<HotelResponse[]>(`/api/hotels/company/${companyId}`)
+    return data
+  },
+
+  async getByType(propertyType: PropertyType): Promise<HotelResponse[]> {
+    const { data } = await http.get<HotelResponse[]>(`/api/hotels/type/${propertyType}`)
     return data
   },
 }

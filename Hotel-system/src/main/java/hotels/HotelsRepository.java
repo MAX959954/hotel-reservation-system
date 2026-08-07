@@ -17,6 +17,8 @@ public interface HotelsRepository extends JpaRepository<Hotels, Long> {
 
     List<Hotels> findByCountry (String country) ;
 
+    List<Hotels> findByPropertyType (PropertyType propertyType) ;
+
     // Filter by star rating
     @Query("SELECT h FROM Hotels h WHERE h.star_rating = :starRating")
     List<Hotels> findByStar_rating(@Param("starRating") Integer starRating);

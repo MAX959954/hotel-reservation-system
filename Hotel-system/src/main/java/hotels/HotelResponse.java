@@ -28,6 +28,7 @@ public class HotelResponse {
     private String description;
     private String imageUrl;
     private Hotel_Status status;
+    private PropertyType propertyType;
     private Long companyId;
     private String companyName;
     private Set<Amenity> amenities;

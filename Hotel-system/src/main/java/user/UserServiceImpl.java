@@ -2,6 +2,7 @@ package user;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -22,10 +24,32 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     private final JwtService jwtService;
     private final OtpService otpService;
     private final GoogleTokenVerifier googleTokenVerifier;
+    private final AvatarStorageService avatarStorageService;
 
     @Override
     public void requestOtp(String identifier) {
         otpService.requestCode(identifier);
+    }
+
+    @Override
+    public void login(LoginRequest request) {
+        String normalized = request.getIdentifier().trim().toLowerCase();
+
+        // Same generic failure for "no such account", "account has no password" (Google-only
+        // sign-up never sets one) and "wrong password" — confirming which of those is true
+        // for an email an attacker doesn't already know it's registered would be an account
+        // enumeration leak. This is also why BCrypt's own matches() isn't called on a null
+        // hash: it throws on that, which would otherwise 500 instead of failing cleanly.
+        User user = userRepository.findByEmail(normalized).orElse(null);
+        boolean ok = user != null
+                && user.getPasswordHash() != null
+                && passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+
+        if (!ok) {
+            throw new IllegalStateException("Incorrect email or password.");
+        }
+
+        otpService.sendLoginCode(normalized);
     }
 
     @Override
@@ -91,6 +115,86 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
         userRepository.save(user);
 
         return issueAuthResponse(user);
+    }
+
+    @Override
+    public UserProfileResponse getCurrentProfile() {
+        return toProfileResponse(currentUser());
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateProfile(UpdateProfileRequest request) {
+        User user = currentUser();
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhone(request.getPhone());
+        return toProfileResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(ChangePasswordRequest request) {
+        User user = currentUser();
+
+        // A hash already on the account must be proven before it's replaced — otherwise a
+        // stolen JWT (which normally just expires) could be used to permanently lock the
+        // real owner out by setting a new password. An account with no hash yet (signed up
+        // via Google, never set one) has nothing to prove, so this step is skipped rather
+        // than rejecting everyone who legitimately has no current password.
+        if (user.getPasswordHash() != null
+                && !passwordEncoder.matches(nullToEmpty(request.getCurrentPassword()), user.getPasswordHash())) {
+            throw new IllegalStateException("Current password is incorrect.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse uploadAvatar(MultipartFile file) {
+        User user = currentUser();
+        String previous = user.getAvatarUrl();
+
+        user.setAvatarUrl(avatarStorageService.store(user.getId(), file));
+        userRepository.save(user);
+
+        // Only after the new file and the DB row are both settled — deleting the old one
+        // first and then failing to save would leave the account pointing at a file that
+        // no longer exists.
+        avatarStorageService.deleteIfExists(previous);
+
+        return toProfileResponse(user);
+    }
+
+    // Mirrors the "current user from the JWT" pattern already used in BookingServiceImpl:
+    // the authenticated principal's name is the email JwtAuthFilter put there, never a
+    // client-supplied id — the same reason a booking can't be created on someone else's account.
+    private User currentUser() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+    }
+
+    private UserProfileResponse toProfileResponse(User user) {
+        return UserProfileResponse.builder()
+                .id(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .avatarUrl(user.getAvatarUrl())
+                .dateOfBirth(user.getDateOfBirth())
+                .emailVerified(user.isEmailVerified())
+                .accountStatus(user.getAccountStatus())
+                .roles(user.getRoles())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 
     private AuthResponse issueAuthResponse(User user) {

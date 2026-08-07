@@ -9,10 +9,12 @@ interface AuthState {
   userId: number | null
   email: string | null
   roles: Role[]
+  /** Not part of AuthResponse — populated separately from the profile once it's fetched. */
+  avatarUrl: string | null
 }
 
 function emptyState(): AuthState {
-  return { token: null, tokenType: 'Bearer', userId: null, email: null, roles: [] }
+  return { token: null, tokenType: 'Bearer', userId: null, email: null, roles: [], avatarUrl: null }
 }
 
 function loadState(): AuthState {
@@ -43,6 +45,7 @@ export const useAuthStore = defineStore('auth', {
           userId: this.userId,
           email: this.email,
           roles: this.roles,
+          avatarUrl: this.avatarUrl,
         }),
       )
     },
@@ -53,6 +56,14 @@ export const useAuthStore = defineStore('auth', {
       this.userId = res.userId
       this.email = res.email
       this.roles = res.roles ?? []
+      // Not carried on AuthResponse — cleared here so a different account signing in on
+      // the same browser doesn't briefly show the previous user's photo until refetched.
+      this.avatarUrl = null
+      this.persist()
+    },
+
+    setAvatar(url: string | null) {
+      this.avatarUrl = url
       this.persist()
     },
 

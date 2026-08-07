@@ -6,6 +6,8 @@ export type HotelStatus =
   | 'CLOSED'
   | 'SUSPENDED'
 
+export type PropertyType = 'HOTEL' | 'APARTMENT'
+
 /** Closed enum on the backend (hotels.Amenity) — 22 values, nothing else can arrive. */
 export type Amenity =
   | 'WIFI'
@@ -44,6 +46,7 @@ export interface HotelResponse {
   description: string | null
   imageUrl: string | null
   status: HotelStatus
+  propertyType: PropertyType
   companyId: number
   companyName: string
   amenities: Amenity[] | null

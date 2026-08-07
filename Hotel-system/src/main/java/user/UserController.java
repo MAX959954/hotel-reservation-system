@@ -23,6 +23,15 @@ public class UserController {
         return ResponseEntity.accepted().build();
     }
 
+    // First factor of sign-in. On success this sends the same kind of code /otp/request
+    // does — the client continues at POST /otp/verify exactly as registration does, since
+    // OtpService.sendLoginCode writes the same OtpCode rows requestCode does.
+    @PostMapping("/login")
+    public ResponseEntity<Void> login(@Valid @RequestBody LoginRequest request) {
+        userService.login(request);
+        return ResponseEntity.accepted().build();
+    }
+
     @PostMapping("/otp/verify")
     public ResponseEntity<OtpVerifyResponse> verifyOtp(@Valid @RequestBody OtpVerifyPayload payload) {
         return ResponseEntity.ok(userService.verifyOtp(payload));

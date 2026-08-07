@@ -48,9 +48,13 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - hotel_uploads_data:/app/uploads
     ports:
       - "8081:8080"
     restart: unless-stopped
 
 volumes:
   hotel_db_data:
+  hotel_uploads_data:

@@ -100,6 +100,14 @@ public class BookingServiceImpl implements BookingService{
     }
 
     @Override
+    public List<BookingResponse> getByCompany(Long companyId , BookingStatus status) {
+        List<Booking> bookings = status == null
+                ? bookingRepository.findByRoom_Hotel_Company_Id(companyId)
+                : bookingRepository.findByRoom_Hotel_Company_IdAndBookingStatus(companyId , status);
+        return bookings.stream().map(this :: toResponse).toList();
+    }
+
+    @Override
     @Transactional
     @CacheEvict(cacheNames =  "roomsAvailability" ,allEntries = true)
     public BookingResponse confirm(Long id) {
