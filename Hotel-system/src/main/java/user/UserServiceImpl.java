@@ -1,5 +1,6 @@
 package user;
 
+import companyuser.CompanyUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,6 +26,7 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     private final OtpService otpService;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final AvatarStorageService avatarStorageService;
+    private final CompanyUserService companyUserService;
 
     @Override
     public void requestOtp(String identifier) {
@@ -90,6 +92,7 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
                 .build();
 
         userRepository.save(user);
+        companyUserService.linkPendingInvites(user);
 
         return issueAuthResponse(user);
     }
@@ -113,6 +116,11 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
 
         user.setGoogleId(identity.getSubject());
         userRepository.save(user);
+        // Safe to call unconditionally, not just for brand-new accounts: an email that
+        // already resolved to an existing user here was never given an invited_email row
+        // in the first place (CompanyUserServiceImpl.invite links straight to that user),
+        // so this is a no-op query for the existing-user branch above.
+        companyUserService.linkPendingInvites(user);
 
         return issueAuthResponse(user);
     }
@@ -170,6 +178,27 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
         avatarStorageService.deleteIfExists(previous);
 
         return toProfileResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse grantRole(Long userId, Roles role) {
+        User user = findById(userId);
+        user.getRoles().add(role);
+        return toProfileResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse revokeRole(Long userId, Roles role) {
+        User user = findById(userId);
+        user.getRoles().remove(role);
+        return toProfileResponse(userRepository.save(user));
+    }
+
+    private User findById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + id));
     }
 
     // Mirrors the "current user from the JWT" pattern already used in BookingServiceImpl:

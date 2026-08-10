@@ -19,6 +19,10 @@ public class CompaniesResponse {
     private String country;
     private String webSite;
     private String logoUrl;
+    private Long submittedByUserId;
+    private String bankAccountHolder;
+    private String bankIban;
+    private String rejectionReason;
     private CompaniesStatus status;
     private LocalDateTime created_at;
     private LocalDateTime updated_at;

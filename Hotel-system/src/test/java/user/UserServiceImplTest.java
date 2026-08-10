@@ -1,5 +1,6 @@
 package user;
 
+import companyuser.CompanyUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,9 @@ public class UserServiceImplTest {
 
     @Mock
     private GoogleTokenVerifier googleTokenVerifier;
+
+    @Mock
+    private CompanyUserService companyUserService;
 
     @InjectMocks
     private UserServiceImpl userService;

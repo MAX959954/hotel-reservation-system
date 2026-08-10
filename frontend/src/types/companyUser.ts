@@ -11,11 +11,14 @@ export function companyRoleLabel(role: string): string {
 
 export type CompanyUserStatus = 'ACTIVE' | 'INVITED' | 'PENDING_APPROVAL' | 'INACTIVE' | 'SUSPENDED' | 'REMOVED'
 
-/** A user's membership in one company — one row per (user, company) pair. */
+/** A user's membership in one company — one row per (user, company) pair. userId/userEmail
+ *  are null while invitedEmail is set: an invite sent to an address with no Folio account
+ *  yet, auto-linked once that email registers (see CompanyUserServiceImpl.linkPendingInvites). */
 export interface CompanyUserResponse {
   id: number
-  userId: number
-  userEmail: string
+  userId: number | null
+  userEmail: string | null
+  invitedEmail: string | null
   companyId: number
   companyName: string
   companyRole: CompanyRole

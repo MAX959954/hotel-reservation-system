@@ -2,6 +2,16 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAuthModalStore } from '@/stores/authModal'
 import { ScrollTrigger, scrollToTop } from '@/lib/motion'
+import type { Role } from '@/types/auth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    /** Any one of these roles is enough — see beforeEach below. Checked after
+     *  requiresAuth, so a role-gated route implies auth is required too. */
+    requiresRole?: Role[]
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,7 +55,31 @@ const router = createRouter({
       path: '/manage/bookings',
       name: 'manage-bookings',
       component: () => import('@/views/ManageBookingsView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'RECEPTIONIST', 'ADMIN'] },
+    },
+    {
+      // OWNER/MANAGER-only in practice (enforced server-side too) — RECEPTIONIST can see
+      // this route per requiresRole (they hold HOTEL_MANAGER's sibling role at the
+      // platform level in some setups) but the company picker only ever offers companies
+      // where their own CompanyRole is OWNER/MANAGER, so there's nothing to act on otherwise.
+      path: '/manage/hotels',
+      name: 'manage-hotels',
+      component: () => import('@/views/ManageHotelsView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'ADMIN'] },
+    },
+    {
+      // Any signed-in guest can apply — this is the application form itself, not a
+      // HOTEL_MANAGER-only page (nobody has that role yet at the point they'd use this).
+      path: '/become-a-host',
+      name: 'become-a-host',
+      component: () => import('@/views/BecomeHostView.vue'),
       meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/applications',
+      name: 'admin-applications',
+      component: () => import('@/views/AdminApplicationsView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['ADMIN'] },
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
   ],
@@ -57,13 +91,22 @@ const router = createRouter({
  * are actually signed in; redirecting to a route that does not exist would dead-end them.
  */
 router.beforeEach(async (to) => {
-  if (!to.meta.requiresAuth) return true
+  if (!to.meta.requiresAuth && !to.meta.requiresRole) return true
 
   const auth = useAuthStore()
-  if (auth.isAuthenticated) return true
+  if (!auth.isAuthenticated) {
+    const authModal = useAuthModalStore()
+    const signedIn = await authModal.prompt(to.fullPath)
+    if (!signedIn) return false
+  }
 
-  const authModal = useAuthModalStore()
-  return await authModal.prompt(to.fullPath)
+  // No dedicated "forbidden" page yet — bouncing home is at least never a dead end,
+  // unlike leaving someone on a page whose data calls will just 403 silently underneath.
+  if (to.meta.requiresRole && !to.meta.requiresRole.some((role) => auth.hasRole(role))) {
+    return { name: 'home' }
+  }
+
+  return true
 })
 
 // Lenis owns the scroll position, so a plain router-driven reset fights it. Track

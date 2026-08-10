@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Loader2, RotateCw } from 'lucide-vue-next'
-import Navbar from '@/components/Navbar.vue'
+import { Loader2, RotateCw, UserPlus } from 'lucide-vue-next'
+import ExtranetShell from '@/components/ExtranetShell.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
 import { bookingsApi } from '@/api/bookings'
 import { companiesApi } from '@/api/companies'
@@ -14,7 +14,7 @@ import { useConfirmModalStore } from '@/stores/confirmModal'
 import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
 import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
-import { companyRoleLabel } from '@/types/companyUser'
+import { companyRoleLabel, type CompanyRole, type CompanyUserResponse } from '@/types/companyUser'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -54,6 +54,61 @@ const myCompanies = computed(() => company.active)
 const pickableCompanies = computed(() => (hasGlobalAccess.value ? allCompanies.value : myCompanies.value))
 
 const companyId = ref<number | null>(null)
+
+// Mirrors CompanyUserController.invite's own gate exactly: ADMIN, or OWNER/MANAGER of
+// *this* company specifically — hasGlobalAccess above is a broader "sees every company"
+// visibility check and would over-show this section for e.g. a plain RECEPTIONIST.
+const canManageStaff = computed(() => {
+  if (auth.hasRole('ADMIN')) return true
+  const membership = company.memberships.find((m) => m.companyId === companyId.value && m.status === 'ACTIVE')
+  return membership?.companyRole === 'OWNER' || membership?.companyRole === 'MANAGER'
+})
+
+const staff = ref<CompanyUserResponse[]>([])
+const staffLoading = ref(false)
+const inviteEmail = ref('')
+const inviteRole = ref<CompanyRole>('RECEPTIONIST')
+const inviting = ref(false)
+const inviteError = ref('')
+const inviteSuccess = ref('')
+
+const STAFF_STATUS_CLASSES: Record<string, string> = {
+  ACTIVE: 'text-champagne bg-champagne/10 border-champagne/25',
+  INVITED: 'text-amber-300/90 bg-amber-300/10 border-amber-300/20',
+  PENDING_APPROVAL: 'text-amber-300/90 bg-amber-300/10 border-amber-300/20',
+  INACTIVE: 'text-bone-dim bg-bone/5 border-hairline',
+  SUSPENDED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
+  REMOVED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
+}
+
+async function loadStaff() {
+  if (!companyId.value || !canManageStaff.value) return
+  staffLoading.value = true
+  try {
+    staff.value = await companyUsersApi.getByCompany(companyId.value)
+  } catch {
+    staff.value = []
+  } finally {
+    staffLoading.value = false
+  }
+}
+
+async function invite() {
+  if (!companyId.value || !inviteEmail.value.trim() || inviting.value) return
+  inviting.value = true
+  inviteError.value = ''
+  inviteSuccess.value = ''
+  try {
+    await companyUsersApi.invite(companyId.value, inviteEmail.value.trim(), inviteRole.value)
+    inviteSuccess.value = t('manageBookings.inviteSent', { email: inviteEmail.value.trim() })
+    inviteEmail.value = ''
+    await loadStaff()
+  } catch (e) {
+    inviteError.value = apiErrorMessage(e, t('manageBookings.inviteError'))
+  } finally {
+    inviting.value = false
+  }
+}
 const status = ref<BookingStatus | null>('PENDING')
 const bookings = ref<BookingResponse[]>([])
 const loading = ref(true)
@@ -150,6 +205,12 @@ watch(pickableCompanies, (list) => {
   if (!companyId.value && list.length) companyId.value = list[0].companyId
 })
 watch([companyId, status], load)
+watch(companyId, () => {
+  staff.value = []
+  inviteError.value = ''
+  inviteSuccess.value = ''
+  loadStaff()
+})
 
 onMounted(async () => {
   const tasks: Promise<unknown>[] = [company.load()]
@@ -166,9 +227,7 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen bg-ink flex flex-col">
-    <div class="border-b border-hairline">
-      <Navbar />
-    </div>
+    <ExtranetShell />
 
     <main class="flex-1 px-6 md:px-10 py-10 max-w-5xl mx-auto w-full">
       <h1 class="font-display text-4xl md:text-5xl text-bone mb-4">{{ $t('manageBookings.title') }}</h1>
@@ -305,6 +364,72 @@ onMounted(async () => {
             </div>
           </article>
         </div>
+
+        <section v-if="canManageStaff" class="mt-10 pt-8 border-t border-hairline">
+          <h2 class="font-display text-2xl text-bone mb-4">{{ $t('manageBookings.staffTitle') }}</h2>
+
+          <form class="flex flex-wrap items-end gap-3 mb-6" @submit.prevent="invite">
+            <label class="flex flex-col gap-1 flex-1 min-w-[220px]">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('manageBookings.inviteEmail') }}</span>
+              <input
+                v-model="inviteEmail"
+                type="email"
+                required
+                placeholder="staff@example.com"
+                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone placeholder:text-bone-dim/50 font-light py-1.5 transition-colors"
+              />
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('manageBookings.inviteRole') }}</span>
+              <select
+                v-model="inviteRole"
+                class="bg-ink-2 border border-hairline rounded-full px-3 py-1.5 text-sm text-bone outline-none focus:border-champagne transition-colors"
+              >
+                <option value="MANAGER">{{ companyRoleLabel('MANAGER') }}</option>
+                <option value="RECEPTIONIST">{{ companyRoleLabel('RECEPTIONIST') }}</option>
+                <option value="ACCOUNTANT">{{ companyRoleLabel('ACCOUNTANT') }}</option>
+                <option value="STAFF">{{ companyRoleLabel('STAFF') }}</option>
+              </select>
+            </label>
+            <button
+              type="submit"
+              :disabled="inviting || !inviteEmail.trim()"
+              class="flex items-center gap-2 rounded-full bg-champagne text-ink px-5 py-2 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Loader2 v-if="inviting" class="w-4 h-4 animate-spin" aria-hidden="true" />
+              <UserPlus v-else class="w-4 h-4" aria-hidden="true" />
+              {{ $t('manageBookings.inviteSubmit') }}
+            </button>
+          </form>
+
+          <p v-if="inviteSuccess" class="text-xs text-champagne mb-4">{{ inviteSuccess }}</p>
+          <p v-if="inviteError" class="text-xs text-rose-300 mb-4">{{ inviteError }}</p>
+
+          <div v-if="staffLoading" class="flex flex-col gap-2">
+            <div v-for="i in 2" :key="i" class="h-14 rounded-xl bg-ink-2 border border-hairline animate-pulse" />
+          </div>
+
+          <ul v-else-if="staff.length" class="flex flex-col gap-2">
+            <li
+              v-for="member in staff"
+              :key="member.id"
+              class="flex items-center justify-between gap-3 rounded-xl bg-ink-2 border border-hairline px-4 py-3"
+            >
+              <span class="text-sm text-bone truncate">{{ member.userEmail ?? member.invitedEmail }}</span>
+              <span class="flex items-center gap-2 shrink-0">
+                <span class="text-xs font-light text-bone-dim">{{ companyRoleLabel(member.companyRole) }}</span>
+                <span
+                  class="px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                  :class="STAFF_STATUS_CLASSES[member.status]"
+                >
+                  {{ member.status }}
+                </span>
+              </span>
+            </li>
+          </ul>
+
+          <p v-else class="text-sm font-light text-bone-dim">{{ $t('manageBookings.staffEmpty') }}</p>
+        </section>
       </template>
     </main>
 

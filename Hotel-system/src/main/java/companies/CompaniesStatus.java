@@ -6,5 +6,6 @@ public enum CompaniesStatus {
     INACTIVE ,
     SUSPENDED ,
     BLACKLISTED ,
-    CLOSED
+    CLOSED ,
+    REJECTED
 }

@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, LogOut, Shield } from 'lucide-vue-next'
+import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, Home, LayoutDashboard, LogOut, Shield } from 'lucide-vue-next'
 import { accountApi } from '@/api/account'
 import { resolveUploadUrl } from '@/api/http'
 import RolesModal from '@/components/RolesModal.vue'
@@ -33,6 +33,10 @@ const badgeLabel = computed(() => (notifications.unreadCount > 9 ? '9+' : String
 const canManageBookings = computed(
   () => company.hasAny || auth.hasRole('ADMIN') || auth.hasRole('RECEPTIONIST') || auth.hasRole('HOTEL_MANAGER'),
 )
+
+// Hidden once someone is already a manager — the extranet ("Manage bookings") is where
+// they'd go next, same as Airbnb drops "Become a host" from the menu once you are one.
+const canBecomeHost = computed(() => !auth.hasRole('HOTEL_MANAGER'))
 
 function toggle() {
   open.value = !open.value
@@ -175,6 +179,36 @@ onUnmounted(() => {
         >
           <Building2 class="w-4 h-4 text-champagne" aria-hidden="true" />
           {{ $t('accountMenu.manageBookings') }}
+        </button>
+        <button
+          v-if="auth.hasRole('HOTEL_MANAGER') || auth.hasRole('ADMIN')"
+          role="menuitem"
+          type="button"
+          class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"
+          @click="go('/manage/hotels')"
+        >
+          <Home class="w-4 h-4 text-champagne" aria-hidden="true" />
+          {{ $t('accountMenu.manageHotels') }}
+        </button>
+        <button
+          v-if="canBecomeHost"
+          role="menuitem"
+          type="button"
+          class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"
+          @click="go('/become-a-host')"
+        >
+          <Home class="w-4 h-4 text-champagne" aria-hidden="true" />
+          {{ $t('accountMenu.becomeHost') }}
+        </button>
+        <button
+          v-if="auth.hasRole('ADMIN')"
+          role="menuitem"
+          type="button"
+          class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"
+          @click="go('/admin/applications')"
+        >
+          <LayoutDashboard class="w-4 h-4 text-champagne" aria-hidden="true" />
+          {{ $t('accountMenu.admin') }}
         </button>
         <button
           role="menuitem"

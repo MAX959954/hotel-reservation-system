@@ -1,15 +1,30 @@
 package companies;
 
+import companyuser.CompanyRole;
+import companyuser.CompanyUser;
+import companyuser.CompanyUserRepository;
+import companyuser.CompanyUserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import user.MailService;
+import user.Roles;
+import user.User;
+import user.UserRepository;
 
-import java.util.List;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,275 +34,146 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-public class CompaniesServiceImplTest {
+class CompaniesServiceImplTest {
 
-    @Mock
-    private CompaniesRepository companiesRepository;
+    @Mock private CompaniesRepository companiesRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private CompanyUserRepository companyUserRepository;
+    @Mock private MailService mailService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private CompaniesServiceImpl companiesService;
 
-    private Companies company;
-    private CompaniesRequest request;
+    private Companies pendingCompany;
+    private User submitter;
 
     @BeforeEach
     void setUp() {
-        company = Companies.builder()
+        submitter = User.builder().id(5L).email("owner@example.com").roles(new HashSet<>(Set.of(Roles.GUEST))).build();
+        pendingCompany = Companies.builder()
                 .id(1L)
-                .name("Acme Hospitality")
-                .legal_name("Acme Hospitality LLC")
-                .email("contact@acme.com")
-                .phone("+123456789")
-                .address("1 Main St")
-                .city("Paris")
-                .country("France")
-                .website("https://acme.com")
-                .logo_url("https://acme.com/logo.png")
+                .name("Ribeira Riverhouse Co")
                 .status(CompaniesStatus.PENDING_VERIFICATION)
+                .submittedByUserId(5L)
                 .build();
-
-        request = new CompaniesRequest();
-        request.setName("Acme Hospitality");
-        request.setLegalName("Acme Hospitality LLC");
-        request.setEmail("contact@acme.com");
-        request.setPhone("+123456789");
-        request.setAddress("1 Main St");
-        request.setCity("Paris");
-        request.setCountry("France");
-        request.setWebSite("https://acme.com");
-        request.setLogoUrl("https://acme.com/logo.png");
     }
 
     // ---------- create ----------
 
     @Test
-    void create_savesCompanyAndReturnsResponse_whenEmailNotInUse() {
-        given(companiesRepository.existsByEmail("contact@acme.com")).willReturn(false);
-        given(companiesRepository.save(any(Companies.class))).willReturn(company);
+    void create_setsSubmittedByUserId_fromAuthenticatedCaller() {
+        CompaniesRequest request = new CompaniesRequest();
+        request.setName("New Co");
+        request.setLegalName("New Co Ltd");
+        request.setEmail("newco@example.com");
+        request.setPhone("+1");
+        request.setAddress("Addr");
+        request.setCity("City");
+        request.setCountry("Country");
+        request.setWebSite("https://newco.example");
 
-        CompaniesResponse response = companiesService.create(request);
+        given(companiesRepository.existsByEmail("newco@example.com")).willReturn(false);
+        given(companiesRepository.save(any(Companies.class))).willAnswer(inv -> inv.getArgument(0));
+        given(userRepository.findByEmail("owner@example.com")).willReturn(Optional.of(submitter));
 
-        assertThat(response.getId()).isEqualTo(1L);
-        assertThat(response.getName()).isEqualTo("Acme Hospitality");
-        assertThat(response.getLegalName()).isEqualTo("Acme Hospitality LLC");
-        assertThat(response.getEmail()).isEqualTo("contact@acme.com");
-        assertThat(response.getPhone()).isEqualTo("+123456789");
-        assertThat(response.getCity()).isEqualTo("Paris");
-        assertThat(response.getCountry()).isEqualTo("France");
-        assertThat(response.getWebSite()).isEqualTo("https://acme.com");
-        assertThat(response.getStatus()).isEqualTo(CompaniesStatus.PENDING_VERIFICATION);
+        try (MockedStatic<SecurityContextHolder> mocked = Mockito.mockStatic(SecurityContextHolder.class)) {
+            SecurityContext context = org.mockito.Mockito.mock(SecurityContext.class);
+            Authentication auth = org.mockito.Mockito.mock(Authentication.class);
+            given(auth.getName()).willReturn("owner@example.com");
+            given(context.getAuthentication()).willReturn(auth);
+            mocked.when(SecurityContextHolder::getContext).thenReturn(context);
+
+            CompaniesResponse response = companiesService.create(request);
+
+            assertThat(response.getSubmittedByUserId()).isEqualTo(5L);
+        }
 
         ArgumentCaptor<Companies> captor = ArgumentCaptor.forClass(Companies.class);
         verify(companiesRepository).save(captor.capture());
-        Companies saved = captor.getValue();
-
-        assertThat(saved.getName()).isEqualTo("Acme Hospitality");
-        assertThat(saved.getEmail()).isEqualTo("contact@acme.com");
+        assertThat(captor.getValue().getSubmittedByUserId()).isEqualTo(5L);
     }
 
-    @Test
-    void create_throws_whenEmailAlreadyInUse() {
-        given(companiesRepository.existsByEmail("contact@acme.com")).willReturn(true);
-
-        assertThatThrownBy(() -> companiesService.create(request))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company with that email already exists");
-
-        verify(companiesRepository, never()).save(any());
-    }
-
-    // ---------- getById ----------
+    // ---------- approve ----------
 
     @Test
-    void getById_returnsCompany_whenFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
+    void approve_movesToActive_grantsHotelManager_createsOwnerMembership() {
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+        given(companiesRepository.save(any(Companies.class))).willAnswer(inv -> inv.getArgument(0));
+        given(userRepository.findById(5L)).willReturn(Optional.of(submitter));
+        given(companyUserRepository.existsByUserIdAndCompanyId(5L, 1L)).willReturn(false);
 
-        CompaniesResponse response = companiesService.getById(1L);
-
-        assertThat(response.getId()).isEqualTo(1L);
-        assertThat(response.getName()).isEqualTo("Acme Hospitality");
-    }
-
-    @Test
-    void getById_throws_whenNotFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> companiesService.getById(1L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company not found");
-    }
-
-    // ---------- getByEmail ----------
-
-    @Test
-    void getByEmail_returnsCompany_whenFound() {
-        given(companiesRepository.findByEmail("contact@acme.com")).willReturn(Optional.of(company));
-
-        CompaniesResponse response = companiesService.getByEmail("contact@acme.com");
-
-        assertThat(response.getEmail()).isEqualTo("contact@acme.com");
-    }
-
-    @Test
-    void getByEmail_throws_whenNotFound() {
-        given(companiesRepository.findByEmail("contact@acme.com")).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> companiesService.getByEmail("contact@acme.com"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company not found with that email");
-    }
-
-    // ---------- getByCountry ----------
-
-    @Test
-    void getByCountry_returnsCompanies() {
-        given(companiesRepository.findByCountry("France")).willReturn(List.of(company));
-
-        List<CompaniesResponse> responses = companiesService.getByCountry("France");
-
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getCountry()).isEqualTo("France");
-    }
-
-    // ---------- getByCity ----------
-
-    @Test
-    void getByCity_returnsCompanies() {
-        given(companiesRepository.findByCity("Paris")).willReturn(List.of(company));
-
-        List<CompaniesResponse> responses = companiesService.getByCity("Paris");
-
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getCity()).isEqualTo("Paris");
-    }
-
-    // ---------- getByStatus ----------
-
-    @Test
-    void getByStatus_returnsCompanies() {
-        given(companiesRepository.findByStatus(CompaniesStatus.PENDING_VERIFICATION)).willReturn(List.of(company));
-
-        List<CompaniesResponse> responses = companiesService.getByStatus(CompaniesStatus.PENDING_VERIFICATION);
-
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getStatus()).isEqualTo(CompaniesStatus.PENDING_VERIFICATION);
-    }
-
-    // ---------- updateStatus ----------
-
-    @Test
-    void updateStatus_updatesAndReturnsCompany_whenFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
-        given(companiesRepository.save(any(Companies.class))).willReturn(company);
-
-        CompaniesResponse response = companiesService.updateStatus(1L, CompaniesStatus.ACTIVE);
+        CompaniesResponse response = companiesService.approve(1L);
 
         assertThat(response.getStatus()).isEqualTo(CompaniesStatus.ACTIVE);
+        assertThat(submitter.getRoles()).contains(Roles.HOTEL_MANAGER);
+        verify(userRepository).save(submitter);
 
-        ArgumentCaptor<Companies> captor = ArgumentCaptor.forClass(Companies.class);
-        verify(companiesRepository).save(captor.capture());
-        assertThat(captor.getValue().getStatus()).isEqualTo(CompaniesStatus.ACTIVE);
+        ArgumentCaptor<CompanyUser> memberCaptor = ArgumentCaptor.forClass(CompanyUser.class);
+        verify(companyUserRepository).save(memberCaptor.capture());
+        assertThat(memberCaptor.getValue().getCompany_role()).isEqualTo(CompanyRole.OWNER);
+        assertThat(memberCaptor.getValue().getStatus()).isEqualTo(CompanyUserStatus.ACTIVE);
+
+        verify(eventPublisher).publishEvent(any(CompanyApplicationDecidedEvent.class));
     }
 
     @Test
-    void updateStatus_throws_whenCompanyNotFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.empty());
+    void approve_doesNotDuplicateMembership_whenOwnerRowAlreadyExists() {
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+        given(companiesRepository.save(any(Companies.class))).willAnswer(inv -> inv.getArgument(0));
+        given(userRepository.findById(5L)).willReturn(Optional.of(submitter));
+        given(companyUserRepository.existsByUserIdAndCompanyId(5L, 1L)).willReturn(true);
 
-        assertThatThrownBy(() -> companiesService.updateStatus(1L, CompaniesStatus.ACTIVE))
+        companiesService.approve(1L);
+
+        verify(companyUserRepository, never()).save(any());
+    }
+
+    @Test
+    void approve_throws_whenNotPending() {
+        pendingCompany.setStatus(CompaniesStatus.ACTIVE);
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+
+        assertThatThrownBy(() -> companiesService.approve(1L))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company not found");
+                .hasMessageContaining("pending applications can be approved");
 
-        verify(companiesRepository, never()).save(any());
-    }
-
-    // ---------- update ----------
-
-    @Test
-    void update_updatesAndReturnsCompany_whenEmailUnchanged() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
-        given(companiesRepository.save(any(Companies.class))).willReturn(company);
-
-        CompaniesResponse response = companiesService.update(1L, request);
-
-        assertThat(response.getName()).isEqualTo("Acme Hospitality");
-
-        verify(companiesRepository, never()).existsByEmail(any());
-        ArgumentCaptor<Companies> captor = ArgumentCaptor.forClass(Companies.class);
-        verify(companiesRepository).save(captor.capture());
-        assertThat(captor.getValue().getEmail()).isEqualTo("contact@acme.com");
+        verify(userRepository, never()).save(any());
     }
 
     @Test
-    void update_updatesAndReturnsCompany_whenEmailChangedAndNotInUse() {
-        CompaniesRequest updateRequest = new CompaniesRequest();
-        updateRequest.setName("Acme Global");
-        updateRequest.setLegalName("Acme Global LLC");
-        updateRequest.setEmail("new@acme.com");
-        updateRequest.setPhone("+987654321");
-        updateRequest.setAddress("2 Main St");
-        updateRequest.setCity("Lyon");
-        updateRequest.setCountry("France");
-        updateRequest.setWebSite("https://acme-global.com");
-        updateRequest.setLogoUrl("https://acme-global.com/logo.png");
+    void approve_throws_whenNoSubmitter() {
+        pendingCompany.setSubmittedByUserId(null);
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
 
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
-        given(companiesRepository.existsByEmail("new@acme.com")).willReturn(false);
-        given(companiesRepository.save(any(Companies.class))).willReturn(company);
-
-        companiesService.update(1L, updateRequest);
-
-        ArgumentCaptor<Companies> captor = ArgumentCaptor.forClass(Companies.class);
-        verify(companiesRepository).save(captor.capture());
-        Companies saved = captor.getValue();
-
-        assertThat(saved.getName()).isEqualTo("Acme Global");
-        assertThat(saved.getEmail()).isEqualTo("new@acme.com");
-        assertThat(saved.getCity()).isEqualTo("Lyon");
-    }
-
-    @Test
-    void update_throws_whenNewEmailAlreadyInUse() {
-        CompaniesRequest updateRequest = new CompaniesRequest();
-        updateRequest.setEmail("taken@acme.com");
-
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
-        given(companiesRepository.existsByEmail("taken@acme.com")).willReturn(true);
-
-        assertThatThrownBy(() -> companiesService.update(1L, updateRequest))
+        assertThatThrownBy(() -> companiesService.approve(1L))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company with that email already exists");
+                .hasMessageContaining("no submitting user");
+    }
 
-        verify(companiesRepository, never()).save(any());
+    // ---------- reject ----------
+
+    @Test
+    void reject_movesToRejected_storesReason() {
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+        given(companiesRepository.save(any(Companies.class))).willAnswer(inv -> inv.getArgument(0));
+        given(userRepository.findById(5L)).willReturn(Optional.of(submitter));
+
+        CompaniesResponse response = companiesService.reject(1L, "Missing documents");
+
+        assertThat(response.getStatus()).isEqualTo(CompaniesStatus.REJECTED);
+        assertThat(response.getRejectionReason()).isEqualTo("Missing documents");
+        verify(eventPublisher).publishEvent(any(CompanyApplicationDecidedEvent.class));
+        verify(companyUserRepository, never()).save(any());
     }
 
     @Test
-    void update_throws_whenCompanyNotFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.empty());
+    void reject_throws_whenNotPending() {
+        pendingCompany.setStatus(CompaniesStatus.REJECTED);
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
 
-        assertThatThrownBy(() -> companiesService.update(1L, request))
+        assertThatThrownBy(() -> companiesService.reject(1L, "reason"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company not found");
-
-        verify(companiesRepository, never()).save(any());
-    }
-
-    // ---------- delete ----------
-
-    @Test
-    void delete_deletesCompany_whenFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.of(company));
-
-        companiesService.delete(1L);
-
-        verify(companiesRepository).delete(company);
-    }
-
-    @Test
-    void delete_throws_whenCompanyNotFound() {
-        given(companiesRepository.findById(1L)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> companiesService.delete(1L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Company not found");
+                .hasMessageContaining("pending applications can be rejected");
     }
 }

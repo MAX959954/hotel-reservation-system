@@ -1,16 +1,36 @@
 package companies;
 
+import companyuser.CompanyRole;
+import companyuser.CompanyUser;
+import companyuser.CompanyUserRepository;
+import companyuser.CompanyUserStatus;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+import user.MailService;
+import user.Roles;
+import user.User;
+import user.UserRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CompaniesServiceImpl implements CompaniesService {
 
     private final CompaniesRepository companiesRepository;
+    private final UserRepository userRepository;
+    private final CompanyUserRepository companyUserRepository;
+    private final MailService mailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -18,7 +38,11 @@ public class CompaniesServiceImpl implements CompaniesService {
         if (companiesRepository.existsByEmail(request.getEmail())) {
             throw new IllegalStateException("Company with that email already exists: " + request.getEmail());
         }
-        return toResponse(companiesRepository.save(toEntity(request)));
+        Companies company = toEntity(request);
+        // Never trust a client-supplied submitter — this is what approve() later promotes
+        // to HOTEL_MANAGER, so it must be exactly whoever is actually authenticated here.
+        company.setSubmittedByUserId(currentUser().getId());
+        return toResponse(companiesRepository.save(company));
     }
 
     @Override
@@ -57,6 +81,80 @@ public class CompaniesServiceImpl implements CompaniesService {
 
     @Override
     @Transactional
+    public CompaniesResponse approve(Long id) {
+        Companies company = findById(id);
+        if (company.getStatus() != CompaniesStatus.PENDING_VERIFICATION) {
+            throw new IllegalStateException("Only pending applications can be approved");
+        }
+        if (company.getSubmittedByUserId() == null) {
+            throw new IllegalStateException("This company has no submitting user to promote");
+        }
+
+        User submitter = userRepository.findById(company.getSubmittedByUserId())
+                .orElseThrow(() -> new IllegalStateException("Submitting user not found: " + company.getSubmittedByUserId()));
+
+        company.setStatus(CompaniesStatus.ACTIVE);
+        Companies saved = companiesRepository.save(company);
+
+        if (!companyUserRepository.existsByUserIdAndCompanyId(submitter.getId(), saved.getId())) {
+            CompanyUser owner = CompanyUser.builder()
+                    .user(submitter)
+                    .company(saved)
+                    .company_role(CompanyRole.OWNER)
+                    .status(CompanyUserStatus.ACTIVE)
+                    .joined_at(LocalDateTime.now())
+                    .build();
+            companyUserRepository.save(owner);
+        }
+
+        if (submitter.getRoles().add(Roles.HOTEL_MANAGER)) {
+            userRepository.save(submitter);
+        }
+
+        eventPublisher.publishEvent(new CompanyApplicationDecidedEvent(submitter.getEmail(), saved.getName(), true, null));
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public CompaniesResponse reject(Long id, String reason) {
+        Companies company = findById(id);
+        if (company.getStatus() != CompaniesStatus.PENDING_VERIFICATION) {
+            throw new IllegalStateException("Only pending applications can be rejected");
+        }
+
+        company.setStatus(CompaniesStatus.REJECTED);
+        company.setRejectionReason(reason);
+        Companies saved = companiesRepository.save(company);
+
+        if (company.getSubmittedByUserId() != null) {
+            userRepository.findById(company.getSubmittedByUserId())
+                    .ifPresent(submitter -> eventPublisher.publishEvent(
+                            new CompanyApplicationDecidedEvent(submitter.getEmail(), saved.getName(), false, reason)));
+        }
+
+        return toResponse(saved);
+    }
+
+    // Published now but delivered only after the transaction commits — same reasoning as
+    // PaymentServiceImpl's confirmation email: the approve/reject decision must not depend
+    // on mail delivery succeeding.
+    @Async("mailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendApplicationDecisionEmail(CompanyApplicationDecidedEvent event) {
+        try {
+            if (event.approved()) {
+                mailService.sendCompanyApplicationApproved(event.email(), event.companyName());
+            } else {
+                mailService.sendCompanyApplicationRejected(event.email(), event.companyName(), event.reason());
+            }
+        } catch (Exception e) {
+            log.warn("Could not deliver application decision email to {}: {}", event.email(), e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
     public CompaniesResponse update(Long id, CompaniesRequest request) {
         Companies company = findById(id);
 
@@ -88,6 +186,14 @@ public class CompaniesServiceImpl implements CompaniesService {
                 .orElseThrow(() -> new IllegalStateException("Company not found: " + id));
     }
 
+    // Mirrors UserServiceImpl.currentUser(): the authenticated principal's name is the
+    // email JwtAuthFilter put there, never a client-supplied id.
+    private User currentUser() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+    }
+
     private Companies toEntity(CompaniesRequest request) {
         return Companies.builder()
                 .name(request.getName())
@@ -99,6 +205,8 @@ public class CompaniesServiceImpl implements CompaniesService {
                 .country(request.getCountry())
                 .website(request.getWebSite())
                 .logo_url(request.getLogoUrl())
+                .bankAccountHolder(request.getBankAccountHolder())
+                .bankIban(request.getBankIban())
                 .build();
     }
 
@@ -114,6 +222,10 @@ public class CompaniesServiceImpl implements CompaniesService {
                 .country(company.getCountry())
                 .webSite(company.getWebsite())
                 .logoUrl(company.getLogo_url())
+                .submittedByUserId(company.getSubmittedByUserId())
+                .bankAccountHolder(company.getBankAccountHolder())
+                .bankIban(company.getBankIban())
+                .rejectionReason(company.getRejectionReason())
                 .status(company.getStatus())
                 .created_at(company.getCreatedAt())
                 .updated_at(company.getUpdatedAt())

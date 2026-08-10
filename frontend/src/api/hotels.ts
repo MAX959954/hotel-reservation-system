@@ -1,9 +1,19 @@
 import { http } from './http'
-import type { HotelResponse, PropertyType } from '@/types/hotel'
+import type { CreateHotelRequest, HotelResponse, PropertyType } from '@/types/hotel'
 
 export const hotelsApi = {
   async getById(id: number | string): Promise<HotelResponse> {
     const { data } = await http.get<HotelResponse>(`/api/hotels/${id}`)
+    return data
+  },
+
+  async create(request: CreateHotelRequest): Promise<HotelResponse> {
+    const { data } = await http.post<HotelResponse>('/api/hotels', request)
+    return data
+  },
+
+  async update(id: number, request: CreateHotelRequest): Promise<HotelResponse> {
+    const { data } = await http.patch<HotelResponse>(`/api/hotels/${id}`, request)
     return data
   },
 

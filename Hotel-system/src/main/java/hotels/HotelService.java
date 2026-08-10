@@ -22,5 +22,10 @@ public interface HotelService {
 
     HotelResponse updateStatus(Long id , Hotel_Status status);
 
+    /** Full-details edit — name/city/country/address/rating/phone/email/description/
+     *  imageUrl/propertyType/amenities. companyId on the request is ignored: a hotel's
+     *  owning company doesn't change through this form. */
+    HotelResponse update(Long id, CreateHotelRequest request);
+
     void delete(Long id);
 }
