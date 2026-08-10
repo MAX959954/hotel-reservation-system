@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { i18n } from '@/i18n'
 
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'JPY'
 
@@ -80,7 +81,9 @@ export const useCurrencyStore = defineStore('currency', {
         maximumFractionDigits: 0,
       })
       return (value: number | null | undefined) =>
-        value == null ? null : `≈ ${formatter.format(value * ILLUSTRATIVE_RATE_FROM_EUR[code])} estimated`
+        value == null
+          ? null
+          : i18n.global.t('currency.estimated', { amount: formatter.format(value * ILLUSTRATIVE_RATE_FROM_EUR[code]) })
     },
   },
 

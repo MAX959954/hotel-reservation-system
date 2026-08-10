@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Mail, MapPin, Phone, RotateCw } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
@@ -15,7 +16,8 @@ import { useCurrencyStore } from '@/stores/currency'
 import { useHotelsStore } from '@/stores/hotels'
 import type { HotelResponse } from '@/types/hotel'
 import type { RoomResponse } from '@/types/room'
-import { humanise, roomTypeLabel } from '@/types/room'
+import { roomTypeLabel } from '@/types/room'
+import { amenityLabel, hotelStatusLabel } from '@/types/hotel'
 import {
   CHECK_IN_TIME,
   CHECK_OUT_TIME,
@@ -25,6 +27,7 @@ import {
 } from '@/lib/dates'
 
 const route = useRoute()
+const { t } = useI18n()
 const auth = useAuthStore()
 const authModal = useAuthModalStore()
 const currency = useCurrencyStore()
@@ -67,7 +70,7 @@ async function load() {
       guests.value || undefined,
     )
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not load this stay.')
+    error.value = apiErrorMessage(e, t('hotelDetail.loadError'))
   } finally {
     loading.value = false
   }
@@ -109,7 +112,7 @@ watch(() => route.params.id, load)
             v-if="hotel.status !== 'ACTIVE'"
             class="inline-block mb-3 px-3 py-1 rounded-full text-[11px] font-medium text-amber-300/90 bg-amber-300/10 border border-amber-300/20"
           >
-            {{ humanise(hotel.status) }}
+            {{ hotelStatusLabel(hotel.status) }}
           </span>
           <h1 class="font-display text-5xl md:text-7xl text-bone leading-[0.95]">{{ hotel.name }}</h1>
           <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm font-light text-bone-dim">
@@ -144,7 +147,7 @@ watch(() => route.params.id, load)
           @click="load"
         >
           <RotateCw class="w-4 h-4" aria-hidden="true" />
-          Retry
+          {{ $t('hotelDetail.retry') }}
         </button>
       </div>
 
@@ -159,18 +162,18 @@ watch(() => route.params.id, load)
             :key="amenity"
             class="px-3 py-1.5 rounded-full text-xs font-light text-bone-dim bg-bone/5 border border-hairline"
           >
-            {{ humanise(amenity) }}
+            {{ amenityLabel(amenity) }}
           </span>
         </div>
 
-        <h2 class="font-display text-3xl text-bone mt-12 mb-5">Available rooms</h2>
+        <h2 class="font-display text-3xl text-bone mt-12 mb-5">{{ $t('hotelDetail.availableRooms') }}</h2>
 
         <div v-if="loading" class="flex flex-col gap-3">
           <div v-for="i in 3" :key="i" class="h-24 rounded-[1.25rem] bg-ink-2 border border-hairline animate-pulse" />
         </div>
 
         <p v-else-if="!rooms.length" class="text-sm font-light text-bone-dim">
-          Nothing free for these dates. Try a different range.
+          {{ $t('hotelDetail.nothingFree') }}
         </p>
 
         <div v-else class="flex flex-col gap-3">
@@ -182,13 +185,13 @@ watch(() => route.params.id, load)
             <div>
               <p class="font-display text-xl text-bone">{{ roomTypeLabel(room.type) }}</p>
               <p class="text-xs font-light text-bone-dim mt-1">
-                Room {{ room.number }} · Floor {{ room.floor }} · Sleeps {{ room.capacity }}
+                {{ $t('hotelDetail.roomInfo', { number: room.number, floor: room.floor, capacity: room.capacity }) }}
               </p>
             </div>
             <div class="flex items-center gap-5">
               <p class="text-right">
                 <span class="font-display text-2xl text-bone">{{ currency.format(room.pricePerNight) }}</span>
-                <span class="text-xs text-bone-dim"> / night</span>
+                <span class="text-xs text-bone-dim"> {{ $t('hotelDetail.perNight') }}</span>
                 <span v-if="currency.estimate(room.pricePerNight)" class="block text-[11px] font-light text-bone-dim">
                   {{ currency.estimate(room.pricePerNight) }}
                 </span>
@@ -198,7 +201,7 @@ watch(() => route.params.id, load)
                 class="rounded-full bg-champagne text-ink px-5 py-2.5 text-sm font-medium hover:bg-champagne-bright transition-colors"
                 @click="reserve(room)"
               >
-                Reserve
+                {{ $t('hotelDetail.reserve') }}
               </button>
             </div>
           </div>

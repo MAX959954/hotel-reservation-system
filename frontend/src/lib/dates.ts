@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 /** Hotel-standard clock times, so a date-only picker still produces a valid LocalDateTime. */
 export const CHECK_IN_TIME = '15:00:00'
 export const CHECK_OUT_TIME = '11:00:00'
@@ -34,7 +36,7 @@ export function addDaysIso(iso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function formatDateRange(checkIn: string, checkOut: string, locale = 'en-GB'): string {
+export function formatDateRange(checkIn: string, checkOut: string, locale = i18n.global.locale.value): string {
   const fmt = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' })
   const a = new Date(checkIn)
   const b = new Date(checkOut)

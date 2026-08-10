@@ -39,9 +39,9 @@ const tourOpen = ref(false)
     </div>
 
     <div class="flex flex-col">
-      <span class="text-[16px] md:text-[20px] font-display text-bone">Take the tour</span>
+      <span class="text-[16px] md:text-[20px] font-display text-bone">{{ $t('tour.title') }}</span>
       <div class="flex items-center gap-1 text-bone-dim transition-colors group-hover:text-bone">
-        <span class="text-[12px] md:text-[14px] font-light">2 min film</span>
+        <span class="text-[12px] md:text-[14px] font-light">{{ $t('tour.duration') }}</span>
         <ChevronRight class="w-3.5 h-3.5" aria-hidden="true" />
       </div>
     </div>

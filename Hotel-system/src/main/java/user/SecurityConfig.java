@@ -1,5 +1,7 @@
 package user;
 
+import exception.RestAccessDeniedHandler;
+import exception.RestAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -29,6 +31,8 @@ import java.util.List;
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
 
     // Vite's default dev server port, both loopback forms since "localhost" and "127.0.0.1"
     // are different CORS origins even though they reach the same server — override via
@@ -63,6 +67,14 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                // Without this, Spring's default entry point for a config with no
+                // httpBasic/formLogin is Http403ForbiddenEntryPoint — every expired or
+                // missing token comes back 403, not 401, and the frontend never notices
+                // the session died (see RestAuthenticationEntryPoint for the full story).
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(restAuthenticationEntryPoint)
+                        .accessDeniedHandler(restAccessDeniedHandler)
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter , UsernamePasswordAuthenticationFilter.class);

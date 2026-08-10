@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 export type RoomType =
   | 'SINGLE'
   | 'DOUBLE'
@@ -31,26 +33,13 @@ export interface RoomResponse {
   hotelName: string
 }
 
-const ROOM_TYPE_LABELS: Record<RoomType, string> = {
-  SINGLE: 'Single',
-  DOUBLE: 'Double',
-  TWIN: 'Twin',
-  TRIPLE: 'Triple',
-  SUITE: 'Suite',
-  JUNIOR_SUITE: 'Junior suite',
-  DELUXE: 'Deluxe',
-  PENTHOUSE: 'Penthouse',
-  FAMILY: 'Family',
-  CONNECTING: 'Connecting',
-  DORMITORY: 'Dormitory',
-  STUDIO: 'Studio',
-  VILLA: 'Villa',
-  BUNGALOW: 'Bungalow',
-  ACCESSIBLE: 'Accessible',
-}
-
+/** A fixed, closed enum — every value has a translation key (see locales/en.ts's
+ *  `roomType`), so this never needs the raw-string fallback in practice. The fallback
+ *  stays as protection against the backend adding a value before the locale files catch up. */
 export function roomTypeLabel(type: RoomType): string {
-  return ROOM_TYPE_LABELS[type] ?? humanise(type)
+  const key = `roomType.${type}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(type) : translated
 }
 
 /** Fallback for any value the API adds before this map is updated. */

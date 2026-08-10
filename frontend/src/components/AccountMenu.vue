@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, LogOut, Shield } from 'lucide-vue-next'
 import { accountApi } from '@/api/account'
 import { resolveUploadUrl } from '@/api/http'
 import RolesModal from '@/components/RolesModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCompanyStore } from '@/stores/company'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useSettingsModalStore } from '@/stores/settingsModal'
 
 const router = useRouter()
+const { t } = useI18n()
 const auth = useAuthStore()
 const company = useCompanyStore()
+const notifications = useNotificationsStore()
 const settingsModal = useSettingsModalStore()
 
 const open = ref(false)
@@ -20,6 +24,7 @@ const root = ref<HTMLElement | null>(null)
 
 const initial = () => (auth.email ? auth.email.charAt(0).toUpperCase() : '?')
 const avatarSrc = () => resolveUploadUrl(auth.avatarUrl)
+const badgeLabel = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
 
 // Company staff (OWNER/MANAGER/RECEPTIONIST at a specific company) always qualify;
 // platform-wide staff roles bypass the per-company membership check the same way the
@@ -52,6 +57,7 @@ function signOut() {
   close()
   auth.logout()
   company.reset()
+  notifications.reset()
   router.push('/')
 }
 
@@ -78,15 +84,23 @@ watch(
     if (!userId) {
       // Covers the 401 interceptor's silent logout, not just the Sign out button.
       company.reset()
+      notifications.reset()
       return
     }
     if (!auth.avatarUrl) {
+      // Roles ride along on the same call: like the avatar, they aren't on AuthResponse,
+      // and a stale cached array would leave "Manage bookings" hidden after a role grant
+      // until the user happens to open RolesModal (which does its own forced refresh).
       accountApi
         .getProfile()
-        .then((profile) => auth.setAvatar(profile.avatarUrl))
+        .then((profile) => {
+          auth.setAvatar(profile.avatarUrl)
+          auth.setRoles(profile.roles)
+        })
         .catch(() => {})
     }
     company.load()
+    notifications.load()
   },
   { immediate: true },
 )
@@ -100,25 +114,34 @@ onUnmounted(() => {
   <div ref="root" class="relative">
     <button
       type="button"
-      class="flex items-center gap-2 rounded-full border border-hairline pl-1 pr-3 py-1 hover:border-champagne-dim transition-colors"
+      class="relative flex items-center gap-2 rounded-full border border-hairline pl-1 pr-3 py-1 hover:border-champagne-dim transition-colors"
       aria-haspopup="true"
       :aria-expanded="open"
-      aria-label="Account menu"
+      :aria-label="notifications.unreadCount ? t('accountMenu.ariaLabelUnread', { count: badgeLabel }) : t('accountMenu.ariaLabel')"
       @click="toggle"
     >
-      <img
-        v-if="avatarSrc()"
-        :src="avatarSrc()!"
-        alt=""
-        class="w-7 h-7 rounded-full object-cover"
-        aria-hidden="true"
-      />
-      <span
-        v-else
-        class="w-7 h-7 rounded-full bg-champagne text-ink flex items-center justify-center text-xs font-medium"
-        aria-hidden="true"
-      >
-        {{ initial() }}
+      <span class="relative shrink-0">
+        <img
+          v-if="avatarSrc()"
+          :src="avatarSrc()!"
+          alt=""
+          class="w-7 h-7 rounded-full object-cover"
+          aria-hidden="true"
+        />
+        <span
+          v-else
+          class="w-7 h-7 rounded-full bg-champagne text-ink flex items-center justify-center text-xs font-medium"
+          aria-hidden="true"
+        >
+          {{ initial() }}
+        </span>
+        <span
+          v-if="notifications.unreadCount"
+          class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-400 text-ink text-[10px] font-medium leading-4 text-center border-2 border-ink"
+          aria-hidden="true"
+        >
+          {{ badgeLabel }}
+        </span>
       </span>
       <ChevronDown class="w-3.5 h-3.5 text-bone-dim transition-transform" :class="{ 'rotate-180': open }" aria-hidden="true" />
     </button>
@@ -141,7 +164,7 @@ onUnmounted(() => {
           @click="go('/bookings')"
         >
           <Briefcase class="w-4 h-4 text-champagne" aria-hidden="true" />
-          My bookings
+          {{ $t('accountMenu.myBookings') }}
         </button>
         <button
           v-if="canManageBookings"
@@ -151,7 +174,7 @@ onUnmounted(() => {
           @click="go('/manage/bookings')"
         >
           <Building2 class="w-4 h-4 text-champagne" aria-hidden="true" />
-          Manage bookings
+          {{ $t('accountMenu.manageBookings') }}
         </button>
         <button
           role="menuitem"
@@ -160,7 +183,7 @@ onUnmounted(() => {
           @click="openRoles"
         >
           <Shield class="w-4 h-4 text-champagne" aria-hidden="true" />
-          View roles
+          {{ $t('accountMenu.viewRoles') }}
         </button>
 
         <div class="h-px bg-hairline my-2" role="separator" />
@@ -172,7 +195,13 @@ onUnmounted(() => {
           @click="go('/notifications')"
         >
           <Bell class="w-4 h-4 text-champagne" aria-hidden="true" />
-          Notifications
+          {{ $t('accountMenu.notifications') }}
+          <span
+            v-if="notifications.unreadCount"
+            class="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-rose-400 text-ink text-[10px] font-medium leading-[18px] text-center"
+          >
+            {{ badgeLabel }}
+          </span>
         </button>
         <button
           role="menuitem"
@@ -181,7 +210,7 @@ onUnmounted(() => {
           @click="openSettings('currency')"
         >
           <Coins class="w-4 h-4 text-champagne" aria-hidden="true" />
-          Region & currency
+          {{ $t('accountMenu.regionCurrency') }}
         </button>
         <button
           role="menuitem"
@@ -190,7 +219,7 @@ onUnmounted(() => {
           @click="openSettings('personal')"
         >
           <CircleUser class="w-4 h-4 text-champagne" aria-hidden="true" />
-          Account settings
+          {{ $t('accountMenu.accountSettings') }}
         </button>
 
         <div class="h-px bg-hairline my-2" role="separator" />
@@ -202,7 +231,7 @@ onUnmounted(() => {
           @click="signOut"
         >
           <LogOut class="w-4 h-4" aria-hidden="true" />
-          Sign out
+          {{ $t('accountMenu.signOut') }}
         </button>
       </div>
     </Transition>

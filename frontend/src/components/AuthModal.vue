@@ -2,6 +2,7 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Loader2, Lock, Mail, X } from 'lucide-vue-next'
+import DatePicker from './DatePicker.vue'
 import { authApi } from '@/api/auth'
 import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -44,6 +45,13 @@ const ageValid = computed(() => {
   cutoff.setFullYear(cutoff.getFullYear() - 18)
   return dob <= cutoff
 })
+
+/** Oldest-guest-on-record to 18-years-ago — a plain prev/next-month calendar would take
+ *  dozens of clicks to reach a real birth year, so DatePicker gets year/month selects here. */
+const dobYearRange: [number, number] = (() => {
+  const currentYear = new Date().getFullYear()
+  return [currentYear - 100, currentYear - 18]
+})()
 
 const passwordStrength = computed(() => {
   const v = password.value
@@ -408,12 +416,12 @@ function backToForm() {
 
             <label class="flex flex-col gap-1">
               <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Date of birth</span>
-              <input
+              <DatePicker
                 v-model="dateOfBirth"
-                type="date"
-                required
                 :max="todayIso()"
-                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
+                :year-range="dobYearRange"
+                aria-label="Date of birth"
+                class="border-b border-hairline focus-within:border-champagne pb-1 transition-colors"
               />
               <span v-if="dateOfBirth && !ageValid" class="text-xs text-rose-300">
                 You must be at least 18 years old to book with us.
@@ -505,6 +513,9 @@ function backToForm() {
               />
             </div>
             <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
+            <p class="text-xs font-light text-bone-dim/70">
+              Didn't get it? Check your spam folder — delivery can occasionally take a minute.
+            </p>
             <div class="flex items-center justify-between text-xs font-light text-bone-dim">
               <button
                 type="button"

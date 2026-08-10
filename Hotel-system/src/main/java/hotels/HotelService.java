@@ -6,17 +6,19 @@ public interface HotelService {
 
     HotelResponse create(CreateHotelRequest request);
 
-    HotelResponse getById(Long id);
+    /** @param locale drives which hotel_translations row backs the description — "en" or
+     *  null/blank always means the base hotels.description column. */
+    HotelResponse getById(Long id, String locale);
 
-    List<HotelResponse> getByCity(String city);
+    List<HotelResponse> getByCity(String city, String locale);
 
-    List<HotelResponse> getByCountry(String country);
+    List<HotelResponse> getByCountry(String country, String locale);
 
-    List<HotelResponse> getByRating(Integer rating);
+    List<HotelResponse> getByRating(Integer rating, String locale);
 
-    List<HotelResponse> getByCompany(Long companyId);
+    List<HotelResponse> getByCompany(Long companyId, String locale);
 
-    List<HotelResponse> getByPropertyType(PropertyType propertyType);
+    List<HotelResponse> getByPropertyType(PropertyType propertyType, String locale);
 
     HotelResponse updateStatus(Long id , Hotel_Status status);
 

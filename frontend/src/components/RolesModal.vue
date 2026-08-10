@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { X } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { Loader2, X } from 'lucide-vue-next'
+import { accountApi } from '@/api/account'
 import { useAuthStore } from '@/stores/auth'
 import { useCompanyStore } from '@/stores/company'
 import type { CompanyUserStatus } from '@/types/companyUser'
@@ -10,6 +11,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const auth = useAuthStore()
 const company = useCompanyStore()
+const refreshing = ref(false)
 
 // The raw numeric ID is only useful for support/admin lookups, not something a regular
 // guest needs to see about their own account.
@@ -27,8 +29,19 @@ const STATUS_CLASSES: Record<CompanyUserStatus, string> = {
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen) document.body.style.overflow = 'hidden'
-    else document.body.style.overflow = ''
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+      // This panel exists to answer "what access do I actually have right now" — a
+      // cached roles array from login time would defeat the point the moment a role
+      // changes mid-session (e.g. an admin grants one), so re-check on every open.
+      refreshing.value = true
+      company.reset()
+      Promise.all([accountApi.getProfile().then((p) => auth.setRoles(p.roles)), company.load()]).finally(
+        () => (refreshing.value = false),
+      )
+    } else {
+      document.body.style.overflow = ''
+    }
   },
 )
 </script>
@@ -54,7 +67,10 @@ watch(
           class="w-full max-w-md rounded-[1.75rem] bg-ink-2/90 backdrop-blur-2xl border border-hairline p-6 md:p-8 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)]"
         >
           <div class="flex items-start justify-between gap-4 mb-6">
-            <h2 id="roles-modal-title" class="font-display text-2xl text-bone">Your roles</h2>
+            <div class="flex items-center gap-2">
+              <h2 id="roles-modal-title" class="font-display text-2xl text-bone">Your roles</h2>
+              <Loader2 v-if="refreshing" class="w-4 h-4 text-bone-dim animate-spin" aria-hidden="true" />
+            </div>
             <button type="button" class="text-bone-dim hover:text-bone transition-colors" aria-label="Close" @click="emit('close')">
               <X class="w-5 h-5" aria-hidden="true" />
             </button>

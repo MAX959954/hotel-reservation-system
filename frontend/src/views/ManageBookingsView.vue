@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Loader2, RotateCw } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
@@ -9,12 +10,16 @@ import { companyUsersApi } from '@/api/companyUsers'
 import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useCompanyStore } from '@/stores/company'
+import { useConfirmModalStore } from '@/stores/confirmModal'
 import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
-import type { BookingResponse, BookingStatus } from '@/types/booking'
+import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
+import { companyRoleLabel } from '@/types/companyUser'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const company = useCompanyStore()
+const confirmModal = useConfirmModalStore()
 const currency = useCurrencyStore()
 
 // Mirrors the backend's own @PreAuthorize bypass on these endpoints: ADMIN/RECEPTIONIST/
@@ -35,14 +40,14 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
-const FILTERS: { label: string; value: BookingStatus | null }[] = [
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Confirmed', value: 'CONFIRMED' },
-  { label: 'Checked in', value: 'CHECKED_IN' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Cancelled', value: 'CANCELLED' },
-  { label: 'All', value: null },
-]
+const FILTERS = computed<{ label: string; value: BookingStatus | null }[]>(() => [
+  { label: t('manageBookings.filterPending'), value: 'PENDING' },
+  { label: t('manageBookings.filterConfirmed'), value: 'CONFIRMED' },
+  { label: t('manageBookings.filterCheckedIn'), value: 'CHECKED_IN' },
+  { label: t('manageBookings.filterCompleted'), value: 'COMPLETED' },
+  { label: t('manageBookings.filterCancelled'), value: 'CANCELLED' },
+  { label: t('manageBookings.filterAll'), value: null },
+])
 
 const invited = computed(() => company.memberships.filter((m) => m.status === 'INVITED'))
 const myCompanies = computed(() => company.active)
@@ -55,21 +60,34 @@ const loading = ref(true)
 const error = ref('')
 const acting = ref<number | null>(null)
 
-/** Server-side transitions this panel drives: confirm, check-in, complete, cancel. */
-function actionsFor(booking: BookingResponse): { label: string; run: () => Promise<BookingResponse>; danger?: boolean }[] {
+type ActionKind = 'confirm' | 'checkIn' | 'complete' | 'cancel'
+
+const ACTION_LABEL_KEYS: Record<ActionKind, string> = {
+  confirm: 'manageBookings.actionConfirm',
+  checkIn: 'manageBookings.actionCheckIn',
+  complete: 'manageBookings.actionComplete',
+  cancel: 'manageBookings.actionCancel',
+}
+
+/** Server-side transitions this panel drives: confirm, check-in, complete, cancel.
+ *  Only a `kind` travels here, not a pre-translated label — the label and (for the
+ *  danger action) the confirmation copy are both resolved from it separately, since
+ *  concatenating a translated verb into an English sentence template would produce
+ *  broken grammar in most other languages. */
+function actionsFor(booking: BookingResponse): { kind: ActionKind; run: () => Promise<BookingResponse>; danger?: boolean }[] {
   switch (booking.bookingStatus) {
     case 'PENDING':
       return [
-        { label: 'Confirm', run: () => bookingsApi.confirm(booking.id) },
-        { label: 'Cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
+        { kind: 'confirm', run: () => bookingsApi.confirm(booking.id) },
+        { kind: 'cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
       ]
     case 'CONFIRMED':
       return [
-        { label: 'Check in', run: () => bookingsApi.checkIn(booking.id) },
-        { label: 'Cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
+        { kind: 'checkIn', run: () => bookingsApi.checkIn(booking.id) },
+        { kind: 'cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
       ]
     case 'CHECKED_IN':
-      return [{ label: 'Complete', run: () => bookingsApi.complete(booking.id) }]
+      return [{ kind: 'complete', run: () => bookingsApi.complete(booking.id) }]
     default:
       return []
   }
@@ -82,13 +100,27 @@ async function load() {
   try {
     bookings.value = await bookingsApi.getByCompany(companyId.value, status.value ?? undefined)
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not load bookings for this company.')
+    error.value = apiErrorMessage(e, t('manageBookings.loadError'))
   } finally {
     loading.value = false
   }
 }
 
-async function runAction(booking: BookingResponse, action: { run: () => Promise<BookingResponse> }) {
+async function runAction(
+  booking: BookingResponse,
+  action: { kind: ActionKind; run: () => Promise<BookingResponse>; danger?: boolean },
+) {
+  if (action.danger) {
+    // Only 'cancel' is ever marked danger, so this modal copy doesn't need to vary by kind.
+    const confirmed = await confirmModal.ask({
+      title: t('manageBookings.cancelModalTitle'),
+      message: t('manageBookings.cancelModalMessage', { user: booking.userFullName, hotel: booking.hotelName }),
+      confirmLabel: t(ACTION_LABEL_KEYS[action.kind]),
+      cancelLabel: t('manageBookings.back'),
+      danger: true,
+    })
+    if (!confirmed) return
+  }
   acting.value = booking.id
   error.value = ''
   try {
@@ -97,7 +129,7 @@ async function runAction(booking: BookingResponse, action: { run: () => Promise<
     // change server-side and the filtered list itself may need to drop this row.
     await load()
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not update that booking.')
+    error.value = apiErrorMessage(e, t('manageBookings.updateError'))
   } finally {
     acting.value = null
   }
@@ -110,7 +142,7 @@ async function accept(membershipId: number) {
     company.reset()
     await company.load()
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not accept that invite.')
+    error.value = apiErrorMessage(e, t('manageBookings.acceptError'))
   }
 }
 
@@ -139,27 +171,28 @@ onMounted(async () => {
     </div>
 
     <main class="flex-1 px-6 md:px-10 py-10 max-w-5xl mx-auto w-full">
-      <h1 class="font-display text-4xl md:text-5xl text-bone mb-4">Manage bookings</h1>
+      <h1 class="font-display text-4xl md:text-5xl text-bone mb-4">{{ $t('manageBookings.title') }}</h1>
 
       <div
         v-for="member in invited"
         :key="member.id"
         class="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-champagne/25 bg-champagne/5 p-4 mb-4"
       >
-        <p class="text-sm font-light text-bone">
-          You've been invited to manage <span class="text-bone">{{ member.companyName }}</span> as {{ member.companyRole }}.
-        </p>
+        <i18n-t keypath="manageBookings.invitedMessage" tag="p" class="text-sm font-light text-bone">
+          <template #company><span class="text-bone">{{ member.companyName }}</span></template>
+          <template #role>{{ companyRoleLabel(member.companyRole) }}</template>
+        </i18n-t>
         <button
           type="button"
           class="rounded-full bg-champagne text-ink px-4 py-2 text-xs font-medium hover:bg-champagne-bright transition-colors"
           @click="accept(member.id)"
         >
-          Accept
+          {{ $t('manageBookings.accept') }}
         </button>
       </div>
 
       <div v-if="!pickableCompanies.length" class="rounded-[1.25rem] border border-hairline bg-ink-2 p-8">
-        <p class="text-sm font-light text-bone-dim">You don't manage any properties yet.</p>
+        <p class="text-sm font-light text-bone-dim">{{ $t('manageBookings.noProperties') }}</p>
       </div>
 
       <template v-else>
@@ -183,7 +216,7 @@ onMounted(async () => {
         <div class="flex flex-wrap gap-2 mb-6">
           <button
             v-for="f in FILTERS"
-            :key="f.label"
+            :key="f.value ?? 'all'"
             type="button"
             role="tab"
             :aria-selected="status === f.value"
@@ -210,12 +243,12 @@ onMounted(async () => {
             @click="load"
           >
             <RotateCw class="w-4 h-4" aria-hidden="true" />
-            Retry
+            {{ $t('manageBookings.retry') }}
           </button>
         </div>
 
         <p v-else-if="!bookings.length" class="text-sm font-light text-bone-dim">
-          Nothing here for this filter.
+          {{ $t('manageBookings.empty') }}
         </p>
 
         <div v-else class="flex flex-col gap-4">
@@ -231,13 +264,13 @@ onMounted(async () => {
                   class="px-2.5 py-1 rounded-full text-[11px] font-medium border"
                   :class="STATUS_CLASSES[booking.bookingStatus]"
                 >
-                  {{ booking.bookingStatus }}
+                  {{ bookingStatusLabel(booking.bookingStatus) }}
                 </span>
               </div>
               <p class="text-sm font-light text-bone-dim mt-2">
-                {{ booking.userFullName }} · Room {{ booking.roomNumber }} ·
+                {{ booking.userFullName }} · {{ $t('payment.roomNumber', { number: booking.roomNumber }) }} ·
                 {{ formatDateRange(booking.checkIn, booking.checkOut) }} ·
-                {{ booking.guestCount }} {{ booking.guestCount === 1 ? 'guest' : 'guests' }}
+                {{ booking.guestCount }} {{ booking.guestCount === 1 ? $t('hotels.guest') : $t('hotels.guests') }}
               </p>
               <p v-if="booking.specialRequest" class="text-xs font-light text-bone-dim/80 mt-2 italic">
                 “{{ booking.specialRequest }}”
@@ -245,11 +278,16 @@ onMounted(async () => {
             </div>
 
             <div class="flex flex-col items-end gap-3">
-              <span class="font-display text-2xl text-bone">{{ currency.format(booking.totalPrice) }}</span>
+              <p class="text-right">
+                <span class="font-display text-2xl text-bone">{{ currency.format(booking.totalPrice) }}</span>
+                <span v-if="currency.estimate(booking.totalPrice)" class="block text-[11px] font-light text-bone-dim">
+                  {{ currency.estimate(booking.totalPrice) }}
+                </span>
+              </p>
               <div class="flex items-center gap-2">
                 <button
                   v-for="action in actionsFor(booking)"
-                  :key="action.label"
+                  :key="action.kind"
                   type="button"
                   :disabled="acting === booking.id"
                   class="flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-light transition-colors disabled:opacity-50"
@@ -261,7 +299,7 @@ onMounted(async () => {
                   @click="runAction(booking, action)"
                 >
                   <Loader2 v-if="acting === booking.id" class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                  {{ action.label }}
+                  {{ $t(ACTION_LABEL_KEYS[action.kind]) }}
                 </button>
               </div>
             </div>

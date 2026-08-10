@@ -1,3 +1,6 @@
+import { i18n } from '@/i18n'
+import { humanise } from './room'
+
 export type HotelStatus =
   | 'ACTIVE'
   | 'INACTIVE'
@@ -50,4 +53,16 @@ export interface HotelResponse {
   companyId: number
   companyName: string
   amenities: Amenity[] | null
+}
+
+export function amenityLabel(amenity: string): string {
+  const key = `amenity.${amenity}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(amenity) : translated
+}
+
+export function hotelStatusLabel(status: string): string {
+  const key = `hotelStatus.${status}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(status) : translated
 }

@@ -14,14 +14,14 @@ let ctx: gsap.Context | null = null
 // the data, not just a label.
 const panels = [
   {
-    title: 'Hotels',
-    blurb: 'Front desks, restaurants, and someone who knows the city.',
+    titleKey: 'stayTypes.hotelsTitle',
+    blurbKey: 'stayTypes.hotelsBlurb',
     image: FALLBACK_IMAGES[1],
     route: { name: 'hotels', query: { type: 'HOTEL' } },
   },
   {
-    title: 'Apartments',
-    blurb: 'Your own kitchen, your own hours, for a longer stay.',
+    titleKey: 'stayTypes.apartmentsTitle',
+    blurbKey: 'stayTypes.apartmentsBlurb',
     image: FALLBACK_IMAGES[6],
     route: { name: 'apartments' },
   },
@@ -51,7 +51,7 @@ onUnmounted(() => {
     <div class="max-w-[1600px] mx-auto grid gap-4 md:gap-5 md:grid-cols-2">
       <button
         v-for="panel in panels"
-        :key="panel.title"
+        :key="panel.titleKey"
         data-panel
         type="button"
         class="relative h-[70vh] rounded-[2rem] overflow-hidden group cursor-pointer border border-hairline text-left"
@@ -59,7 +59,7 @@ onUnmounted(() => {
       >
         <img
           :src="panel.image"
-          :alt="`${panel.title} on Folio`"
+          :alt="`${$t(panel.titleKey)} on Folio`"
           class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1.2s] ease-[cubic-bezier(0.16,1,0.3,1)]"
         />
         <div
@@ -69,8 +69,8 @@ onUnmounted(() => {
 
         <div class="absolute inset-x-0 bottom-0 p-6 md:p-10 flex items-end justify-between gap-4">
           <div>
-            <h3 class="font-display text-4xl text-bone">{{ panel.title }}</h3>
-            <p class="text-sm font-light text-bone-dim mt-1 max-w-xs">{{ panel.blurb }}</p>
+            <h3 class="font-display text-4xl text-bone">{{ $t(panel.titleKey) }}</h3>
+            <p class="text-sm font-light text-bone-dim mt-1 max-w-xs">{{ $t(panel.blurbKey) }}</p>
           </div>
           <ArrowUpRight
             class="w-7 h-7 text-champagne shrink-0 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1"

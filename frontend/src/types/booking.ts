@@ -1,3 +1,6 @@
+import { i18n } from '@/i18n'
+import { humanise } from './room'
+
 export type BookingStatus =
   | 'PENDING'
   | 'CONFIRMED'
@@ -6,6 +9,12 @@ export type BookingStatus =
   | 'CANCELLED'
   | 'NO_SHOW'
   | 'PAYMENT_FAILED'
+
+export function bookingStatusLabel(status: string): string {
+  const key = `bookingStatus.${status}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(status) : translated
+}
 
 /**
  * Deliberately has no `userId`: the server takes the booking's owner from the JWT.

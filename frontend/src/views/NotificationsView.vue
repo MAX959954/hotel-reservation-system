@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { CalendarPlus, CheckCircle2, RotateCw, XCircle } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
 import { bookingsApi } from '@/api/bookings'
 import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
-import type { BookingResponse } from '@/types/booking'
+import { useNotificationsStore } from '@/stores/notifications'
+import { bookingStatusLabel, type BookingResponse } from '@/types/booking'
 
 /**
  * There is no notifications table in the backend — this feed is derived from real booking
@@ -24,7 +26,9 @@ interface NotificationEntry {
   currentStatus: BookingResponse['bookingStatus']
 }
 
+const { t, locale } = useI18n()
 const auth = useAuthStore()
+const notifications = useNotificationsStore()
 
 const bookings = ref<BookingResponse[]>([])
 const loading = ref(true)
@@ -49,12 +53,6 @@ function isLatestForBooking(entry: NotificationEntry, index: number): boolean {
   return entries.value.findIndex((e) => e.bookingId === entry.bookingId) === index
 }
 
-const EVENT_COPY: Record<NotificationEntry['event'], string> = {
-  requested: 'You requested a booking at',
-  confirmed: 'confirmed your booking at',
-  cancelled: 'cancelled the booking at',
-}
-
 async function load() {
   if (!auth.userId) return
   loading.value = true
@@ -62,19 +60,24 @@ async function load() {
   try {
     bookings.value = await bookingsApi.getByUser(auth.userId)
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not load your notifications.')
+    error.value = apiErrorMessage(e, t('notifications.loadError'))
   } finally {
     loading.value = false
   }
 }
 
 function formatWhen(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(
+  return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(
     new Date(iso),
   )
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  // Opening this page is the "read" action — everything up to now no longer counts
+  // toward the badge on the account menu.
+  notifications.markSeen()
+})
 </script>
 
 <template>
@@ -82,7 +85,7 @@ onMounted(load)
     <Navbar />
 
     <main class="flex-1 px-6 md:px-10 py-10 max-w-2xl mx-auto w-full">
-      <h1 class="font-display text-4xl md:text-5xl text-bone mb-8">Notifications</h1>
+      <h1 class="font-display text-4xl md:text-5xl text-bone mb-8">{{ $t('notifications.title') }}</h1>
 
       <div v-if="loading" class="flex flex-col gap-3">
         <div v-for="i in 4" :key="i" class="h-16 rounded-[1.25rem] bg-ink-2 border border-hairline animate-pulse" />
@@ -96,12 +99,12 @@ onMounted(load)
           @click="load"
         >
           <RotateCw class="w-4 h-4" aria-hidden="true" />
-          Retry
+          {{ $t('notifications.retry') }}
         </button>
       </div>
 
       <p v-else-if="!entries.length" class="text-sm font-light text-bone-dim">
-        Nothing yet — booking activity will show up here.
+        {{ $t('notifications.empty') }}
       </p>
 
       <ul v-else class="flex flex-col gap-3">
@@ -125,17 +128,18 @@ onMounted(load)
 
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <p class="text-sm text-bone">
-                Folio {{ EVENT_COPY[entry.event] }}
-                <RouterLink :to="{ name: 'bookings' }" class="text-champagne hover:text-champagne-bright transition-colors">
-                  {{ entry.hotelName }}
-                </RouterLink>
-              </p>
+              <i18n-t :keypath="`notifications.${entry.event}`" tag="p" class="text-sm text-bone">
+                <template #hotel>
+                  <RouterLink :to="{ name: 'bookings' }" class="text-champagne hover:text-champagne-bright transition-colors">
+                    {{ entry.hotelName }}
+                  </RouterLink>
+                </template>
+              </i18n-t>
               <span
                 v-if="isLatestForBooking(entry, i)"
                 class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-bone-dim border border-hairline rounded-full px-2 py-0.5"
               >
-                {{ entry.currentStatus }}
+                {{ bookingStatusLabel(entry.currentStatus) }}
               </span>
             </div>
             <p class="text-xs font-light text-bone-dim mt-1">{{ formatWhen(entry.timestamp) }}</p>

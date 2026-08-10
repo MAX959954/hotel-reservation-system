@@ -3,6 +3,7 @@ package payment;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
+import hotels.Hotels;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,6 +11,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import room.Room;
+import user.MailService;
+import user.User;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +36,12 @@ public class PaymentServiceImplTest {
     @Mock
     private BookingRepository bookingRepository;
 
+    @Mock
+    private MailService mailService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private PaymentServiceImpl paymentService;
 
@@ -39,15 +50,26 @@ public class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        // Room/hotel/user are populated (not just id/status/totalPrice) because pay()
+        // now publishes a PaymentCompletedEvent built from this chain — an incomplete
+        // fixture would NPE inside publishConfirmation rather than testing anything.
+        Hotels hotel = Hotels.builder().id(1L).name("Ribeira Riverhouse").build();
+        Room room = Room.builder().id(1L).number("101").hotel(hotel).build();
+        User user = User.builder().id(1L).email("guest@example.com").firstName("Alex").build();
+
         booking = Booking.builder()
                 .id(1L)
                 .bookingStatus(BookingStatus.CONFIRMED)
                 .totalPrice(250.0)
+                .check_in(LocalDateTime.now().plusDays(1))
+                .check_out(LocalDateTime.now().plusDays(3))
+                .room(room)
+                .user(user)
                 .build();
 
         request = new PaymentRequest();
         request.setBookingId(1L);
-        request.setMethod(PaymentMethod.CREDIT_CARD);
+        request.setMethod(PaymentMethod.CASH);
         request.setCurrency("USD");
         request.setTransactionId("txn-123");
     }
@@ -91,6 +113,17 @@ public class PaymentServiceImplTest {
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
         verify(paymentRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.COMPLETED);
+    }
+
+    @Test
+    void pay_throws_forGatewayMethods() {
+        request.setMethod(PaymentMethod.CREDIT_CARD);
+
+        assertThatThrownBy(() -> paymentService.pay(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("/api/payments/intent");
+
+        verify(paymentRepository, never()).save(any());
     }
 
     @Test

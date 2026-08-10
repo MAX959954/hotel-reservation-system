@@ -97,7 +97,7 @@ class HotelControllerTest {
 
     @Test
     void getById_returns200_whenFound() throws Exception {
-        given(hotelService.getById(1L)).willReturn(sampleResponse());
+        given(hotelService.getById(1L, "en")).willReturn(sampleResponse());
 
         mockMvc.perform(get("/api/hotels/{id}", 1L))
                 .andExpect(status().isOk())
@@ -106,7 +106,7 @@ class HotelControllerTest {
 
     @Test
     void getById_returns400_whenNotFound() throws Exception {
-        given(hotelService.getById(1L)).willThrow(new IllegalStateException("Hotel not found 1"));
+        given(hotelService.getById(1L, "en")).willThrow(new IllegalStateException("Hotel not found 1"));
 
         mockMvc.perform(get("/api/hotels/{id}", 1L))
                 .andExpect(status().isBadRequest());
@@ -114,7 +114,7 @@ class HotelControllerTest {
 
     @Test
     void getByCity_returns200() throws Exception {
-        given(hotelService.getByCity("Paris")).willReturn(List.of(sampleResponse()));
+        given(hotelService.getByCity("Paris", "en")).willReturn(List.of(sampleResponse()));
 
         mockMvc.perform(get("/api/hotels/city/{city}", "Paris"))
                 .andExpect(status().isOk())
