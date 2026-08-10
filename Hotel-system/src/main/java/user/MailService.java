@@ -82,6 +82,77 @@ public class MailService {
                 + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut))
                 + detailRow("Amount paid", String.format(Locale.ENGLISH, "%.2f %s", amount, currency));
 
+        return emailShell(
+                "Payment confirmed",
+                "Hi %s — congratulations, your payment went through and your stay at <strong>%s</strong> is booked."
+                        .formatted(guestName, hotelName),
+                rows,
+                "You can view or manage this booking any time from \"My bookings\" on Folio."
+        );
+    }
+
+    public void sendCompanyInvite(String toEmail, String companyName, String role) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(resolveFromAddress());
+            helper.setTo(toEmail);
+            helper.setSubject("You've been invited to " + companyName + " on Folio");
+            String rows = detailRow("Company", companyName) + detailRow("Role", humaniseRole(role));
+            String intro = "You've been invited to join <strong>%s</strong> on Folio.".formatted(companyName);
+            String footer = "Sign in (or create an account with this email address) and open \"Manage bookings\" to accept.";
+            helper.setText(emailShell("You're invited", intro, rows, footer), true);
+            mailSender.send(mimeMessage);
+        } catch (jakarta.mail.MessagingException e) {
+            throw new IllegalStateException("Could not build invite email", e);
+        }
+    }
+
+    public void sendCompanyApplicationApproved(String toEmail, String companyName) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(resolveFromAddress());
+            helper.setTo(toEmail);
+            helper.setSubject("Approved — " + companyName + " is live on Folio");
+            String rows = detailRow("Company", companyName) + detailRow("Status", "Active");
+            String intro = "Good news — <strong>%s</strong> has been approved and you're now a hotel manager on Folio."
+                    .formatted(companyName);
+            String footer = "Sign in and open \"Manage bookings\" to start adding hotels and inviting staff.";
+            helper.setText(emailShell("Application approved", intro, rows, footer), true);
+            mailSender.send(mimeMessage);
+        } catch (jakarta.mail.MessagingException e) {
+            throw new IllegalStateException("Could not build application-approved email", e);
+        }
+    }
+
+    public void sendCompanyApplicationRejected(String toEmail, String companyName, String reason) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(resolveFromAddress());
+            helper.setTo(toEmail);
+            helper.setSubject("Update on your Folio application — " + companyName);
+            String rows = detailRow("Company", companyName)
+                    + detailRow("Reason", reason == null || reason.isBlank() ? "Not specified" : reason);
+            String intro = "We're unable to approve the application for <strong>%s</strong> at this time."
+                    .formatted(companyName);
+            String footer = "You're welcome to submit a new application once the issue above is addressed.";
+            helper.setText(emailShell("Application not approved", intro, rows, footer), true);
+            mailSender.send(mimeMessage);
+        } catch (jakarta.mail.MessagingException e) {
+            throw new IllegalStateException("Could not build application-rejected email", e);
+        }
+    }
+
+    private String humaniseRole(String role) {
+        String lower = role.replace('_', ' ').toLowerCase(Locale.ENGLISH);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+    }
+
+    /** The shared badge/heading/hr/detail-rows-table/footer envelope every transactional
+     *  email on Folio uses — see detailRow() for what fills the rows table. */
+    private String emailShell(String heading, String introHtml, String rowsHtml, String footerText) {
         return """
                 <!DOCTYPE html>
                 <html>
@@ -90,10 +161,8 @@ public class MailService {
                     <tr>
                       <td style="padding:40px 40px 8px 40px;">
                         <div style="width:36px;height:36px;border-radius:50%%;background:#111111;color:#e8c88a;text-align:center;line-height:36px;font-family:Georgia,'Times New Roman',serif;font-size:19px;">F</div>
-                        <h1 style="margin:24px 0 12px 0;font-size:26px;line-height:1.3;color:#111111;font-weight:600;">Payment confirmed</h1>
-                        <p style="margin:0 0 32px 0;font-size:15px;line-height:1.6;color:#444444;">
-                          Hi %s — congratulations, your payment went through and your stay at <strong>%s</strong> is booked.
-                        </p>
+                        <h1 style="margin:24px 0 12px 0;font-size:26px;line-height:1.3;color:#111111;font-weight:600;">%s</h1>
+                        <p style="margin:0 0 32px 0;font-size:15px;line-height:1.6;color:#444444;">%s</p>
                       </td>
                     </tr>
                     <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #ececec;margin:0 0 24px 0;"/></td></tr>
@@ -105,13 +174,13 @@ public class MailService {
                     <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #ececec;margin:4px 0 24px 0;"/></td></tr>
                     <tr>
                       <td style="padding:0 40px 40px 40px;">
-                        <p style="margin:0;font-size:12px;line-height:1.6;color:#999999;">You can view or manage this booking any time from "My bookings" on Folio.</p>
+                        <p style="margin:0;font-size:12px;line-height:1.6;color:#999999;">%s</p>
                       </td>
                     </tr>
                   </table>
                 </body>
                 </html>
-                """.formatted(guestName, hotelName, rows);
+                """.formatted(heading, introHtml, rowsHtml, footerText);
     }
 
     private String resolveFromAddress() {

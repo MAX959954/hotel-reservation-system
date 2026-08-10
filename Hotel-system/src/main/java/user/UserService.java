@@ -22,4 +22,10 @@ public interface UserService {
     void changePassword(ChangePasswordRequest request);
 
     UserProfileResponse uploadAvatar(MultipartFile file);
+
+    /** ADMIN-only — see admin.AdminUserController. Granular add/remove rather than a
+     *  full-set replace, so a call can't accidentally wipe GUEST or any other role. */
+    UserProfileResponse grantRole(Long userId, Roles role);
+
+    UserProfileResponse revokeRole(Long userId, Roles role);
 }

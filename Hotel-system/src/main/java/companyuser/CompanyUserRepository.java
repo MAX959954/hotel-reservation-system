@@ -17,4 +17,10 @@ public interface CompanyUserRepository extends JpaRepository<CompanyUser, Long> 
 
     boolean existsByUserIdAndCompanyId(Long userId, Long companyId);
 
+    boolean existsByInvitedEmailAndCompanyId(String invitedEmail, Long companyId);
+
+    /** Invites sent to an email before that person had an account — resolved once they
+     *  register (see CompanyUserServiceImpl.linkPendingInvites). */
+    List<CompanyUser> findByInvitedEmailAndUserIsNull(String invitedEmail);
+
 }

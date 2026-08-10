@@ -1,6 +1,7 @@
 package companyuser;
 
 import booking.BookingRepository;
+import companies.CompaniesRepository;
 import hotels.HotelsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -22,6 +23,7 @@ public class CompanyAuthorization {
     private final PaymentRepository paymentRepository;
     private final HotelsRepository hotelsRepository;
     private final RoomRepository roomRepository;
+    private final CompaniesRepository companiesRepository;
 
     public boolean hasRole(Long companyId , String... roles) {
         Long userId = currentUserId();
@@ -31,7 +33,9 @@ public class CompanyAuthorization {
         }
 
         return companyUserRepository.findByCompanyId(companyId).stream()
-                .anyMatch(member -> member.getUser().getId().equals(userId) &&
+                // .getUser() can be null now — a row still pending on an unregistered
+                // invited_email has nothing to match against.
+                .anyMatch(member -> member.getUser() != null && member.getUser().getId().equals(userId) &&
                         member.getStatus().equals(CompanyUserStatus.ACTIVE) &&
                         Arrays.asList(roles).contains(member.getCompany_role().name()));
     }
@@ -44,8 +48,22 @@ public class CompanyAuthorization {
         }
 
         return companyUserRepository.findByCompanyId(companyId).stream()
-                .anyMatch(member -> member.getUser().getId().equals(userId) &&
+                .anyMatch(member -> member.getUser() != null && member.getUser().getId().equals(userId) &&
                       member.getStatus().equals(CompanyUserStatus.ACTIVE));
+    }
+
+    public boolean isCompanySubmitter(Long companyId) {
+        Long userId = currentUserId();
+        return userId != null && companiesRepository.findById(companyId)
+                .map(company -> userId.equals(company.getSubmittedByUserId()))
+                .orElse(false);
+    }
+
+    public boolean isCompanyUserSelf(Long companyUserId) {
+        Long userId = currentUserId();
+        return userId != null && companyUserRepository.findById(companyUserId)
+                .map(member -> member.getUser() != null && member.getUser().getId().equals(userId))
+                .orElse(false);
     }
 
     public boolean hasRoleForBooking(Long bookingId , String... roles) {

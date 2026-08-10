@@ -31,4 +31,6 @@ public class CompaniesRequest {
     @NotBlank
     private String webSite ;
     private String logoUrl;
+    private String bankAccountHolder;
+    private String bankIban;
 }

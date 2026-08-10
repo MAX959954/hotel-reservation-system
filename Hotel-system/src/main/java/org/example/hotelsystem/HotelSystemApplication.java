@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @ComponentScan(basePackages = {
         "org.example.hotelsystem",
         "config",
+        "admin",
         "user",
         "companyuser",
         "companies",

@@ -39,9 +39,17 @@ public class CompanyUser {
     @Column(name = "joined_at")
     private LocalDateTime joined_at;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    // Null until the invited email address belongs to a registered account — see
+    // CompanyUserServiceImpl.invite (creates it null for an unregistered email) and
+    // .linkPendingInvites (fills it in once that email signs up).
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    // The address an invite was sent to before the invitee had an account. Cleared once
+    // `user` is linked; NULL for invites that always had a known userId.
+    @Column(name = "invited_email")
+    private String invitedEmail;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "company_id", nullable = false)

@@ -47,6 +47,21 @@ public class Companies {
     @Column(name = "logo_url")
     private String logo_url;
 
+    // Who applied — set server-side from the authenticated caller at creation, never
+    // client-supplied. Drives the approve() side effect (grants HOTEL_MANAGER + creates
+    // the OWNER CompanyUser row) and the "which application is mine" checks.
+    @Column(name = "submitted_by_user_id")
+    private Long submittedByUserId;
+
+    @Column(name = "bank_account_holder")
+    private String bankAccountHolder;
+
+    @Column(name = "bank_iban")
+    private String bankIban;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     @Builder.Default

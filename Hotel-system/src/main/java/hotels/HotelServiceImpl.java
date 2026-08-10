@@ -105,6 +105,30 @@ public class HotelServiceImpl implements HotelService{
             @CacheEvict(cacheNames = "hotelById", allEntries = true),
             @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     })
+    public HotelResponse update(Long id, CreateHotelRequest request) {
+        Hotels hotel = findById(id);
+        hotel.setName(request.getName());
+        hotel.setCity(request.getCity());
+        hotel.setCountry(request.getCountry());
+        hotel.setAddress(request.getAddress());
+        hotel.setStar_rating(request.getRating());
+        hotel.setPhone(request.getPhone());
+        hotel.setEmail(request.getEmail());
+        hotel.setDescription(request.getDescription());
+        hotel.setImage_url(request.getImageUrl());
+        if (request.getPropertyType() != null) hotel.setPropertyType(request.getPropertyType());
+        hotel.setAmenities(request.getAmenities() != null ? request.getAmenities() : new HashSet<>());
+        // company and status are deliberately untouched here — moving a hotel between
+        // companies or flipping its status isn't what a details-edit form is for.
+        return toResponse(hotelsRepository.save(hotel), BASE_LOCALE);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "hotelById", allEntries = true),
+            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
+    })
     public void delete(Long id) {
         hotelsRepository.delete(findById(id));
     }

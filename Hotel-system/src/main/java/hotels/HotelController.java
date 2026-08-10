@@ -68,6 +68,12 @@ public class HotelController {
         return ResponseEntity.ok(hotelService.updateStatus(id, status));
     }
 
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForHotel(#id , 'OWNER' , 'MANAGER')")
+    public ResponseEntity<HotelResponse> update(@PathVariable Long id, @Valid @RequestBody CreateHotelRequest request) {
+        return ResponseEntity.ok(hotelService.update(id, request));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForHotel(#id , 'OWNER')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {

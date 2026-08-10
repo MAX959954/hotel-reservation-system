@@ -19,6 +19,22 @@ export type RoomType =
 
 export type RoomStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE' | 'OUT_OF_ORDER'
 
+export const ALL_ROOM_TYPES: RoomType[] = [
+  'SINGLE', 'DOUBLE', 'TWIN', 'TRIPLE', 'SUITE', 'JUNIOR_SUITE', 'DELUXE', 'PENTHOUSE',
+  'FAMILY', 'CONNECTING', 'DORMITORY', 'STUDIO', 'VILLA', 'BUNGALOW', 'ACCESSIBLE',
+]
+
+/** Matches RoomRequest on the backend. */
+export interface CreateRoomRequest {
+  number: string
+  type: RoomType
+  pricePerNight: number
+  capacity: number
+  floor: number
+  description?: string
+  hotelId: number
+}
+
 export interface RoomResponse {
   id: number
   number: string

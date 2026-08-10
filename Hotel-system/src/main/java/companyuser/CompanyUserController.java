@@ -22,7 +22,11 @@ public class CompanyUserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(companyUserService.invite(request));
     }
 
+    // Previously ungated — any authenticated user could accept anyone else's invite by
+    // guessing the numeric id. isCompanyUserSelf requires the row's linked user to be
+    // the caller (a still-pending row with no user linked matches no one, correctly).
     @PatchMapping("/{id}/accept")
+    @PreAuthorize("@companyAuth.isCompanyUserSelf(#id)")
     public ResponseEntity<CompanyUserResponse> acceptInvite(@PathVariable Long id) {
         return ResponseEntity.ok(companyUserService.acceptInvite(id));
     }
