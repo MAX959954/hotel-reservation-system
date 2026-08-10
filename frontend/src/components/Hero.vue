@@ -59,14 +59,14 @@ onMounted(() => {
             ref="heading"
             class="font-display text-5xl sm:text-6xl md:text-7xl lg:text-[88px] font-normal text-bone mb-3 tracking-[-0.02em] leading-[0.98]"
           >
-            Rooms <em class="text-champagne not-italic">worth the journey</em>
+            {{ $t('hero.headingLead') }} <em class="text-champagne not-italic">{{ $t('hero.headingEmphasis') }}</em>
           </h1>
 
           <p
             ref="subheading"
             class="text-sm sm:text-base md:text-lg text-bone-dim leading-relaxed max-w-xl font-light"
           >
-            Independently run hotels and apartments across 12 cities. One register, no noise.
+            {{ $t('hero.subheading') }}
           </p>
         </div>
 

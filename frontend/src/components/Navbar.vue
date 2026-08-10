@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAuthModalStore } from '@/stores/authModal'
 import { ACTIVE_CITIES } from '@/lib/cities'
 import AccountMenu from './AccountMenu.vue'
+import LanguageSwitcher from './LanguageSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,9 +14,9 @@ const auth = useAuthStore()
 const authModal = useAuthModalStore()
 
 const navLinks = [
-  { label: 'Stays', to: { name: 'hotels' } },
-  { label: 'Apartments', to: { name: 'apartments' } },
-  { label: 'Journal', to: { name: 'journal' } },
+  { label: 'nav.stays', to: { name: 'hotels' } },
+  { label: 'nav.apartments', to: { name: 'apartments' } },
+  { label: 'nav.journal', to: { name: 'journal' } },
 ]
 
 const signedIn = computed(() => auth.isAuthenticated)
@@ -72,7 +73,7 @@ onUnmounted(() => {
           class="hover:text-bone transition-colors"
           :class="{ 'text-bone': route.name === navLinks[0].to.name }"
         >
-          {{ navLinks[0].label }}
+          {{ $t(navLinks[0].label) }}
         </RouterLink>
       </li>
 
@@ -85,7 +86,7 @@ onUnmounted(() => {
           :aria-expanded="citiesOpen"
           @click="toggleCities"
         >
-          Cities
+          {{ $t('nav.cities') }}
           <ChevronDown
             class="w-3.5 h-3.5 transition-transform"
             :class="{ 'rotate-180': citiesOpen }"
@@ -126,12 +127,13 @@ onUnmounted(() => {
           class="hover:text-bone transition-colors"
           :class="{ 'text-bone': route.name === item.to.name }"
         >
-          {{ item.label }}
+          {{ $t(item.label) }}
         </RouterLink>
       </li>
     </ul>
 
     <div class="flex-1 flex justify-end items-center gap-3">
+      <LanguageSwitcher class="hidden sm:block" />
       <AccountMenu v-if="signedIn" />
 
       <template v-else>
@@ -140,7 +142,7 @@ onUnmounted(() => {
           class="hidden sm:flex items-center gap-2 rounded-full border border-hairline px-4 py-1.5 md:py-2 text-xs md:text-sm font-light text-bone-dim hover:text-bone hover:border-champagne-dim transition-colors"
           @click="openAuth('register')"
         >
-          Create account
+          {{ $t('nav.createAccount') }}
         </button>
 
         <button
@@ -151,7 +153,7 @@ onUnmounted(() => {
           <span class="bg-ink/15 p-1 md:p-1.5 rounded-full flex items-center justify-center">
             <ArrowUpRight class="w-4 h-4 md:w-5 md:h-5" aria-hidden="true" />
           </span>
-          <span class="text-xs md:text-sm font-medium">Sign in</span>
+          <span class="text-xs md:text-sm font-medium">{{ $t('nav.signIn') }}</span>
         </button>
       </template>
     </div>

@@ -18,7 +18,7 @@ onMounted(() => {
   >
     <Sparkles class="w-3.5 h-3.5 text-champagne" aria-hidden="true" />
     <span class="text-[13px] font-light tracking-wide text-bone-dim">
-      12 cities · 40 independent stays
+      {{ $t('hero.badge') }}
     </span>
   </div>
 </template>

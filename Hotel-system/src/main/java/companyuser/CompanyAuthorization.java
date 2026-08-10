@@ -85,6 +85,13 @@ public class CompanyAuthorization {
                 .orElse(false );
     }
 
+    public boolean isPaymentOwner(Long paymentId) {
+        Long userId = currentUserId();
+        return userId != null && paymentRepository.findById(paymentId)
+                .map(payment -> payment.getBooking().getUser().getId().equals(userId))
+                .orElse(false);
+    }
+
     public boolean isSelf(Long userId) {
         Long currentUserId = currentUserId();
         return currentUserId != null && currentUserId.equals(userId);

@@ -67,6 +67,15 @@ export const useAuthStore = defineStore('auth', {
       this.persist()
     },
 
+    // The JWT's own `roles` claim is issued once at login and never used for
+    // authorization anyway — JwtAuthFilter reloads the user from the database on every
+    // request, so the server is always current. This is purely to un-stale what the UI
+    // displays/gates on after a role changes mid-session (see RolesModal, AccountMenu).
+    setRoles(roles: Role[]) {
+      this.roles = roles
+      this.persist()
+    },
+
     logout() {
       this.$patch(emptyState())
       localStorage.removeItem(STORAGE_KEY)

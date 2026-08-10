@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { CheckCircle2, Loader2, X } from 'lucide-vue-next'
+import DatePicker from './DatePicker.vue'
+import NumberStepper from './NumberStepper.vue'
 import { bookingsApi } from '@/api/bookings'
 import { apiErrorMessage } from '@/api/http'
 import { useCurrencyStore } from '@/stores/currency'
@@ -165,38 +167,22 @@ async function submit() {
             <div class="grid grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
                 <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check in</span>
-                <input
-                  v-model="checkIn"
-                  type="date"
-                  :min="addDaysIso(todayIso(), 1)"
-                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
-                />
+                <DatePicker v-model="checkIn" :min="addDaysIso(todayIso(), 1)" aria-label="Check in" />
               </label>
               <label class="flex flex-col gap-1">
                 <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check out</span>
-                <input
-                  v-model="checkOut"
-                  type="date"
-                  :min="addDaysIso(checkIn, 1)"
-                  class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
-                />
+                <DatePicker v-model="checkOut" :min="addDaysIso(checkIn, 1)" aria-label="Check out" />
               </label>
             </div>
             <p v-if="dateError" class="text-xs text-rose-300 -mt-2">{{ dateError }}</p>
 
-            <label class="flex flex-col gap-1">
+            <div class="flex items-center justify-between gap-3">
               <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">
                 Guests (sleeps {{ room.capacity }})
               </span>
-              <input
-                v-model.number="guestCount"
-                type="number"
-                min="1"
-                :max="room.capacity"
-                class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
-              />
-              <span v-if="capacityError" class="text-xs text-rose-300">{{ capacityError }}</span>
-            </label>
+              <NumberStepper v-model="guestCount" :min="1" :max="room.capacity" aria-label="Guests" />
+            </div>
+            <span v-if="capacityError" class="text-xs text-rose-300 -mt-2">{{ capacityError }}</span>
 
             <label class="flex flex-col gap-1">
               <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">

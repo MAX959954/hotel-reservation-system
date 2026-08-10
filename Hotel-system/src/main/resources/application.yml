@@ -12,6 +12,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Local dev's Redis has no password; managed Redis on a host like Railway always
+      # does. Blank-safe the same way the datasource/SMTP settings above are.
+      password: ${REDIS_PASSWORD:}
 
   jpa:
     hibernate:
@@ -44,7 +47,10 @@ spring:
             enable: true
 
 server:
-  port: 8080
+  # Railway (and most PaaS hosts) assign the listen port at runtime via $PORT rather than
+  # letting you pick one — 8080 stays the default for local/Docker Compose, where nothing
+  # sets that variable.
+  port: ${PORT:8080}
 
 jwt:
   secret: ${JWT_SECRET}
@@ -65,3 +71,9 @@ app:
 google:
   oauth:
     client-id: ${GOOGLE_CLIENT_ID:}
+
+stripe:
+  # Blank-safe like the SMTP settings above: an empty key only breaks the specific request
+  # that needs Stripe (create/confirm payment), not application startup — so contextLoads()
+  # and any test that boots the full context still work without a real key configured.
+  secret-key: ${STRIPE_SECRET_KEY:}

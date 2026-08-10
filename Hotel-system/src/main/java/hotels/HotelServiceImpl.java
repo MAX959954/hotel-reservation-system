@@ -17,8 +17,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class HotelServiceImpl implements HotelService{
 
+    private static final String BASE_LOCALE = "en";
+
     private final HotelsRepository hotelsRepository;
     private final CompaniesRepository companiesRepository;
+    private final HotelTranslationRepository hotelTranslationRepository;
 
     @Override
     @Transactional
@@ -41,61 +44,65 @@ public class HotelServiceImpl implements HotelService{
                 .amenities(request.getAmenities() != null ? request.getAmenities() : new HashSet<>())
                 .build();
 
-        return toResponse(hotelsRepository.save(hotel));
+        return toResponse(hotelsRepository.save(hotel), BASE_LOCALE);
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelById", key = "#id")
-    public HotelResponse getById(Long id) {
-        return toResponse(findById(id));
+    @Cacheable(cacheNames = "hotelById", key = "#id + '-' + #locale")
+    public HotelResponse getById(Long id, String locale) {
+        return toResponse(findById(id), locale);
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelsByCity", key = "#city")
-    public List<HotelResponse> getByCity(String city) {
-        return hotelsRepository.findByCity(city).stream().map(this :: toResponse).toList();
+    @Cacheable(cacheNames = "hotelsByCity", key = "#city + '-' + #locale")
+    public List<HotelResponse> getByCity(String city, String locale) {
+        return hotelsRepository.findByCity(city).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelsByCountry", key = "#country")
-    public List<HotelResponse> getByCountry(String country) {
-        return hotelsRepository.findByCountry(country).stream().map(this :: toResponse).toList();
+    @Cacheable(cacheNames = "hotelsByCountry", key = "#country + '-' + #locale")
+    public List<HotelResponse> getByCountry(String country, String locale) {
+        return hotelsRepository.findByCountry(country).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelsByCompany", key = "#companyId")
-    public List<HotelResponse> getByCompany(Long companyId) {
-        return hotelsRepository.findByCompanyId(companyId).stream().map(this :: toResponse).toList();
+    @Cacheable(cacheNames = "hotelsByCompany", key = "#companyId + '-' + #locale")
+    public List<HotelResponse> getByCompany(Long companyId, String locale) {
+        return hotelsRepository.findByCompanyId(companyId).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelsByRating", key = "#rating")
-    public List<HotelResponse> getByRating(Integer rating) {
-        return hotelsRepository.findByStar_rating(rating).stream().map(this :: toResponse).toList();
+    @Cacheable(cacheNames = "hotelsByRating", key = "#rating + '-' + #locale")
+    public List<HotelResponse> getByRating(Integer rating, String locale) {
+        return hotelsRepository.findByStar_rating(rating).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
-    @Cacheable(cacheNames = "hotelsByType", key = "#propertyType")
-    public List<HotelResponse> getByPropertyType(PropertyType propertyType) {
-        return hotelsRepository.findByPropertyType(propertyType).stream().map(this :: toResponse).toList();
+    @Cacheable(cacheNames = "hotelsByType", key = "#propertyType + '-' + #locale")
+    public List<HotelResponse> getByPropertyType(PropertyType propertyType, String locale) {
+        return hotelsRepository.findByPropertyType(propertyType).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
     @Transactional
+    // Both hotelById and the list caches now key on "id-locale" / "param-locale" — a
+    // targeted evict by #id alone can no longer match, since it doesn't know which
+    // locale(s) are cached. allEntries clears every locale's copy, which is the
+    // correct (if slightly broader) fix.
     @Caching(evict = {
-            @CacheEvict(cacheNames = "hotelById", key = "#id"),
+            @CacheEvict(cacheNames = "hotelById", allEntries = true),
             @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     })
     public HotelResponse updateStatus(Long id , Hotel_Status status) {
         Hotels hotel =  findById(id);
         hotel.setStatus(status);
-        return toResponse(hotelsRepository.save(hotel));
+        return toResponse(hotelsRepository.save(hotel), BASE_LOCALE);
     }
 
     @Override
     @Transactional
     @Caching(evict = {
-            @CacheEvict(cacheNames = "hotelById", key = "#id"),
+            @CacheEvict(cacheNames = "hotelById", allEntries = true),
             @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     })
     public void delete(Long id) {
@@ -106,7 +113,18 @@ public class HotelServiceImpl implements HotelService{
         return hotelsRepository.findById(id).orElseThrow(() -> new IllegalStateException("Hotel not found " + id));
     }
 
-    private HotelResponse toResponse(Hotels  hotel) {
+    /** Falls back to the base (English) description whenever the requested locale is
+     *  English itself, blank, or simply has no translation row yet for this hotel. */
+    private String resolveDescription(Hotels hotel, String locale) {
+        if (locale == null || locale.isBlank() || locale.equalsIgnoreCase(BASE_LOCALE)) {
+            return hotel.getDescription();
+        }
+        return hotelTranslationRepository.findByHotelIdAndLocale(hotel.getId(), locale.toLowerCase())
+                .map(HotelTranslation::getDescription)
+                .orElse(hotel.getDescription());
+    }
+
+    private HotelResponse toResponse(Hotels hotel, String locale) {
         return HotelResponse.builder()
                 .id(hotel.getId())
                 .name(hotel.getName())
@@ -116,7 +134,7 @@ public class HotelServiceImpl implements HotelService{
                 .startRating(hotel.getStar_rating())
                 .phone(hotel.getPhone())
                 .email(hotel.getEmail())
-                .description(hotel.getDescription())
+                .description(resolveDescription(hotel, locale))
                 .imageUrl(hotel.getImage_url())
                 .status(hotel.getStatus())
                 .propertyType(hotel.getPropertyType())

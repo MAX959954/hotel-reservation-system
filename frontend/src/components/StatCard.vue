@@ -19,7 +19,7 @@ onMounted(() => {
     <div class="flex flex-col gap-1">
       <span class="font-display text-3xl md:text-4xl text-bone tracking-tight">4.8</span>
       <span class="text-[10px] md:text-[11px] font-light text-bone-dim uppercase tracking-[0.14em]">
-        Average guest rating
+        {{ $t('stats.rating') }}
       </span>
     </div>
 
@@ -34,7 +34,7 @@ onMounted(() => {
       <span class="bg-ink/10 p-1 rounded-full flex items-center justify-center">
         <ArrowUpRight class="w-3.5 h-3.5 text-ink" aria-hidden="true" />
       </span>
-      <span class="text-[13px] font-medium text-ink">Read reviews</span>
+      <span class="text-[13px] font-medium text-ink">{{ $t('stats.readReviews') }}</span>
     </RouterLink>
   </div>
 </template>

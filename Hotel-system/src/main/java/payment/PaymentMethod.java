@@ -5,5 +5,6 @@ public enum PaymentMethod {
     DEBIT_CARD,
     BANK_TRANSFER,
     CASH,
-    CRYPTO
+    CRYPTO,
+    GOOGLE_PAY
 }

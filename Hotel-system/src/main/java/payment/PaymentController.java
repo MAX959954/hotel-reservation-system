@@ -26,6 +26,18 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.pay(request));
     }
 
+    @PostMapping("/intent")
+    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    public ResponseEntity<PaymentIntentResponse> createIntent(@Valid @RequestBody PaymentRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createIntent(request));
+    }
+
+    @PostMapping("/{id}/confirm")
+    @PreAuthorize("@companyAuth.isPaymentOwner(#id) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    public ResponseEntity<PaymentResponse> confirm(@PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.confirm(id));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> getById(@PathVariable Long id) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Camera, Check, CircleUser, Coins, KeyRound, Loader2, ShieldCheck, X } from 'lucide-vue-next'
 import { accountApi } from '@/api/account'
 import { apiErrorMessage, resolveUploadUrl } from '@/api/http'
@@ -8,12 +9,15 @@ import { useSettingsModalStore } from '@/stores/settingsModal'
 import type { SettingsTab } from '@/stores/settingsModal'
 import { CURRENCIES, useCurrencyStore } from '@/stores/currency'
 import type { CurrencyCode } from '@/stores/currency'
+import { SUPPORTED_LOCALES, setLocale } from '@/i18n'
+import type { LocaleCode } from '@/i18n'
 import type { UserProfileResponse } from '@/types/account'
 
 const auth = useAuthStore()
 
 const modal = useSettingsModalStore()
 const currency = useCurrencyStore()
+const { locale } = useI18n()
 
 const SECTIONS: { id: SettingsTab; label: string; icon: typeof CircleUser }[] = [
   { id: 'personal', label: 'Personal info', icon: CircleUser },
@@ -135,6 +139,10 @@ async function savePassword() {
 
 function pickCurrency(code: CurrencyCode) {
   currency.setCode(code)
+}
+
+function pickLocale(code: LocaleCode) {
+  setLocale(code)
 }
 
 function memberSince(iso: string | undefined): string {
@@ -396,11 +404,36 @@ function formatDate(iso: string | null | undefined): string {
             <!-- Languages & currency -->
             <div v-else class="flex flex-col gap-4 max-w-sm">
               <h3 class="font-display text-2xl text-bone mb-1">Languages & currency</h3>
-              <p class="text-xs font-light text-bone-dim leading-relaxed">
-                Folio is English-only for now. Every price is charged in EUR — choosing another
-                currency adds an estimated conversion next to the price, using a fixed rate, not
-                a live market rate.
-              </p>
+
+              <div class="flex flex-col gap-1">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Language</span>
+                <p class="text-xs font-light text-bone-dim leading-relaxed mb-1">
+                  Core pages are translated so far — the rest of Folio still reads in English.
+                </p>
+                <ul class="flex flex-col gap-1" role="radiogroup" aria-label="Display language">
+                  <li v-for="l in SUPPORTED_LOCALES" :key="l.code">
+                    <button
+                      type="button"
+                      role="radio"
+                      :aria-checked="locale === l.code"
+                      class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-light transition-colors"
+                      :class="locale === l.code ? 'bg-bone/8 text-bone' : 'text-bone-dim hover:bg-bone/5 hover:text-bone'"
+                      @click="pickLocale(l.code)"
+                    >
+                      {{ l.nativeName }}
+                      <Check v-if="locale === l.code" class="w-4 h-4 text-champagne" aria-hidden="true" />
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="flex flex-col gap-1 mt-2">
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Currency</span>
+                <p class="text-xs font-light text-bone-dim leading-relaxed mb-1">
+                  Every price is charged in EUR — choosing another currency adds an estimated
+                  conversion next to the price, using a fixed rate, not a live market rate.
+                </p>
+              </div>
 
               <ul class="flex flex-col gap-1" role="radiogroup" aria-label="Display currency">
                 <li v-for="c in CURRENCIES" :key="c.code">

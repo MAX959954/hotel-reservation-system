@@ -15,7 +15,9 @@ const router = createRouter({
       path: '/hotels',
       name: 'hotels',
       component: () => import('@/views/HotelsView.vue'),
-      meta: { catalogLabel: 'Stays' },
+      // A translation key, not the literal English word — meta is set outside any i18n
+      // context, so HotelsView resolves this itself via t(route.meta.catalogLabel).
+      meta: { catalogLabel: 'hotels.stays' },
     },
     { path: '/hotels/:id', name: 'hotel', component: () => import('@/views/HotelDetailView.vue') },
     {
@@ -24,7 +26,7 @@ const router = createRouter({
       path: '/apartments',
       name: 'apartments',
       component: () => import('@/views/HotelsView.vue'),
-      meta: { catalogLabel: 'Apartments', defaultType: 'APARTMENT' },
+      meta: { catalogLabel: 'hotels.apartments', defaultType: 'APARTMENT' },
     },
     { path: '/journal', name: 'journal', component: () => import('@/views/JournalView.vue') },
     {

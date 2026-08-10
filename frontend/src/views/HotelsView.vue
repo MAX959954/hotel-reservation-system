@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { RotateCw, Star } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
@@ -13,6 +14,7 @@ import type { HotelResponse, PropertyType } from '@/types/hotel'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const hotels = ref<HotelResponse[]>([])
 const loading = ref(false)
@@ -24,8 +26,9 @@ const checkOut = computed(() => String(route.query.checkOut ?? ''))
 const guests = computed(() => String(route.query.guests ?? ''))
 
 // Shared by /hotels ("Stays") and /apartments: the heading and default filter differ,
-// the component and loading logic don't. See router/index.ts for the route meta.
-const catalogLabel = computed(() => (route.meta.catalogLabel as string) ?? 'Stays')
+// the component and loading logic don't. See router/index.ts for the route meta —
+// catalogLabel there is a translation key ('hotels.stays'/'hotels.apartments'), not text.
+const catalogLabel = computed(() => t((route.meta.catalogLabel as string) ?? 'hotels.stays'))
 const propertyType = computed(() => (route.query.type as PropertyType) || (route.meta.defaultType as PropertyType) || null)
 
 let ctx: gsap.Context | null = null
@@ -45,7 +48,7 @@ async function load() {
     }
     revealCards()
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not load stays.')
+    error.value = apiErrorMessage(e, t('hotels.loadError'))
     hotels.value = []
   } finally {
     loading.value = false
@@ -117,14 +120,14 @@ onUnmounted(() => {
           v-if="guests"
           class="px-3 py-1.5 rounded-full text-xs font-light text-bone-dim bg-bone/5 border border-hairline"
         >
-          {{ guests }} {{ guests === '1' ? 'guest' : 'guests' }}
+          {{ guests }} {{ guests === '1' ? $t('hotels.guest') : $t('hotels.guests') }}
         </span>
       </div>
     </div>
 
     <main class="flex-1 px-6 md:px-10 py-10 max-w-[1600px] mx-auto w-full">
       <h1 class="font-display text-4xl md:text-5xl text-bone mb-8">
-        <template v-if="city">{{ catalogLabel }} in {{ city }}</template>
+        <template v-if="city">{{ $t('hotels.inCity', { catalog: catalogLabel, city }) }}</template>
         <template v-else>{{ catalogLabel }}</template>
       </h1>
 
@@ -154,7 +157,7 @@ onUnmounted(() => {
           @click="load"
         >
           <RotateCw class="w-4 h-4" aria-hidden="true" />
-          Retry
+          {{ $t('hotels.retry') }}
         </button>
       </div>
 
@@ -163,8 +166,8 @@ onUnmounted(() => {
         class="rounded-[1.25rem] border border-hairline bg-ink-2 p-8 flex flex-col items-start gap-4"
       >
         <p class="text-sm font-light text-bone-dim">
-          <template v-if="city">No {{ catalogLabel.toLowerCase() }} in {{ city }} yet.</template>
-          <template v-else>Nothing on the register right now.</template>
+          <template v-if="city">{{ $t('hotels.noResultsInCity', { catalog: catalogLabel.toLowerCase(), city }) }}</template>
+          <template v-else>{{ $t('hotels.nothingOnRegister') }}</template>
         </p>
         <div class="flex flex-wrap gap-2">
           <button
@@ -211,7 +214,7 @@ onUnmounted(() => {
               v-if="!propertyType"
               class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-ink/70 backdrop-blur-md border border-hairline text-[11px] font-medium text-bone-dim"
             >
-              {{ hotel.propertyType === 'APARTMENT' ? 'Apartment' : 'Hotel' }}
+              {{ hotel.propertyType === 'APARTMENT' ? $t('hotels.propertyApartment') : $t('hotels.propertyHotel') }}
             </span>
           </div>
           <div class="p-5">

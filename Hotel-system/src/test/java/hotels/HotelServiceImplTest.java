@@ -112,7 +112,7 @@ public class HotelServiceImplTest {
     void getById_returnsHotel_whenFound(){
         given(hotelsRepository.findById(1L)).willReturn(Optional.of(hotel));
 
-        HotelResponse response = hotelService.getById(1L);
+        HotelResponse response = hotelService.getById(1L, "en");
 
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getName()).isEqualTo("Grand Hotel");
@@ -122,7 +122,7 @@ public class HotelServiceImplTest {
     void getById_throws_whenNotFound(){
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> hotelService.getById(1L))
+        assertThatThrownBy(() -> hotelService.getById(1L, "en"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Hotel not found");
     }
@@ -131,7 +131,7 @@ public class HotelServiceImplTest {
     void getByCity_returnsHotels(){
         given(hotelsRepository.findByCity("Paris")).willReturn(List.of(hotel));
 
-        List<HotelResponse> responses = hotelService.getByCity("Paris");
+        List<HotelResponse> responses = hotelService.getByCity("Paris", "en");
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getCity()).isEqualTo("Paris");
@@ -141,7 +141,7 @@ public class HotelServiceImplTest {
     void getByCountry_returnsHotels(){
         given(hotelsRepository.findByCountry("France")).willReturn(List.of(hotel));
 
-        List<HotelResponse> responses = hotelService.getByCountry("France");
+        List<HotelResponse> responses = hotelService.getByCountry("France", "en");
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getCountry()).isEqualTo("France");
@@ -151,7 +151,7 @@ public class HotelServiceImplTest {
     void getByCompany_returnsHotels() {
         given(hotelsRepository.findByCompanyId(1L)).willReturn(List.of(hotel));
 
-        List<HotelResponse> responses = hotelService.getByCompany(1L);
+        List<HotelResponse> responses = hotelService.getByCompany(1L, "en");
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getCompanyId()).isEqualTo(1L);
     }
@@ -160,7 +160,7 @@ public class HotelServiceImplTest {
     void getByRating_returnsHotels() {
         given(hotelsRepository.findByStar_rating(4)).willReturn(List.of(hotel));
 
-        List<HotelResponse> responses = hotelService.getByRating(4);
+        List<HotelResponse> responses = hotelService.getByRating(4, "en");
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getStartRating()).isEqualTo(4);
     }

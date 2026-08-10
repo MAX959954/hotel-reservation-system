@@ -23,33 +23,43 @@ public class HotelController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<HotelResponse> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(hotelService.getById(id));
+    public ResponseEntity<HotelResponse> getById(@PathVariable Long id, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getById(id, normalize(locale)));
     }
 
     @GetMapping("/city/{city}")
-    public ResponseEntity<List<HotelResponse>> getByCity(@PathVariable String city) {
-        return ResponseEntity.ok(hotelService.getByCity(city));
+    public ResponseEntity<List<HotelResponse>> getByCity(@PathVariable String city, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getByCity(city, normalize(locale)));
     }
 
     @GetMapping("/country/{country}")
-    public ResponseEntity<List<HotelResponse>> getByCountry(@PathVariable String country) {
-        return ResponseEntity.ok(hotelService.getByCountry(country));
+    public ResponseEntity<List<HotelResponse>> getByCountry(@PathVariable String country, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getByCountry(country, normalize(locale)));
     }
 
     @GetMapping("/company/{companyId}")
-    public ResponseEntity<List<HotelResponse>> getByCompanyId(@PathVariable Long companyId) {
-        return ResponseEntity.ok(hotelService.getByCompany(companyId));
+    public ResponseEntity<List<HotelResponse>> getByCompanyId(@PathVariable Long companyId, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getByCompany(companyId, normalize(locale)));
     }
 
     @GetMapping("/rating/{rating}")
-    public ResponseEntity<List<HotelResponse>> getByRating(@PathVariable Integer rating) {
-        return ResponseEntity.ok(hotelService.getByRating(rating));
+    public ResponseEntity<List<HotelResponse>> getByRating(@PathVariable Integer rating, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getByRating(rating, normalize(locale)));
     }
 
     @GetMapping("/type/{propertyType}")
-    public ResponseEntity<List<HotelResponse>> getByPropertyType(@PathVariable PropertyType propertyType) {
-        return ResponseEntity.ok(hotelService.getByPropertyType(propertyType));
+    public ResponseEntity<List<HotelResponse>> getByPropertyType(@PathVariable PropertyType propertyType, @RequestHeader(value = "Accept-Language", required = false) String locale) {
+        return ResponseEntity.ok(hotelService.getByPropertyType(propertyType, normalize(locale)));
+    }
+
+    // The frontend sends a plain 2-letter code ("ru", "ja", ...), but Accept-Language is
+    // free-form ("ru-RU,ru;q=0.9,en;q=0.8") when it comes from anything else (a browser,
+    // curl, Postman) — take just the first language tag's primary subtag so both work.
+    private String normalize(String acceptLanguageHeader) {
+        if (acceptLanguageHeader == null || acceptLanguageHeader.isBlank()) return "en";
+        String firstTag = acceptLanguageHeader.split(",")[0].trim();
+        String primarySubtag = firstTag.split("-")[0].split(";")[0].trim();
+        return primarySubtag.isBlank() ? "en" : primarySubtag.toLowerCase();
     }
 
     @PatchMapping("/{id}/status")

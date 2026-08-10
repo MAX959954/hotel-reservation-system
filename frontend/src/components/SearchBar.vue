@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CalendarDays, MapPin, Search, Users } from 'lucide-vue-next'
+import { MapPin, Search, Users } from 'lucide-vue-next'
 import { addDaysIso, todayIso } from '@/lib/dates'
 import { QUICK_CITIES } from '@/lib/cities'
+import NumberStepper from './NumberStepper.vue'
+import DatePicker from './DatePicker.vue'
 
 const router = useRouter()
 
@@ -35,11 +37,11 @@ function pickCity(name: string) {
     >
       <label class="flex items-center gap-2 px-3 py-2 flex-1 min-w-0">
         <MapPin class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-        <span class="sr-only">City</span>
+        <span class="sr-only">{{ $t('search.cityLabel') }}</span>
         <input
           v-model="city"
           type="text"
-          placeholder="Where to?"
+          :placeholder="$t('search.wherePlaceholder')"
           class="bg-transparent outline-none text-sm text-bone placeholder:text-bone-dim/70 w-full font-light"
         />
       </label>
@@ -47,47 +49,34 @@ function pickCity(name: string) {
       <div class="hidden md:block w-px h-8 bg-hairline" aria-hidden="true" />
 
       <div class="flex items-center gap-2 px-3 py-2 flex-1 min-w-0">
-        <CalendarDays class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-        <label class="flex-1 min-w-0">
-          <span class="sr-only">Check in</span>
-          <input
-            v-model="checkIn"
-            type="date"
-            :min="todayIso()"
-            class="bg-transparent outline-none text-sm text-bone w-full font-light"
-          />
-        </label>
+        <DatePicker
+          v-model="checkIn"
+          :min="todayIso()"
+          :aria-label="$t('search.checkInLabel')"
+          class="flex-1 min-w-0"
+        />
         <span class="text-bone-dim/50 text-xs" aria-hidden="true">→</span>
-        <label class="flex-1 min-w-0">
-          <span class="sr-only">Check out</span>
-          <input
-            v-model="checkOut"
-            type="date"
-            :min="checkIn"
-            class="bg-transparent outline-none text-sm text-bone w-full font-light"
-          />
-        </label>
+        <DatePicker
+          v-model="checkOut"
+          :min="checkIn"
+          :aria-label="$t('search.checkOutLabel')"
+          class="flex-1 min-w-0"
+        />
       </div>
 
       <div class="hidden md:block w-px h-8 bg-hairline" aria-hidden="true" />
 
-      <label class="flex items-center gap-2 px-3 py-2 w-full md:w-28">
+      <div class="flex items-center gap-2 px-3 py-2 w-full md:w-auto">
         <Users class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-        <span class="sr-only">Guests</span>
-        <input
-          v-model.number="guests"
-          type="number"
-          min="1"
-          class="bg-transparent outline-none text-sm text-bone w-full font-light"
-        />
-      </label>
+        <NumberStepper v-model="guests" :min="1" :aria-label="$t('search.guestsLabel')" />
+      </div>
 
       <button
         type="submit"
         class="shrink-0 flex items-center justify-center gap-2 bg-champagne text-ink rounded-full px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors"
       >
         <Search class="w-4 h-4" aria-hidden="true" />
-        Search
+        {{ $t('search.searchButton') }}
       </button>
     </form>
 

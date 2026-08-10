@@ -1,6 +1,7 @@
 package user;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
@@ -14,6 +15,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OtpService {
@@ -92,10 +94,20 @@ public class OtpService {
         eventPublisher.publishEvent(new OtpCodeGeneratedEvent(normalized, code));
     }
 
+    // Deliberately caught rather than left to bubble to the default
+    // SimpleAsyncUncaughtExceptionHandler: the OTP row already exists (this listener only
+    // fires after that transaction committed), so a broken SMTP config must not look like
+    // an unhandled server error — it's a delivery problem, not an application one. One
+    // clear log line is what an operator actually needs to notice and fix a bad
+    // SMTP_USERNAME/SMTP_PASSWORD; the caller already got its 202 and has no use for this.
     @Async("mailTaskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void sendOtpEmail(OtpCodeGeneratedEvent event) {
-        mailService.sendOtpCode(event.identifier(), event.code());
+        try {
+            mailService.sendOtpCode(event.identifier(), event.code());
+        } catch (Exception e) {
+            log.warn("Could not deliver OTP email to {}: {}", event.identifier(), e.getMessage());
+        }
     }
 
     /**

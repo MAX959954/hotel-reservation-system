@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiError } from '@/types/auth'
 import { useAuthStore } from '@/stores/auth'
+import { i18n } from '@/i18n'
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
@@ -20,6 +21,10 @@ http.interceptors.request.use((config) => {
   if (auth.token) {
     config.headers.Authorization = `${auth.tokenType} ${auth.token}`
   }
+  // Drives which hotel_translations row the backend serves for hotel/apartment
+  // descriptions (see HotelController) — every request carries it, not just the hotel
+  // endpoints, since it costs nothing extra and keeps this in one place.
+  config.headers['Accept-Language'] = i18n.global.locale.value
   return config
 })
 
