@@ -1,24 +1,37 @@
 package user;
 
-import jakarta.mail.internet.MimeMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
-import java.time.format.DateTimeFormatter;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
+/**
+ * Sends through Resend's HTTP API (port 443) rather than raw SMTP. Railway — like most
+ * PaaS hosts on their free/trial tiers — blocks outbound SMTP (port 587/465) to stop
+ * their infrastructure being used for spam, so JavaMailSender's SMTP connection to Gmail
+ * just times out there even though the same credentials work fine locally. An HTTPS API
+ * call goes out over the same port every other outbound request already uses.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MailService {
 
-    private final JavaMailSender mailSender;
+    private static final URI RESEND_ENDPOINT = URI.create("https://api.resend.com/emails");
+    private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     // MAIL_FROM is often left as an empty string rather than unset (e.g. a blank line in
     // .env), and Spring's ${a:b} default only kicks in when a property is absent, not when
@@ -26,19 +39,13 @@ public class MailService {
     @Value("${app.mail.from:}")
     private String configuredFrom;
 
-    @Value("${spring.mail.username:}")
-    private String smtpUsername;
+    @Value("${resend.api-key:}")
+    private String resendApiKey;
 
     public void sendOtpCode(String toEmail, String code) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(resolveFromAddress());
-        message.setTo(toEmail);
-        message.setSubject("Your Folio verification code");
-        message.setText(
+        send(toEmail, "Your Folio verification code", null,
                 "Your Folio verification code is " + code + ".\n\n" +
-                "It expires in 10 minutes. If you didn't request this, you can ignore this email."
-        );
-        mailSender.send(message);
+                "It expires in 10 minutes. If you didn't request this, you can ignore this email.");
     }
 
     private static final DateTimeFormatter STAY_DATE_FORMAT =
@@ -46,20 +53,48 @@ public class MailService {
 
     public void sendPaymentConfirmation(String toEmail, String guestName, String hotelName, String roomNumber,
                                          LocalDateTime checkIn, LocalDateTime checkOut, double amount, String currency) {
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            helper.setFrom(resolveFromAddress());
-            helper.setTo(toEmail);
-            helper.setSubject("Payment confirmed — " + hotelName);
-            helper.setText(buildPaymentConfirmationHtml(guestName, hotelName, roomNumber, checkIn, checkOut, amount, currency), true);
-            mailSender.send(mimeMessage);
-        } catch (jakarta.mail.MessagingException e) {
-            // Wrapped rather than declared `throws` — the caller (PaymentServiceImpl's async
-            // listener) already catches broadly around this call and logs a warning, matching
-            // how a SimpleMailMessage send failure would have surfaced before this HTML rewrite.
-            throw new IllegalStateException("Could not build payment confirmation email", e);
-        }
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut))
+                + detailRow("Amount paid", String.format(Locale.ENGLISH, "%.2f %s", amount, currency));
+
+        String html = emailShell(
+                "Payment confirmed",
+                "Hi %s — congratulations, your payment went through and your stay at <strong>%s</strong> is booked."
+                        .formatted(guestName, hotelName),
+                rows,
+                "You can view or manage this booking any time from \"My bookings\" on Folio."
+        );
+        send(toEmail, "Payment confirmed — " + hotelName, html, null);
+    }
+
+    public void sendCompanyInvite(String toEmail, String companyName, String role) {
+        String rows = detailRow("Company", companyName) + detailRow("Role", humaniseRole(role));
+        String intro = "You've been invited to join <strong>%s</strong> on Folio.".formatted(companyName);
+        String footer = "Sign in (or create an account with this email address) and open \"Manage bookings\" to accept.";
+        send(toEmail, "You've been invited to " + companyName + " on Folio", emailShell("You're invited", intro, rows, footer), null);
+    }
+
+    public void sendCompanyApplicationApproved(String toEmail, String companyName) {
+        String rows = detailRow("Company", companyName) + detailRow("Status", "Active");
+        String intro = "Good news — <strong>%s</strong> has been approved and you're now a hotel manager on Folio."
+                .formatted(companyName);
+        String footer = "Sign in and open \"Manage bookings\" to start adding hotels and inviting staff.";
+        send(toEmail, "Approved — " + companyName + " is live on Folio", emailShell("Application approved", intro, rows, footer), null);
+    }
+
+    public void sendCompanyApplicationRejected(String toEmail, String companyName, String reason) {
+        String rows = detailRow("Company", companyName)
+                + detailRow("Reason", reason == null || reason.isBlank() ? "Not specified" : reason);
+        String intro = "We're unable to approve the application for <strong>%s</strong> at this time."
+                .formatted(companyName);
+        String footer = "You're welcome to submit a new application once the issue above is addressed.";
+        send(toEmail, "Update on your Folio application — " + companyName, emailShell("Application not approved", intro, rows, footer), null);
+    }
+
+    private String humaniseRole(String role) {
+        String lower = role.replace('_', ' ').toLowerCase(Locale.ENGLISH);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
     /** Row = an uppercase gray label over a black value, mirroring how Airbnb's own
@@ -73,81 +108,6 @@ public class MailService {
                   </td>
                 </tr>
                 """.formatted(label, value);
-    }
-
-    private String buildPaymentConfirmationHtml(String guestName, String hotelName, String roomNumber,
-                                                  LocalDateTime checkIn, LocalDateTime checkOut, double amount, String currency) {
-        String rows = detailRow("Room", roomNumber)
-                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
-                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut))
-                + detailRow("Amount paid", String.format(Locale.ENGLISH, "%.2f %s", amount, currency));
-
-        return emailShell(
-                "Payment confirmed",
-                "Hi %s — congratulations, your payment went through and your stay at <strong>%s</strong> is booked."
-                        .formatted(guestName, hotelName),
-                rows,
-                "You can view or manage this booking any time from \"My bookings\" on Folio."
-        );
-    }
-
-    public void sendCompanyInvite(String toEmail, String companyName, String role) {
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            helper.setFrom(resolveFromAddress());
-            helper.setTo(toEmail);
-            helper.setSubject("You've been invited to " + companyName + " on Folio");
-            String rows = detailRow("Company", companyName) + detailRow("Role", humaniseRole(role));
-            String intro = "You've been invited to join <strong>%s</strong> on Folio.".formatted(companyName);
-            String footer = "Sign in (or create an account with this email address) and open \"Manage bookings\" to accept.";
-            helper.setText(emailShell("You're invited", intro, rows, footer), true);
-            mailSender.send(mimeMessage);
-        } catch (jakarta.mail.MessagingException e) {
-            throw new IllegalStateException("Could not build invite email", e);
-        }
-    }
-
-    public void sendCompanyApplicationApproved(String toEmail, String companyName) {
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            helper.setFrom(resolveFromAddress());
-            helper.setTo(toEmail);
-            helper.setSubject("Approved — " + companyName + " is live on Folio");
-            String rows = detailRow("Company", companyName) + detailRow("Status", "Active");
-            String intro = "Good news — <strong>%s</strong> has been approved and you're now a hotel manager on Folio."
-                    .formatted(companyName);
-            String footer = "Sign in and open \"Manage bookings\" to start adding hotels and inviting staff.";
-            helper.setText(emailShell("Application approved", intro, rows, footer), true);
-            mailSender.send(mimeMessage);
-        } catch (jakarta.mail.MessagingException e) {
-            throw new IllegalStateException("Could not build application-approved email", e);
-        }
-    }
-
-    public void sendCompanyApplicationRejected(String toEmail, String companyName, String reason) {
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            helper.setFrom(resolveFromAddress());
-            helper.setTo(toEmail);
-            helper.setSubject("Update on your Folio application — " + companyName);
-            String rows = detailRow("Company", companyName)
-                    + detailRow("Reason", reason == null || reason.isBlank() ? "Not specified" : reason);
-            String intro = "We're unable to approve the application for <strong>%s</strong> at this time."
-                    .formatted(companyName);
-            String footer = "You're welcome to submit a new application once the issue above is addressed.";
-            helper.setText(emailShell("Application not approved", intro, rows, footer), true);
-            mailSender.send(mimeMessage);
-        } catch (jakarta.mail.MessagingException e) {
-            throw new IllegalStateException("Could not build application-rejected email", e);
-        }
-    }
-
-    private String humaniseRole(String role) {
-        String lower = role.replace('_', ' ').toLowerCase(Locale.ENGLISH);
-        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
     /** The shared badge/heading/hr/detail-rows-table/footer envelope every transactional
@@ -183,9 +143,34 @@ public class MailService {
                 """.formatted(heading, introHtml, rowsHtml, footerText);
     }
 
+    private void send(String toEmail, String subject, String html, String text) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("from", resolveFromAddress());
+        payload.put("to", toEmail);
+        payload.put("subject", subject);
+        if (html != null) payload.put("html", html);
+        if (text != null) payload.put("text", text);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder(RESEND_ENDPOINT)
+                    .header("Authorization", "Bearer " + resendApiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(payload)))
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("Resend API returned " + response.statusCode() + ": " + response.body());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not send email via Resend", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not send email via Resend", e);
+        }
+    }
+
     private String resolveFromAddress() {
         if (configuredFrom != null && !configuredFrom.isBlank()) return configuredFrom;
-        if (smtpUsername != null && !smtpUsername.isBlank()) return smtpUsername;
-        return "no-reply@folio.example";
+        return "Folio <onboarding@resend.dev>";
     }
 }
