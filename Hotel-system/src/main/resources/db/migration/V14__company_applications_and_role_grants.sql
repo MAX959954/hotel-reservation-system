@@ -1,8 +1,7 @@
-ALTER TABLE companies
-    ADD COLUMN submitted_by_user_id BIGINT REFERENCES users(id),
-    ADD COLUMN bank_account_holder VARCHAR(255),
-    ADD COLUMN bank_iban VARCHAR(64),
-    ADD COLUMN rejection_reason TEXT;
+ALTER TABLE companies ADD COLUMN submitted_by_user_id BIGINT REFERENCES users(id);
+ALTER TABLE companies ADD COLUMN bank_account_holder VARCHAR(255);
+ALTER TABLE companies ADD COLUMN bank_iban VARCHAR(64);
+ALTER TABLE companies ADD COLUMN rejection_reason TEXT;
 
 ALTER TABLE companies DROP CONSTRAINT companies_status_check;
 ALTER TABLE companies ADD CONSTRAINT companies_status_check

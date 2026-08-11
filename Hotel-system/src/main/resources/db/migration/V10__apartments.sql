@@ -230,7 +230,7 @@ VALUES
 INSERT INTO hotel_amenities (hotel_id, amenity)
 SELECT h.id, a.amenity
 FROM hotels h
-CROSS JOIN LATERAL (VALUES
+CROSS JOIN (VALUES
     ('WIFI'), ('AIR_CONDITIONING'), ('WORKSPACE'), ('LAUNDRY'), ('NON_SMOKING')
 ) AS a(amenity)
 WHERE h.property_type = 'APARTMENT';

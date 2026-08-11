@@ -48,6 +48,15 @@ export function scrollToY(y: number) {
   }
 }
 
+export function scrollToElement(el: HTMLElement) {
+  if (lenis) {
+    const y = el.getBoundingClientRect().top + window.scrollY
+    lenis.scrollTo(y, { immediate: true })
+  } else {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
 export function scrollToTop() {
   if (lenis) {
     lenis.scrollTo(0, { immediate: true })

@@ -1,15 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAuthModalStore } from '@/stores/authModal'
+import { useCompanyStore } from '@/stores/company'
 import { ScrollTrigger, scrollToTop } from '@/lib/motion'
 import type { Role } from '@/types/auth'
 
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
-    /** Any one of these roles is enough — see beforeEach below. Checked after
+    /** Any one of these platform roles is enough — see beforeEach below. Checked after
      *  requiresAuth, so a role-gated route implies auth is required too. */
     requiresRole?: Role[]
+    /** Fallback when requiresRole doesn't match: company-level membership is its own,
+     *  separate role system (CompanyRole, not the platform Roles enum) — someone who is
+     *  only staff on a company (invited by email, accepted or not) never gets a matching
+     *  platform role from that alone, so a platform-only check would permanently lock
+     *  invited staff out of the very page that shows their invite. 'any' accepts any
+     *  membership regardless of status (an unaccepted invite still needs to reach the
+     *  accept banner); 'manager' requires an ACTIVE OWNER/MANAGER membership.
+     */
+    allowCompanyRole?: 'any' | 'manager'
   }
 }
 
@@ -55,17 +65,16 @@ const router = createRouter({
       path: '/manage/bookings',
       name: 'manage-bookings',
       component: () => import('@/views/ManageBookingsView.vue'),
-      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'RECEPTIONIST', 'ADMIN'] },
+      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'RECEPTIONIST', 'ADMIN'], allowCompanyRole: 'any' },
     },
     {
-      // OWNER/MANAGER-only in practice (enforced server-side too) — RECEPTIONIST can see
-      // this route per requiresRole (they hold HOTEL_MANAGER's sibling role at the
-      // platform level in some setups) but the company picker only ever offers companies
-      // where their own CompanyRole is OWNER/MANAGER, so there's nothing to act on otherwise.
+      // OWNER/MANAGER-only in practice (enforced server-side too) — allowCompanyRole:
+      // 'manager' is what actually lets an invited-but-not-platform-roled company
+      // OWNER/MANAGER in; requiresRole alone would only ever match ADMIN/HOTEL_MANAGER.
       path: '/manage/hotels',
       name: 'manage-hotels',
       component: () => import('@/views/ManageHotelsView.vue'),
-      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'ADMIN'] },
+      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'ADMIN'], allowCompanyRole: 'manager' },
     },
     {
       // Any signed-in guest can apply — this is the application form itself, not a
@@ -103,7 +112,12 @@ router.beforeEach(async (to) => {
   // No dedicated "forbidden" page yet — bouncing home is at least never a dead end,
   // unlike leaving someone on a page whose data calls will just 403 silently underneath.
   if (to.meta.requiresRole && !to.meta.requiresRole.some((role) => auth.hasRole(role))) {
-    return { name: 'home' }
+    if (!to.meta.allowCompanyRole) return { name: 'home' }
+
+    const company = useCompanyStore()
+    await company.load()
+    const allowed = to.meta.allowCompanyRole === 'manager' ? company.managesAny : company.hasAny
+    if (!allowed) return { name: 'home' }
   }
 
   return true

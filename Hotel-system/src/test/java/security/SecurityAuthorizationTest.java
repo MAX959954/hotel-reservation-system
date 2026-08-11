@@ -96,11 +96,11 @@ class SecurityAuthorizationTest {
     }
 
     @Test
-    void adminOnlyEndpoint_returns403_withoutToken() throws Exception {
-        // no explicit AuthenticationEntryPoint is configured, so an unauthenticated
-        // request is rejected as 403 rather than 401 in this app
+    void adminOnlyEndpoint_returns401_withoutToken() throws Exception {
+        // RestAuthenticationEntryPoint rejects a missing/invalid token as 401 (distinct
+        // from a 403 @PreAuthorize denial), so the frontend's session-expiry handling fires
         mockMvc.perform(get("/api/bookings/status/{status}", BookingStatus.PENDING))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -120,7 +120,7 @@ class SecurityAuthorizationTest {
     }
 
     @Test
-    void authenticatedOnlyEndpoint_returns403_withoutToken() throws Exception {
+    void authenticatedOnlyEndpoint_returns401_withoutToken() throws Exception {
         ReviewsRequest request = new ReviewsRequest();
         request.setBookingId(1L);
         request.setRating(5);
@@ -128,7 +128,7 @@ class SecurityAuthorizationTest {
         mockMvc.perform(post("/api/reviews")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -150,7 +150,7 @@ class SecurityAuthorizationTest {
     void invalidToken_isTreatedAsUnauthenticated() throws Exception {
         mockMvc.perform(get("/api/bookings/status/{status}", BookingStatus.PENDING)
                         .header("Authorization", "Bearer not-a-real-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
