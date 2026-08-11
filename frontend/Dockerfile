@@ -22,14 +22,11 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Dropped into templates/ (not conf.d/ directly) so the base image's own entrypoint
-# script runs it through envsubst at container start, substituting ${PORT} — Railway
-# (like most PaaS hosts) assigns the listen port at runtime rather than letting you fix
-# one, same reason Hotel-system's application.yml reads server.port from ${PORT:8080}.
-# The official entrypoint only substitutes names that are actual env vars, so nginx's
-# own $uri/$host/... runtime variables in the config are left alone.
-COPY nginx.conf /etc/nginx/templates/default.conf.template
-ENV PORT=80
+# Fixed port 80, matching the target port configured in Railway's domain settings —
+# no envsubst templating, so there's no risk of a bad substitution breaking the config
+# (which is exactly what silently happened here: nginx never started, no log output at
+# all, container just sat there failing every request with 502).
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
