@@ -19,6 +19,10 @@ export const useCompanyStore = defineStore('company', {
   getters: {
     active: (state) => state.memberships.filter((m) => m.status === 'ACTIVE'),
     hasAny: (state) => state.memberships.some((m) => m.status === 'ACTIVE' || m.status === 'INVITED'),
+    /** ACTIVE and OWNER/MANAGER specifically — the set of companies a member can actually
+     *  edit hotels/rooms for, as opposed to just being staff on (see ManageHotelsView). */
+    managesAny: (state) =>
+      state.memberships.some((m) => m.status === 'ACTIVE' && (m.companyRole === 'OWNER' || m.companyRole === 'MANAGER')),
   },
 
   actions: {

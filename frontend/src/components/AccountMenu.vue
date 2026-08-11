@@ -34,9 +34,7 @@ const canManageBookings = computed(
   () => company.hasAny || auth.hasRole('ADMIN') || auth.hasRole('RECEPTIONIST') || auth.hasRole('HOTEL_MANAGER'),
 )
 
-// Hidden once someone is already a manager — the extranet ("Manage bookings") is where
-// they'd go next, same as Airbnb drops "Become a host" from the menu once you are one.
-const canBecomeHost = computed(() => !auth.hasRole('HOTEL_MANAGER'))
+const canManageHotels = computed(() => company.managesAny || auth.hasRole('ADMIN') || auth.hasRole('HOTEL_MANAGER'))
 
 function toggle() {
   open.value = !open.value
@@ -181,7 +179,7 @@ onUnmounted(() => {
           {{ $t('accountMenu.manageBookings') }}
         </button>
         <button
-          v-if="auth.hasRole('HOTEL_MANAGER') || auth.hasRole('ADMIN')"
+          v-if="canManageHotels"
           role="menuitem"
           type="button"
           class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"
@@ -191,7 +189,6 @@ onUnmounted(() => {
           {{ $t('accountMenu.manageHotels') }}
         </button>
         <button
-          v-if="canBecomeHost"
           role="menuitem"
           type="button"
           class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"

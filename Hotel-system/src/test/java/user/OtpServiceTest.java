@@ -29,6 +29,9 @@ class OtpServiceTest {
     private OtpCodeRepository otpCodeRepository;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private MailService mailService;
 
     @Mock

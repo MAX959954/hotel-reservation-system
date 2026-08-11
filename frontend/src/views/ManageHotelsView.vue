@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { BedDouble, ChevronDown, Loader2, Pencil, Plus, RotateCw } from 'lucide-vue-next'
+import { scrollToElement } from '@/lib/motion'
 import ExtranetShell from '@/components/ExtranetShell.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
 import { companiesApi } from '@/api/companies'
@@ -72,10 +73,13 @@ const hotelFormEl = ref<HTMLElement | null>(null)
 
 // The form renders above the hotel list, at the top of the page — with a long list,
 // "Edit" on a card far down otherwise opens a form the click never visibly reacts to,
-// since it's off-screen until you scroll all the way back up.
+// since it's off-screen until you scroll all the way back up. The page's smooth-scroll
+// is driven by Lenis (see lib/motion.ts), which intercepts native scrolling — a plain
+// Element.scrollIntoView() call is silently a no-op while Lenis is active, so this has
+// to go through Lenis's own scrollTo() instead.
 async function scrollToHotelForm() {
   await nextTick()
-  hotelFormEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (hotelFormEl.value) scrollToElement(hotelFormEl.value)
 }
 
 function resetHotelForm() {
