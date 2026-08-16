@@ -12,5 +12,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Vite rejects requests whose Host header it doesn't recognize (protection against
+    // DNS rebinding). A Cloudflare quick tunnel forwards the real Host header through,
+    // and trycloudflare.com's subdomain is random per run, so it's allow-listed by
+    // suffix rather than by exact hostname.
+    allowedHosts: ['.trycloudflare.com'],
   },
 })
