@@ -66,6 +66,47 @@ function Set-EnvValue {
     Set-Content -Path $EnvPath -Value $content
 }
 
+# `docker info`'s exit code is what we actually want, but with $ErrorActionPreference =
+# 'Stop' any line docker.exe writes to stderr (even a harmless warning) turns into a
+# terminating error before redirection can swallow it — so this runs with that preference
+# relaxed just for the duration of the call.
+function Test-DockerReady {
+    $prevPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try {
+        docker info 2>$null 1>$null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $prevPreference
+    }
+}
+
+# `docker compose up` fails outright if the Docker Desktop engine isn't running yet -
+# launch it and wait rather than making that a manual pre-step every time.
+function Wait-ForDocker {
+    param([int]$TimeoutSeconds = 120)
+
+    if (Test-DockerReady) { return }
+
+    Write-Host "==> Docker Desktop is not running - starting it..." -ForegroundColor Cyan
+    $dockerDesktopExe = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+    if (-not (Test-Path $dockerDesktopExe)) {
+        throw "Docker Desktop.exe not found at '$dockerDesktopExe' - adjust the path in Wait-ForDocker if it is installed elsewhere."
+    }
+    Start-Process $dockerDesktopExe
+
+    for ($i = 0; $i -lt $TimeoutSeconds; $i += 2) {
+        Start-Sleep -Seconds 2
+        if (Test-DockerReady) {
+            Write-Host "    Docker is ready." -ForegroundColor Green
+            return
+        }
+    }
+    throw "Timed out after ${TimeoutSeconds}s waiting for Docker Desktop to start."
+}
+
+Wait-ForDocker
+
 Write-Host "==> Starting Postgres, Redis, backend (Docker)..." -ForegroundColor Cyan
 Push-Location $backendDir
 docker compose up -d postgres redis app

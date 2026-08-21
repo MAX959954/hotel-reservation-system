@@ -59,10 +59,11 @@ Requires the [`cloudflared`](https://github.com/cloudflare/cloudflared) CLI inst
 powershell -ExecutionPolicy Bypass -File scripts\start-tunnels.ps1
 ```
 
-This brings up Postgres/Redis/the API in Docker, starts the Vite dev server, opens a
-tunnel for each, and wires the generated URLs into both `.env` files automatically
-(`VITE_API_BASE_URL` on the frontend, `CORS_ALLOWED_ORIGINS` on the backend) — then
-prints the two public links.
+This starts Docker Desktop first if it isn't already running (waits up to 2 minutes for
+it to come up), then brings up Postgres/Redis/the API in Docker, starts the Vite dev
+server, opens a tunnel for each, and wires the generated URLs into both `.env` files
+automatically (`VITE_API_BASE_URL` on the frontend, `CORS_ALLOWED_ORIGINS` on the
+backend) — then prints the two public links.
 
 **Stop everything:**
 
