@@ -29,10 +29,15 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
 
     List<Room> findByHotelIdAndCapacityGreaterThanEqual( Long hotelId, Integer guestCount);
 
+    // Excludes rooms that are out of service (independent of any booking) and bookings
+    // that never actually held the room (CANCELLED/PAYMENT_FAILED), so a cancelled stay
+    // or a room taken out of maintenance frees those dates back up for search.
     @Query("SELECT r FROM Room r WHERE r.hotel.id = :hotelId " +
             "AND (:guestCount IS NULL OR r.capacity >= :guestCount) " +
+            "AND r.status NOT IN (room.RoomStatus.MAINTENANCE, room.RoomStatus.OUT_OF_ORDER) " +
             "AND r.id NOT IN " +
-            "(SELECT b.room.id FROM Booking b WHERE b.check_in < :checkOut AND b.check_out > :checkIn)")
+            "(SELECT b.room.id FROM Booking b WHERE b.check_in < :checkOut AND b.check_out > :checkIn " +
+            "AND b.bookingStatus NOT IN (booking.BookingStatus.CANCELLED, booking.BookingStatus.PAYMENT_FAILED))")
     List<Room> findAvailableRooms(@Param("hotelId") Long hotelId,
                                   @Param("checkIn") LocalDateTime checkIn,
                                   @Param("checkOut") LocalDateTime checkOut,

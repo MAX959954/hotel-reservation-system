@@ -155,13 +155,43 @@ class BookingIntegrationTest {
     }
 
     @Test
-    void create_throws_whenRoomNotAvailable() {
+    void create_throws_whenRoomUnderMaintenance() {
         room.setStatus(RoomStatus.MAINTENANCE);
         roomRepository.save(room);
 
         assertThatThrownBy(() -> bookingService.create(
                 requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3))))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Room id not available");
+                .hasMessageContaining("Room is not available for booking");
+    }
+
+    // Regression test: confirming a booking used to flip the room to RESERVED for
+    // good, which then blocked booking it for any OTHER, non-overlapping dates too.
+    @Test
+    void create_succeeds_forLaterDates_afterAnEarlierBookingOnTheRoomWasConfirmed() {
+        BookingResponse first = bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3)));
+        bookingService.confirm(first.getId());
+
+        BookingResponse second = bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(5), LocalDateTime.now().plusDays(7)));
+
+        assertThat(second.getRoomId()).isEqualTo(room.getId());
+        assertThat(second.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
+    }
+
+    // Regression test: a CANCELLED booking used to keep blocking its dates forever
+    // because findOverlappingBookings ignored booking status entirely.
+    @Test
+    void create_succeeds_forSameDates_afterEarlierBookingWasCancelled() {
+        BookingResponse first = bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3)));
+        bookingService.cancel(first.getId());
+
+        BookingResponse second = bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3)));
+
+        assertThat(second.getRoomId()).isEqualTo(room.getId());
+        assertThat(second.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
     }
 }

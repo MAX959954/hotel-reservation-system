@@ -3,11 +3,20 @@ package payment;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Charge;
+import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.Refund;
+import com.stripe.model.StripeObject;
+import com.stripe.net.RequestOptions;
+import com.stripe.net.Webhook;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.RefundCreateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -19,6 +28,7 @@ import user.MailService;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -37,6 +47,13 @@ public class PaymentServiceImpl implements PaymentService {
     private final BookingRepository bookingRepository;
     private final MailService mailService;
     private final ApplicationEventPublisher eventPublisher;
+
+    // Not part of the Lombok constructor on purpose: it's only needed by
+    // handleWebhookEvent, and leaving it as plain field injection keeps that one
+    // Stripe-dashboard-configured value out of every other constructor call/test in
+    // this class (same blank-safe convention as StripeConfig.secretKey).
+    @Value("${stripe.webhook-secret:}")
+    private String webhookSecret;
 
     @Override
     @Transactional
@@ -222,16 +239,89 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
 
+    // Amounts are compared in whole cents (rounded) to avoid floating-point noise (e.g.
+    // 149.99999999999997) producing a false "exceeds remaining balance" or a refund that
+    // never quite reaches REFUNDED.
+    private static final long REMAINING_BALANCE_EPSILON_CENTS = 1;
+
     @Override
-    public PaymentResponse refund (Long id) {
+    @Transactional
+    public PaymentResponse refund (Long id, Double amount) {
         Payment payment = findById(id);
 
-        if (payment.getStatus() != PaymentStatus.COMPLETED) {
-            throw new IllegalStateException("Only COMPLETED payments can be refunded");
+        if (payment.getStatus() != PaymentStatus.COMPLETED && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new IllegalStateException("Only COMPLETED or PARTIALLY_REFUNDED payments can be refunded");
+        }
+        if (amount != null && amount <= 0) {
+            throw new IllegalStateException("Refund amount must be positive");
         }
 
-        payment.setStatus(PaymentStatus.REFUNDED);
-        return  toResponse(paymentRepository.save(payment));
+        double alreadyRefunded = payment.getRefundedAmount() != null ? payment.getRefundedAmount() : 0.0;
+        double remaining = payment.getAmount() - alreadyRefunded;
+        double refundAmount = amount != null ? amount : remaining;
+        long refundAmountCents = Math.round(refundAmount * 100);
+        long remainingCents = Math.round(remaining * 100);
+
+        if (refundAmountCents - remainingCents > REMAINING_BALANCE_EPSILON_CENTS) {
+            throw new IllegalStateException(
+                    "Refund amount " + refundAmount + " exceeds the remaining refundable amount of " + remaining);
+        }
+
+        if (GATEWAY_METHODS.contains(payment.getMethod())) {
+            // Money for these methods only ever moved through Stripe, so it can only be
+            // returned through Stripe too — marking the row REFUNDED without this would
+            // show a completed refund on our side while the guest's card is never
+            // actually credited (silent money loss / chargeback risk).
+            try {
+                RefundCreateParams params = RefundCreateParams.builder()
+                        .setPaymentIntent(payment.getTransaction_id())
+                        .setAmount(refundAmountCents)
+                        .build();
+                RequestOptions options = RequestOptions.builder()
+                        // Keyed on the balance BEFORE this refund, not just the payment id: a
+                        // retry of this exact request (same starting balance, same amount)
+                        // reuses the key so Stripe dedupes it, but a later, separate partial
+                        // refund on top of this one starts from a different balance and gets
+                        // its own key — a single per-payment key would make Stripe silently
+                        // replay the first refund instead of creating the second one.
+                        .setIdempotencyKey("refund-payment-" + payment.getId() + "-"
+                                + Math.round(alreadyRefunded * 100) + "-" + refundAmountCents)
+                        .build();
+                Refund refund = Refund.create(params, options);
+                payment.setRefund_transaction_id(refund.getId());
+            } catch (StripeException e) {
+                throw new IllegalStateException("Could not refund payment with Stripe: " + e.getMessage(), e);
+            }
+        }
+        // Offline methods (bank transfer, cash, crypto) were never charged through a
+        // gateway — same as pay(), the money movement happens outside this system and
+        // this call only records that staff already returned it.
+
+        double newRefundedTotal = alreadyRefunded + refundAmount;
+        payment.setRefundedAmount(newRefundedTotal);
+        boolean fullyRefunded = Math.round(payment.getAmount() * 100) - Math.round(newRefundedTotal * 100)
+                <= REMAINING_BALANCE_EPSILON_CENTS;
+        payment.setStatus(fullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED);
+        Payment saved = paymentRepository.save(payment);
+
+        if (fullyRefunded) {
+            cancelBookingAfterFullRefund(payment.getBooking());
+        }
+
+        return toResponse(saved);
+    }
+
+    // A full refund reads as "this booking isn't happening" — but only while it's still
+    // just CONFIRMED. CHECKED_IN/COMPLETED reflect a stay that already happened (or is
+    // in progress); a refund there is a financial/goodwill matter, not proof the stay
+    // didn't occur, so booking status is intentionally left alone. Already-CANCELLED is
+    // a no-op (and cancel() would reject it as a terminal state anyway).
+    private void cancelBookingAfterFullRefund(Booking booking) {
+        if (booking.getBookingStatus() == BookingStatus.CONFIRMED) {
+            booking.setBookingStatus(BookingStatus.CANCELLED);
+            booking.setCancelled_at(LocalDateTime.now());
+            bookingRepository.save(booking);
+        }
     }
 
     @Override
@@ -244,6 +334,104 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setStatus(PaymentStatus.CANCELLED);
         return toResponse(paymentRepository.save(payment));
+    }
+
+    @Override
+    @Transactional
+    public void handleWebhookEvent(String payload, String signatureHeader) {
+        if (webhookSecret == null || webhookSecret.isBlank()) {
+            // Refusing to process is the safe failure mode here: without a configured
+            // secret there is no way to verify this request actually came from Stripe.
+            throw new IllegalStateException("Stripe webhook secret is not configured");
+        }
+
+        Event event;
+        try {
+            event = Webhook.constructEvent(payload, signatureHeader, webhookSecret);
+        } catch (SignatureVerificationException e) {
+            throw new IllegalStateException("Invalid Stripe webhook signature: " + e.getMessage(), e);
+        }
+
+        // Absent only when this event's payload can't be resolved against the API
+        // version stripe-java was generated for (a Stripe-side/library mismatch) —
+        // nothing safe to act on. Acknowledge anyway so Stripe stops retrying a delivery
+        // we will never be able to parse.
+        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (stripeObject == null) {
+            log.warn("Could not deserialize Stripe webhook event {} ({})", event.getId(), event.getType());
+            return;
+        }
+
+        switch (event.getType()) {
+            case "payment_intent.succeeded" -> onPaymentIntentSucceeded((PaymentIntent) stripeObject);
+            case "payment_intent.payment_failed" -> onPaymentIntentFailed((PaymentIntent) stripeObject);
+            case "charge.refunded" -> onChargeRefunded((Charge) stripeObject);
+            default -> log.debug("Ignoring Stripe webhook event type {}", event.getType());
+        }
+    }
+
+    // Reconciles a payment whose confirming client call (see confirm()) never arrived —
+    // tab closed, network dropped — even though Stripe did charge the card. Guarded on
+    // PENDING so a duplicate delivery of the same event, or one arriving after confirm()
+    // already ran, is a no-op rather than a double-fire of the confirmation email.
+    private void onPaymentIntentSucceeded(PaymentIntent intent) {
+        paymentRepository.findByTransactionId(intent.getId()).ifPresent(payment -> {
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                return;
+            }
+            payment.setStatus(PaymentStatus.COMPLETED);
+            payment.setPaidAt(LocalDateTime.now());
+            Payment saved = paymentRepository.save(payment);
+            publishConfirmation(payment.getBooking(), saved);
+        });
+    }
+
+    private void onPaymentIntentFailed(PaymentIntent intent) {
+        paymentRepository.findByTransactionId(intent.getId()).ifPresent(payment -> {
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                return;
+            }
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+        });
+    }
+
+    // Reconciles a refund issued directly from the Stripe Dashboard/API rather than
+    // through refund() above — the only way our own status (and refunded total) stays
+    // correct when someone refunds a guest, fully or partially, without going through
+    // this app at all. Guarded on COMPLETED/PARTIALLY_REFUNDED: once REFUNDED there's
+    // nothing left Stripe could still be refunding, so further deliveries of this event
+    // (Stripe retries, or one that arrives after refund() already recorded the same
+    // refund) are a no-op. charge.amount_refunded is Stripe's own running total for the
+    // charge, so it's written as-is rather than added to ours — that stays correct
+    // regardless of how many partial refunds (ours or dashboard-issued) came before it.
+    private void onChargeRefunded(Charge charge) {
+        String paymentIntentId = charge.getPaymentIntent();
+        if (paymentIntentId == null) {
+            return;
+        }
+        paymentRepository.findByTransactionId(paymentIntentId).ifPresent(payment -> {
+            if (payment.getStatus() != PaymentStatus.COMPLETED && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+                return;
+            }
+            long amountRefundedCents = charge.getAmountRefunded() != null ? charge.getAmountRefunded() : 0L;
+            boolean fullyRefunded = amountRefundedCents >= Math.round(payment.getAmount() * 100);
+            payment.setRefundedAmount(amountRefundedCents / 100.0);
+            payment.setStatus(fullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED);
+            latestRefundId(charge).ifPresent(payment::setRefund_transaction_id);
+            paymentRepository.save(payment);
+
+            if (fullyRefunded) {
+                cancelBookingAfterFullRefund(payment.getBooking());
+            }
+        });
+    }
+
+    private Optional<String> latestRefundId(Charge charge) {
+        if (charge.getRefunds() == null || charge.getRefunds().getData() == null || charge.getRefunds().getData().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(charge.getRefunds().getData().get(0).getId());
     }
 
     private Payment findById(Long id) {
@@ -262,6 +450,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .method(payment.getMethod())
                 .currency(payment.getCurrency())
                 .transactionId(payment.getTransaction_id())
+                .refundTransactionId(payment.getRefund_transaction_id())
+                .refundedAmount(payment.getRefundedAmount())
                 .status(payment.getStatus())
                 .paidAt(payment.getPaidAt())
                 .createdAt(payment.getCreatedAt())

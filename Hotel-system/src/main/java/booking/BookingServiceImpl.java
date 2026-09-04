@@ -38,8 +38,14 @@ public class BookingServiceImpl implements BookingService{
         // else's account by editing the request body.
         User user = currentUser();
 
-        if (room.getStatus() != RoomStatus.AVAILABLE){
-            throw new IllegalStateException("Room id not available");
+        // Only an operational flag (staff-set, independent of any booking) blocks
+        // creation outright. Whether the room is free for these specific dates is
+        // decided solely by the overlap check below — RoomStatus is not a per-date
+        // calendar, so it must never gate booking on its own (that previously made a
+        // room permanently unbookable for ANY future dates as soon as one stay on it
+        // was confirmed).
+        if (room.getStatus() == RoomStatus.MAINTENANCE || room.getStatus() == RoomStatus.OUT_OF_ORDER){
+            throw new IllegalStateException("Room is not available for booking");
         }
 
         boolean hasOverlap = !bookingRepository.findOverlappingBookings(
@@ -119,7 +125,6 @@ public class BookingServiceImpl implements BookingService{
 
         booking.setBookingStatus(BookingStatus.CONFIRMED);
         booking.setConfirmed_at(LocalDateTime.now());
-        booking.getRoom().setStatus(RoomStatus.RESERVED);
         return  toResponse(bookingRepository.save(booking));
     }
 
@@ -135,7 +140,6 @@ public class BookingServiceImpl implements BookingService{
         }
         booking.setBookingStatus(BookingStatus.CANCELLED);
         booking.setCancelled_at(LocalDateTime.now());
-        booking.getRoom().setStatus(RoomStatus.AVAILABLE);
         return toResponse(bookingRepository.save(booking));
     }
 
@@ -149,7 +153,6 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Only CONFIRMED bookings can be checked in");
         }
         booking.setBookingStatus(BookingStatus.CHECKED_IN);
-        booking.getRoom().setStatus(RoomStatus.OCCUPIED);
         return toResponse(bookingRepository.save(booking));
     }
 
@@ -163,7 +166,6 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Only CHECKED_IN bookings can be completed");
         }
         booking.setBookingStatus(BookingStatus.COMPLETED);
-        booking.getRoom().setStatus(RoomStatus.AVAILABLE);
         return toResponse(bookingRepository.save(booking));
     }
 
