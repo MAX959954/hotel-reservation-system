@@ -16,6 +16,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -74,6 +75,31 @@ class PaymentControllerTest {
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createIntent_returns201_andPassesNullIdempotencyKey_whenHeaderAbsent() throws Exception {
+        given(paymentService.createIntent(any(PaymentRequest.class), isNull()))
+                .willReturn(PaymentIntentResponse.builder().paymentId(1L).clientSecret("secret_1").build());
+
+        mockMvc.perform(post("/api/payments/intent")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.clientSecret").value("secret_1"));
+    }
+
+    @Test
+    void createIntent_forwardsIdempotencyKeyHeader_whenPresent() throws Exception {
+        given(paymentService.createIntent(any(PaymentRequest.class), eq("client-key-1")))
+                .willReturn(PaymentIntentResponse.builder().paymentId(1L).clientSecret("secret_2").build());
+
+        mockMvc.perform(post("/api/payments/intent")
+                        .contentType("application/json")
+                        .header("Idempotency-Key", "client-key-1")
+                        .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.clientSecret").value("secret_2"));
     }
 
     @Test

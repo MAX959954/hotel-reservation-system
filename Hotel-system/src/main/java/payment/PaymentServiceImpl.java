@@ -6,6 +6,7 @@ import booking.BookingStatus;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
+import com.stripe.model.Dispute;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Refund;
@@ -82,7 +83,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PaymentIntentResponse createIntent(PaymentRequest request) {
+    public PaymentIntentResponse createIntent(PaymentRequest request, String idempotencyKey) {
         if (!GATEWAY_METHODS.contains(request.getMethod())) {
             throw new IllegalStateException("Only card and Google Pay payments use /api/payments/intent");
         }
@@ -104,7 +105,16 @@ public class PaymentServiceImpl implements PaymentService {
                     .putMetadata("bookingId", String.valueOf(booking.getId()))
                     .putMetadata("method", request.getMethod().name())
                     .build();
-            PaymentIntent intent = PaymentIntent.create(params);
+            // Caller-supplied, not derived from the booking: unlike refund() there's no
+            // existing row yet to key off, and a static booking-based key would be actively
+            // wrong here — assertPayable() above may have just cancelled a previous
+            // PaymentIntent for this booking, and Stripe's idempotency replay returns the
+            // ORIGINAL response verbatim, so a reused key would hand back a client_secret
+            // for an intent that's already cancelled. Only trustworthy when it's guaranteed
+            // fresh per genuine new attempt, which only the caller can guarantee.
+            PaymentIntent intent = (idempotencyKey != null && !idempotencyKey.isBlank())
+                    ? PaymentIntent.create(params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build())
+                    : PaymentIntent.create(params);
 
             Payment payment = Payment.builder()
                     .booking(booking)
@@ -338,6 +348,32 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    public void markExpired(Long id) {
+        Payment payment = findById(id);
+
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            // Resolved some other way (paid, cancelled, reconciled by the webhook) since
+            // the scheduler queried for stale rows — nothing to do.
+            return;
+        }
+
+        if (GATEWAY_METHODS.contains(payment.getMethod()) && payment.getTransaction_id() != null) {
+            // Best-effort, same as the stale-PENDING cleanup in assertPayable: leaving an
+            // abandoned PaymentIntent open costs nothing on Stripe's side, so a failure
+            // here isn't worth failing the whole job over.
+            try {
+                PaymentIntent.retrieve(payment.getTransaction_id()).cancel();
+            } catch (StripeException e) {
+                log.warn("Could not cancel stale Stripe PaymentIntent {}: {}", payment.getTransaction_id(), e.getMessage());
+            }
+        }
+
+        payment.setStatus(PaymentStatus.EXPIRED);
+        paymentRepository.save(payment);
+    }
+
+    @Override
+    @Transactional
     public void handleWebhookEvent(String payload, String signatureHeader) {
         if (webhookSecret == null || webhookSecret.isBlank()) {
             // Refusing to process is the safe failure mode here: without a configured
@@ -366,6 +402,7 @@ public class PaymentServiceImpl implements PaymentService {
             case "payment_intent.succeeded" -> onPaymentIntentSucceeded((PaymentIntent) stripeObject);
             case "payment_intent.payment_failed" -> onPaymentIntentFailed((PaymentIntent) stripeObject);
             case "charge.refunded" -> onChargeRefunded((Charge) stripeObject);
+            case "charge.dispute.created" -> onChargeDisputeCreated((Dispute) stripeObject);
             default -> log.debug("Ignoring Stripe webhook event type {}", event.getType());
         }
     }
@@ -424,6 +461,26 @@ public class PaymentServiceImpl implements PaymentService {
             if (fullyRefunded) {
                 cancelBookingAfterFullRefund(payment.getBooking());
             }
+        });
+    }
+
+    // A dispute means the cardholder's bank pulled the money back through their own
+    // process, outside anything Stripe or this app initiated — CHARGEBACK is kept
+    // distinct from REFUNDED because, unlike a refund, this is contested: the outcome
+    // isn't final yet and Stripe may reverse it later. Deliberately does NOT touch
+    // BookingStatus (unlike a full refund) — a chargeback needs a human to look at it,
+    // not an automatic cancellation of what may well have been a legitimate stay.
+    private void onChargeDisputeCreated(Dispute dispute) {
+        String paymentIntentId = dispute.getPaymentIntent();
+        if (paymentIntentId == null) {
+            return;
+        }
+        paymentRepository.findByTransactionId(paymentIntentId).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.CHARGEBACK) {
+                return;
+            }
+            payment.setStatus(PaymentStatus.CHARGEBACK);
+            paymentRepository.save(payment);
         });
     }
 

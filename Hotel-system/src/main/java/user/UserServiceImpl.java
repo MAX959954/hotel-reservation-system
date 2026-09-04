@@ -2,6 +2,7 @@ package user;
 
 import companyuser.CompanyUserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -28,6 +30,14 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     private final GoogleTokenVerifier googleTokenVerifier;
     private final AvatarStorageService avatarStorageService;
     private final CompanyUserService companyUserService;
+    private final RefreshTokenService refreshTokenService;
+    private final JwtBlacklistService jwtBlacklistService;
+
+    @Value("${app.login.max-failed-attempts:5}")
+    private int maxFailedAttempts;
+
+    @Value("${app.login.lockout-minutes:15}")
+    private long lockoutMinutes;
 
     @Override
     public void requestOtp(String identifier) {
@@ -35,24 +45,75 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     }
 
     @Override
+    @Transactional
     public void login(LoginRequest request) {
         String normalized = request.getIdentifier().trim().toLowerCase();
 
         // Same generic failure for "no such account", "account has no password" (Google-only
-        // sign-up never sets one) and "wrong password" — confirming which of those is true
-        // for an email an attacker doesn't already know it's registered would be an account
-        // enumeration leak. This is also why BCrypt's own matches() isn't called on a null
-        // hash: it throws on that, which would otherwise 500 instead of failing cleanly.
+        // sign-up never sets one), "wrong password" AND "temporarily locked out" —
+        // confirming which of those is true for an email an attacker doesn't already know
+        // is registered (or is currently rate-limited) would itself be an account
+        // enumeration/probing leak. This is also why BCrypt's own matches() isn't called on
+        // a null hash: it throws on that, which would otherwise 500 instead of failing cleanly.
         User user = userRepository.findByEmail(normalized).orElse(null);
+
+        if (user != null && isLockedOut(user)) {
+            throw new IllegalStateException("Incorrect email or password.");
+        }
+
         boolean ok = user != null
                 && user.getPasswordHash() != null
                 && passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
 
         if (!ok) {
+            if (user != null) {
+                registerFailedLogin(user);
+            }
             throw new IllegalStateException("Incorrect email or password.");
         }
 
+        if (user.getFailedLoginAttempts() > 0) {
+            user.setFailedLoginAttempts(0);
+            userRepository.save(user);
+        }
+
         otpService.sendLoginCode(normalized);
+    }
+
+    // LOCKED is set only by registerFailedLogin below (never by an admin — see
+    // AccountStatus/updateAccountStatus, which uses SUSPENDED/BANNED/DEACTIVATED for
+    // that), so it's always safe for this same mechanism to clear it again.
+    private boolean isLockedOut(User user) {
+        if (user.getAccountStatus() != AccountStatus.LOCKED) {
+            return false;
+        }
+        if (user.getLockedUntil() != null && !user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            // Lockout window has passed — clear it now rather than waiting on some other
+            // process to do it, so this very attempt can proceed to the password check.
+            user.setAccountStatus(AccountStatus.APPROVED);
+            user.setLockedUntil(null);
+            user.setFailedLoginAttempts(0);
+            userRepository.save(user);
+            return false;
+        }
+        return true;
+    }
+
+    private void registerFailedLogin(User user) {
+        if (user.getAccountStatus() != AccountStatus.APPROVED) {
+            // Only ever escalate an account this mechanism itself would later unlock again
+            // — never touch a status an admin set for an unrelated reason (BANNED,
+            // SUSPENDED, ...), which isLockedOut()'s auto-clear must never undo.
+            return;
+        }
+
+        int attempts = user.getFailedLoginAttempts() + 1;
+        user.setFailedLoginAttempts(attempts);
+        if (attempts >= maxFailedAttempts) {
+            user.setAccountStatus(AccountStatus.LOCKED);
+            user.setLockedUntil(LocalDateTime.now().plusMinutes(lockoutMinutes));
+        }
+        userRepository.save(user);
     }
 
     @Override
@@ -157,7 +218,46 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        // Every session — including the one making this very call — needs a fresh login
+        // after this: an access token issued a moment ago has an `iat` before this
+        // instant and gets rejected by JwtAuthFilter's tokenValidAfter check the next
+        // time it's used, and every refresh token is revoked outright so none of them
+        // can mint a replacement either. A stolen token is worth nothing the moment the
+        // real owner changes their password, not just once each old token happens to expire.
+        user.setTokenValidAfter(LocalDateTime.now());
         userRepository.save(user);
+        refreshTokenService.revokeAllForUser(user.getId());
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        Long userId = refreshTokenService.validateAndConsume(request.getRefreshToken());
+        if (userId == null) {
+            throw new IllegalStateException("Refresh token is invalid or expired. Please sign in again.");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("Account no longer exists."));
+        return issueAuthResponse(user);
+    }
+
+    @Override
+    public void logout(RefreshTokenRequest request, String accessToken) {
+        // Both steps are best-effort: a client calling this after its refresh token
+        // already expired, or with no Authorization header at all, should still get a
+        // clean response rather than an error — there's nothing left to revoke in that
+        // case, not a failure.
+        if (request != null && request.getRefreshToken() != null && !request.getRefreshToken().isBlank()) {
+            refreshTokenService.validateAndConsume(request.getRefreshToken());
+        }
+        if (accessToken != null && !accessToken.isBlank()) {
+            try {
+                jwtBlacklistService.blacklist(jwtService.extractJti(accessToken), jwtService.remainingValidity(accessToken));
+            } catch (Exception e) {
+                // Malformed, unsigned, or already-expired token — nothing meaningful to
+                // blacklist; the request itself is still a successful logout.
+            }
+        }
     }
 
     private static String nullToEmpty(String value) {
@@ -247,9 +347,17 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     }
 
     private AuthResponse issueAuthResponse(User user) {
+        // Password + OTP already got this far, so this isn't the enumeration-sensitive
+        // path login() is — a clear reason is fine to surface here.
+        if (user.getAccountStatus() != AccountStatus.APPROVED) {
+            throw new IllegalStateException("This account is not active. Contact support for help.");
+        }
+
         String token = jwtService.generateToken(user.getEmail(), user.getRoles());
+        String refreshToken = refreshTokenService.issue(user.getId());
         return AuthResponse.builder()
                 .token(token)
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .email(user.getEmail())
                 .roles(user.getRoles())
@@ -263,17 +371,6 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
 
         var authorities = user.getRoles().stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role.name())).collect(Collectors.toSet());
 
-        return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                user.getPasswordHash() == null ? "" : user.getPasswordHash(),
-                user.isEmailVerified(),
-                true ,
-                true ,
-                // Allowlist, not a denylist: only APPROVED can authenticate. A denylist of just
-                // LOCKED/BANNED would silently let SUSPENDED, DEACTIVATED, REJECTED and
-                // ANONYMIZED accounts log in, since nothing else in the codebase blocks them.
-                user.getAccountStatus() == AccountStatus.APPROVED,
-                authorities
-        );
+        return new CustomUserDetails(user, authorities);
     }
 }

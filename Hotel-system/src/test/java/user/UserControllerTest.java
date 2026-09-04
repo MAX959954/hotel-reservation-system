@@ -15,7 +15,10 @@ import java.time.LocalDate;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -197,6 +200,81 @@ class UserControllerTest {
         mockMvc.perform(post("/api/auth/google")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---------- /refresh ----------
+
+    @Test
+    void refresh_returns200_whenTokenValid() throws Exception {
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("refresh_abc");
+
+        given(userService.refresh(any(RefreshTokenRequest.class))).willReturn(sampleResponse());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("token_abc"));
+    }
+
+    @Test
+    void refresh_returns400_whenTokenInvalidOrExpired() throws Exception {
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("stale_token");
+
+        given(userService.refresh(any(RefreshTokenRequest.class)))
+                .willThrow(new IllegalStateException("Refresh token is invalid or expired. Please sign in again."));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void refresh_returns400_whenBodyMissingToken() throws Exception {
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---------- /logout ----------
+
+    @Test
+    void logout_returns204_andPassesBearerToken_whenAuthorizationHeaderPresent() throws Exception {
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("refresh_abc");
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer access_token_abc")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+
+        verify(userService).logout(eq(request), eq("access_token_abc"));
+    }
+
+    @Test
+    void logout_returns204_withNullAccessToken_whenNoAuthorizationHeader() throws Exception {
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("refresh_abc");
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNoContent());
+
+        verify(userService).logout(eq(request), isNull());
+    }
+
+    @Test
+    void logout_returns400_whenBodyMissingToken() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType("application/json")
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
     }
 }

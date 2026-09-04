@@ -17,6 +17,16 @@ public interface UserService {
 
     AuthResponse authenticateWithGoogle(String idToken);
 
+    /** Exchanges a still-valid refresh token for a new access token, rotating the refresh
+     *  token in the same call (the old one is consumed and can't be reused). */
+    AuthResponse refresh(RefreshTokenRequest request);
+
+    /** Revokes the given refresh token and, if a caller's access token is presented too,
+     *  blacklists it for whatever's left of its own lifetime — see JwtBlacklistService.
+     *  Both are best-effort: calling this with an already-expired refresh token or no
+     *  Authorization header is still a successful logout, not an error. */
+    void logout(RefreshTokenRequest request, String accessToken);
+
     UserProfileResponse getCurrentProfile();
 
     UserProfileResponse updateProfile(UpdateProfileRequest request);

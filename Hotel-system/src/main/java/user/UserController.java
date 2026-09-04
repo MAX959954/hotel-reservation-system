@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -45,6 +46,28 @@ public class UserController {
     @PostMapping("/google")
     public ResponseEntity<AuthResponse> google(@Valid @RequestBody GoogleAuthRequest request) {
         return ResponseEntity.ok(userService.authenticateWithGoogle(request.getIdToken()));
+    }
+
+    // Access tokens are short-lived on purpose (see jwt.expiration) — this is what keeps
+    // a session alive past that without asking for the password again. Rotates the
+    // refresh token too: the one in the request body is consumed and can't be replayed.
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(userService.refresh(request));
+    }
+
+    // No @PreAuthorize / SecurityConfig change needed — this path is already under
+    // /api/auth/**'s permitAll, and revocation is keyed off the refresh token in the
+    // body plus whatever Authorization header happens to be present, not an
+    // authenticated principal. Works even if the access token already expired.
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request,
+                                        @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+        String accessToken = (authorizationHeader != null && authorizationHeader.startsWith("Bearer "))
+                ? authorizationHeader.substring(7)
+                : null;
+        userService.logout(request, accessToken);
+        return ResponseEntity.noContent().build();
     }
 
 }

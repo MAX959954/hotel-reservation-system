@@ -35,4 +35,19 @@ export const authApi = {
     const { data } = await http.post<AuthResponse>('/api/auth/google', { idToken })
     return data
   },
+
+  /** Exchanges a still-valid refresh token for a new access token (rotated: the one
+   *  passed in is consumed and can't be reused). Called by http.ts's 401 interceptor,
+   *  not normally from a component directly. */
+  async refresh(refreshToken: string): Promise<AuthResponse> {
+    const { data } = await http.post<AuthResponse>('/api/auth/refresh', { refreshToken })
+    return data
+  },
+
+  /** Best-effort server-side revocation — still safe to call with a refresh token that's
+   *  already expired, or with no access token in the request at all (this app doesn't
+   *  pass one explicitly; the request interceptor already attaches whatever's current). */
+  async logout(refreshToken: string): Promise<void> {
+    await http.post('/api/auth/logout', { refreshToken })
+  },
 }

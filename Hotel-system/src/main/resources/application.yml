@@ -42,7 +42,12 @@ server:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  # Short on purpose now that refresh tokens exist (see RefreshTokenService) to sustain
+  # a session past this — a leaked access token that's only good for 15 minutes is a much
+  # smaller window than the 24h this used to default to, and refresh-expiration-days below
+  # is what actually decides how long someone stays signed in.
+  expiration: ${JWT_EXPIRATION:900000}
+  refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:30}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}
@@ -53,8 +58,33 @@ app:
   otp:
     expiry-minutes: 10
     resend-cooldown-seconds: 30
+  login:
+    # Brute-force protection on the password check in UserServiceImpl.login — OTP itself
+    # is already separately rate-limited (see OtpService.MAX_REQUESTS_PER_HOUR), so this
+    # is specifically about guessing the first factor.
+    max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
+    lockout-minutes: ${LOGIN_LOCKOUT_MINUTES:15}
   uploads:
     dir: ${UPLOADS_DIR:/app/uploads}
+  scheduling:
+    # Off switch for BookingLifecycleScheduler/PaymentLifecycleScheduler as a whole —
+    # the test profile sets this to false so background ticks can't mutate rows outside
+    # any test's transaction.
+    enabled: ${SCHEDULING_ENABLED:true}
+  bookings:
+    # This model requires staff to confirm a booking request (see
+    # BookingController.confirm) — PENDING means "awaiting someone's action", not
+    # "processing", so it can legitimately sit for a while. But it still blocks the room
+    # for those dates (findOverlappingBookings only excludes CANCELLED/PAYMENT_FAILED),
+    # so it can't be left open forever either.
+    pending-hold-hours: ${BOOKING_PENDING_HOLD_HOURS:48}
+    # Grace period after check-in time before an unshown CONFIRMED booking is flagged
+    # NO_SHOW — guards against flagging a guest who's simply arriving later the same day.
+    no-show-grace-hours: ${BOOKING_NO_SHOW_GRACE_HOURS:6}
+  payments:
+    # How long a PENDING payment (a Stripe PaymentIntent the guest never finished, or
+    # abandoned before 3DS/redirect completed) sits before it's marked EXPIRED.
+    pending-expiry-hours: ${PAYMENT_PENDING_EXPIRY_HOURS:24}
 
 sendgrid:
   # Blank-safe like stripe.secret-key below: an empty key only breaks the specific email

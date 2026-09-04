@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 //Spring creates it once and you can inject it anywhere:
 @Slf4j
@@ -25,6 +26,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserServiceImpl userServiceImpl;
+    private final JwtBlacklistService jwtBlacklistService;
 
     //runs on every incoming HTTP request and answers one question: "Who is making this request, and are they allowed?
     @Override
@@ -43,7 +45,36 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             //Avoids re-authenticating if Spring already knows who this user is in this request cycle
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                // Explicitly revoked (logout) — checked before anything else touches the
+                // database, since this is exactly the case a signature/expiry check alone
+                // can never catch: the token is otherwise perfectly valid.
+                if (jwtBlacklistService.isBlacklisted(jwtService.extractJti(token))) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 UserDetails userDetails = userServiceImpl.loadUserByUsername(email);
+                // Reloaded from the database on every request rather than trusted from the
+                // token's own (stale-by-design) roles claim — a ban/suspension/lock set
+                // after this token was issued takes effect on its very next use, not just
+                // once the token eventually expires.
+                if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                // A token issued before the account's last forced-logout instant (password
+                // change) is rejected even though its signature and expiry both check out —
+                // otherwise changing your password would do nothing to a token that leaked
+                // before you noticed.
+                if (userDetails instanceof CustomUserDetails customUserDetails) {
+                    LocalDateTime tokenValidAfter = customUserDetails.getTokenValidAfter();
+                    if (tokenValidAfter != null && jwtService.extractIssuedAt(token).isBefore(tokenValidAfter)) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                }
+
                 //Loads the user from DB, verifies the token is still valid, then tells Spring Security "this request is authenticated as this user with these roles"
                 if (jwtService.isTokenValid(token , email)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(userDetails , null ,

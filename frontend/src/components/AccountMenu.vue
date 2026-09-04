@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, Home, LayoutDashboard, LogOut, Shield, Users } from 'lucide-vue-next'
 import { accountApi } from '@/api/account'
+import { authApi } from '@/api/auth'
 import { resolveUploadUrl } from '@/api/http'
 import RolesModal from '@/components/RolesModal.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -57,6 +58,15 @@ function openRoles() {
 }
 function signOut() {
   close()
+  // Best-effort: revokes the refresh token and blacklists the access token server-side
+  // (see UserServiceImpl.logout) so a leaked token from this session dies immediately
+  // instead of just sitting valid until it expires on its own. Local state is cleared
+  // either way — the whole point of a client-side session is that it doesn't depend on
+  // this call succeeding.
+  const refreshToken = auth.refreshToken
+  if (refreshToken) {
+    authApi.logout(refreshToken).catch(() => {})
+  }
   auth.logout()
   company.reset()
   notifications.reset()

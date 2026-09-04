@@ -8,9 +8,15 @@ export const paymentsApi = {
     return data
   },
 
-  /** Card / Google Pay only — see PaymentServiceImpl.GATEWAY_METHODS on the backend. */
+  /** Card / Google Pay only — see PaymentServiceImpl.GATEWAY_METHODS on the backend.
+   *  Sends a fresh Idempotency-Key per call: if a dropped connection makes the browser
+   *  resend this exact request below the JS layer (invisible to any "submitting" flag
+   *  here), the backend forwards the same key to Stripe and gets back the original
+   *  PaymentIntent instead of creating — and charging — a second one. */
   async createIntent(request: PaymentRequest): Promise<PaymentIntentResponse> {
-    const { data } = await http.post<PaymentIntentResponse>('/api/payments/intent', request)
+    const { data } = await http.post<PaymentIntentResponse>('/api/payments/intent', request, {
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+    })
     return data
   },
 
