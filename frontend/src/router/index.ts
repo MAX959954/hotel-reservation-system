@@ -90,6 +90,18 @@ const router = createRouter({
       component: () => import('@/views/AdminApplicationsView.vue'),
       meta: { requiresAuth: true, requiresRole: ['ADMIN'] },
     },
+    {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: () => import('@/views/AdminUsersView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['ADMIN'] },
+    },
+    {
+      path: '/admin/users/:id',
+      name: 'admin-user-detail',
+      component: () => import('@/views/AdminUserDetailView.vue'),
+      meta: { requiresAuth: true, requiresRole: ['ADMIN'] },
+    },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
   ],
 })

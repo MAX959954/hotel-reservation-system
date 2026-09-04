@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+import { humanise } from './room'
 import type { Role } from './auth'
 
 export type AccountStatus =
@@ -9,6 +11,12 @@ export type AccountStatus =
   | 'BANNED'
   | 'DEACTIVATED'
   | 'LOCKED'
+
+export function accountStatusLabel(status: string): string {
+  const key = `accountStatus.${status}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(status) : translated
+}
 
 export interface UserProfileResponse {
   id: number

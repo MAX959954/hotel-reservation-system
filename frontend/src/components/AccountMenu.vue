@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, Home, LayoutDashboard, LogOut, Shield } from 'lucide-vue-next'
+import { Bell, Briefcase, Building2, ChevronDown, CircleUser, Coins, Home, LayoutDashboard, LogOut, Shield, Users } from 'lucide-vue-next'
 import { accountApi } from '@/api/account'
 import { resolveUploadUrl } from '@/api/http'
 import RolesModal from '@/components/RolesModal.vue'
@@ -206,6 +206,16 @@ onUnmounted(() => {
         >
           <LayoutDashboard class="w-4 h-4 text-champagne" aria-hidden="true" />
           {{ $t('accountMenu.admin') }}
+        </button>
+        <button
+          v-if="auth.hasRole('ADMIN')"
+          role="menuitem"
+          type="button"
+          class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-light text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors"
+          @click="go('/admin/users')"
+        >
+          <Users class="w-4 h-4 text-champagne" aria-hidden="true" />
+          {{ $t('accountMenu.adminUsers') }}
         </button>
         <button
           role="menuitem"

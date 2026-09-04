@@ -29,7 +29,7 @@ This starts Postgres, Redis, and the API (built from `Dockerfile`) together, lis
 on `http://localhost:8081`. Flyway applies all migrations automatically on startup.
 
 Required in `.env`: `POSTGRES_PASSWORD`, `JWT_SECRET`, `STRIPE_SECRET_KEY`. Everything
-else (Resend, Google OAuth, custom CORS origins) is optional for local use — see the
+else (SendGrid, Google OAuth, custom CORS origins) is optional for local use — see the
 comments in `.env.example` for what each one is for.
 
 ### 2. Frontend
