@@ -180,15 +180,46 @@ public class BookingServiceImplTest {
     }
 
     @Test
-    void create_throws_whenRoomNotAvailable() {
-        room.setStatus(RoomStatus.OCCUPIED);
+    void create_throws_whenRoomUnderMaintenance() {
+        room.setStatus(RoomStatus.MAINTENANCE);
         authenticateAs("jane@example.com");
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
         given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
 
         assertThatThrownBy(() -> bookingService.create(request))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Room id not available");
+                .hasMessage("Room is not available for booking");
+    }
+
+    @Test
+    void create_throws_whenRoomOutOfOrder() {
+        room.setStatus(RoomStatus.OUT_OF_ORDER);
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> bookingService.create(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Room is not available for booking");
+    }
+
+    // Regression test for the bug this fix addresses: RESERVED/OCCUPIED only reflect
+    // that the room has *some* booking somewhere, not that it's busy for THESE dates.
+    // As long as the overlap check finds no conflict, the room must still be bookable.
+    @Test
+    void create_succeeds_whenRoomReservedButRequestedDatesAreFree() {
+        room.setStatus(RoomStatus.RESERVED);
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+        given(bookingRepository.findOverlappingBookings(1L, request.getCheckIn(), request.getCheckOut()))
+                .willReturn(List.of());
+        given(bookingRepository.save(any(Booking.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.create(request);
+
+        assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
     }
 
     @Test
@@ -282,7 +313,7 @@ public class BookingServiceImplTest {
     // ---------- confirm ----------
 
     @Test
-    void confirm_setsConfirmedAndReservesRoom_whenPending() {
+    void confirm_setsConfirmed_whenPending() {
         Booking booking = bookingWithStatus(BookingStatus.PENDING);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -291,7 +322,9 @@ public class BookingServiceImplTest {
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(booking.getConfirmed_at()).isNotNull();
-        assertThat(room.getStatus()).isEqualTo(RoomStatus.RESERVED);
+        // Confirming must not touch RoomStatus: availability for other dates is
+        // decided per-date by the overlap query, not by a single room-wide flag.
+        assertThat(room.getStatus()).isEqualTo(RoomStatus.AVAILABLE);
     }
 
     @Test
@@ -309,9 +342,9 @@ public class BookingServiceImplTest {
     // ---------- cancel ----------
 
     @Test
-    void cancel_setsCancelledAndFreesRoom_whenNotAlreadyTerminal() {
+    void cancel_setsCancelled_whenNotAlreadyTerminal() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
-        room.setStatus(RoomStatus.RESERVED);
+        room.setStatus(RoomStatus.MAINTENANCE);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
 
@@ -319,7 +352,11 @@ public class BookingServiceImplTest {
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
         assertThat(booking.getCancelled_at()).isNotNull();
-        assertThat(room.getStatus()).isEqualTo(RoomStatus.AVAILABLE);
+        // Cancelling a booking must not clobber an operational flag staff set
+        // independently (e.g. the room was pulled for MAINTENANCE) by forcing it back
+        // to AVAILABLE. Freeing the dates is handled by excluding CANCELLED bookings
+        // from the overlap query, not by mutating RoomStatus.
+        assertThat(room.getStatus()).isEqualTo(RoomStatus.MAINTENANCE);
     }
 
     @Test
@@ -345,7 +382,7 @@ public class BookingServiceImplTest {
     // ---------- checkIn ----------
 
     @Test
-    void checkIn_setsCheckedInAndOccupiesRoom_whenConfirmed() {
+    void checkIn_setsCheckedIn_whenConfirmed() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -353,7 +390,7 @@ public class BookingServiceImplTest {
         BookingResponse response = bookingService.checkIn(10L);
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.CHECKED_IN);
-        assertThat(room.getStatus()).isEqualTo(RoomStatus.OCCUPIED);
+        assertThat(room.getStatus()).isEqualTo(RoomStatus.AVAILABLE);
     }
 
     @Test
@@ -369,16 +406,14 @@ public class BookingServiceImplTest {
     // ---------- complete ----------
 
     @Test
-    void complete_setsCompletedAndFreesRoom_whenCheckedIn() {
+    void complete_setsCompleted_whenCheckedIn() {
         Booking booking = bookingWithStatus(BookingStatus.CHECKED_IN);
-        room.setStatus(RoomStatus.OCCUPIED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         BookingResponse response = bookingService.complete(10L);
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.COMPLETED);
-        assertThat(room.getStatus()).isEqualTo(RoomStatus.AVAILABLE);
     }
 
     @Test

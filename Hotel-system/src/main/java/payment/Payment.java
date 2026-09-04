@@ -34,6 +34,20 @@ public class Payment {
     @Column(name = "transaction_id")
     private String transaction_id;
 
+    // Set only when this payment went through the gateway and was actually refunded via
+    // Stripe (see PaymentServiceImpl.refund) — distinct from transaction_id so the
+    // original charge/PaymentIntent id is never overwritten and both remain traceable
+    // in the Stripe dashboard.
+    @Column(name = "refund_transaction_id")
+    private String refund_transaction_id;
+
+    // Running total across possibly-multiple partial refunds, so a further partial
+    // refund (or the webhook reconciling one issued from the Stripe Dashboard) knows
+    // how much of `amount` is still owed rather than assuming this is the first refund.
+    @Column(name = "refunded_amount", nullable = false)
+    @Builder.Default
+    private Double refundedAmount = 0.0;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     @Builder.Default

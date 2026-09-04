@@ -63,6 +63,10 @@ public class SecurityConfig {
                         // Uploaded avatars are public images, same trust level as the hotel
                         // photos the frontend bundles — GET is open, uploading (POST) is not.
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // Stripe calls this directly with no user session and no JWT to send —
+                        // it authenticates itself via the Stripe-Signature header instead (see
+                        // PaymentServiceImpl.handleWebhookEvent), so it must bypass JWT auth here.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

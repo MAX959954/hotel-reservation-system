@@ -32,6 +32,19 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createIntent(request));
     }
 
+    // Called by Stripe itself, not a logged-in user — there is no JWT to check. Trust is
+    // established instead by verifying the Stripe-Signature header against
+    // stripe.webhook-secret inside handleWebhookEvent(); SecurityConfig permits this
+    // exact path so the request reaches here unauthenticated in the first place.
+    // @RequestBody String, not a DTO: Stripe's signature covers the exact raw bytes, so
+    // the payload must reach constructEvent unparsed/unre-serialized.
+    @PostMapping("/webhook")
+    public ResponseEntity<Void> webhook(@RequestBody String payload,
+                                         @RequestHeader("Stripe-Signature") String signature) {
+        paymentService.handleWebhookEvent(payload, signature);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{id}/confirm")
     @PreAuthorize("@companyAuth.isPaymentOwner(#id) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> confirm(@PathVariable Long id) {
@@ -87,10 +100,14 @@ public class PaymentController {
      — not compile time.
      */
 
+    // amount omitted (or absent from the request entirely) refunds whatever's still
+    // owed on this payment; a value refunds exactly that much and must not exceed it —
+    // see PaymentServiceImpl.refund for how repeated partial refunds are tracked.
     @PatchMapping("/{id}/refund")
     @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER')")
-    public ResponseEntity<PaymentResponse> refund(@PathVariable Long id) {
-        return ResponseEntity.ok(paymentService.refund(id));
+    public ResponseEntity<PaymentResponse> refund(@PathVariable Long id,
+                                                   @RequestParam(required = false) Double amount) {
+        return ResponseEntity.ok(paymentService.refund(id, amount));
     }
 
     @PatchMapping("/{id}/cancel")

@@ -15,6 +15,8 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -104,11 +106,22 @@ class PaymentControllerTest {
     void refund_returns200() throws Exception {
         PaymentResponse refunded = sampleResponse();
         refunded.setStatus(PaymentStatus.REFUNDED);
-        given(paymentService.refund(anyLong())).willReturn(refunded);
+        given(paymentService.refund(anyLong(), nullable(Double.class))).willReturn(refunded);
 
         mockMvc.perform(patch("/api/payments/{id}/refund", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REFUNDED"));
+    }
+
+    @Test
+    void refund_withAmount_passesItThrough_andReturns200() throws Exception {
+        PaymentResponse refunded = sampleResponse();
+        refunded.setStatus(PaymentStatus.PARTIALLY_REFUNDED);
+        given(paymentService.refund(eq(1L), eq(50.0))).willReturn(refunded);
+
+        mockMvc.perform(patch("/api/payments/{id}/refund", 1L).param("amount", "50.0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PARTIALLY_REFUNDED"));
     }
 
     @Test

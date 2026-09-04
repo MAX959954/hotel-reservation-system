@@ -15,7 +15,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByBookingStatus(BookingStatus status);
 
-    @Query("SELECT b FROM Booking b WHERE b.room.id = :roomId AND b.check_in < :checkOut AND b.check_out > :checkIn")
+    // CANCELLED/PAYMENT_FAILED bookings never occupied the room, so they must not keep
+    // blocking those dates for everyone else.
+    @Query("SELECT b FROM Booking b WHERE b.room.id = :roomId AND b.check_in < :checkOut AND b.check_out > :checkIn " +
+            "AND b.bookingStatus NOT IN (booking.BookingStatus.CANCELLED, booking.BookingStatus.PAYMENT_FAILED)")
     List<Booking> findOverlappingBookings(@Param("roomId") Long roomId,
                                           @Param("checkIn") LocalDateTime checkIn,
                                           @Param("checkOut") LocalDateTime checkOut);

@@ -70,3 +70,7 @@ stripe:
   # that needs Stripe (create/confirm payment), not application startup — so contextLoads()
   # and any test that boots the full context still work without a real key configured.
   secret-key: ${STRIPE_SECRET_KEY:}
+  # Signing secret for the /api/payments/webhook endpoint (Stripe CLI/Dashboard gives you
+  # one per webhook destination, starts with "whsec_"). Blank-safe for the same reason —
+  # an unconfigured secret only fails signature verification on an actual webhook call.
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
