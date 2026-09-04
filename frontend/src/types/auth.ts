@@ -17,6 +17,10 @@ export function roleLabel(role: string): string {
 
 export interface AuthResponse {
   token: string
+  /** Exchanged at /api/auth/refresh for a new access token once this one's short TTL
+   *  (jwt.expiration, ~15 min) runs out — see api/http.ts's 401 interceptor. Rotates on
+   *  every refresh: the value here is only ever the *current* one, never reused. */
+  refreshToken: string
   tokenType: string
   userId: number
   email: string

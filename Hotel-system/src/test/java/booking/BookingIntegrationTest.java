@@ -21,6 +21,7 @@ import user.User;
 import user.UserRepository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +42,9 @@ class BookingIntegrationTest {
 
     @Autowired
     private BookingService bookingService;
+
+    @Autowired
+    private BookingRepository bookingRepository;
 
     @Autowired
     private RoomRepository roomRepository;
@@ -193,5 +197,43 @@ class BookingIntegrationTest {
 
         assertThat(second.getRoomId()).isEqualTo(room.getId());
         assertThat(second.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
+    }
+
+    // ---------- BookingLifecycleScheduler queries ----------
+
+    @Test
+    void findStalePending_returnsPendingBookings_onlyWhenOlderThanCutoff() {
+        bookingService.create(requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3)));
+
+        // created_at is set to "now" by @PrePersist and can't be backdated (updatable =
+        // false), so instead of faking an old row, the cutoff itself is moved: a cutoff
+        // in the future makes this just-created row count as "older than cutoff", one in
+        // the past does not.
+        assertThat(bookingRepository.findStalePending(LocalDateTime.now().plusHours(1))).hasSize(1);
+        assertThat(bookingRepository.findStalePending(LocalDateTime.now().minusHours(1))).isEmpty();
+    }
+
+    @Test
+    void findOverdueForNoShow_returnsOnlyConfirmedBookingsPastCheckIn() {
+        BookingResponse overdue = bookingService.create(
+                requestFor(LocalDateTime.now().minusDays(3), LocalDateTime.now().minusDays(1)));
+        bookingService.confirm(overdue.getId());
+
+        BookingResponse notYetDue = bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(5), LocalDateTime.now().plusDays(7)));
+        bookingService.confirm(notYetDue.getId());
+
+        List<Booking> results = bookingRepository.findOverdueForNoShow(LocalDateTime.now());
+
+        assertThat(results).extracting(Booking::getId).containsExactly(overdue.getId());
+    }
+
+    @Test
+    void findOverdueForNoShow_excludesBookingsNeverConfirmed() {
+        // Still PENDING — never confirmed by staff, so however overdue its check-in date
+        // is, this isn't a no-show, it's an abandoned request (findStalePending's job).
+        bookingService.create(requestFor(LocalDateTime.now().minusDays(3), LocalDateTime.now().minusDays(1)));
+
+        assertThat(bookingRepository.findOverdueForNoShow(LocalDateTime.now())).isEmpty();
     }
 }

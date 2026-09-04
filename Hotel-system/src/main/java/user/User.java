@@ -76,6 +76,23 @@ public class User {
     @Builder.Default
     private AccountStatus accountStatus = AccountStatus.APPROVED;
 
+    // Both reset to zero/null on a successful login, or lazily once lockedUntil has
+    // passed (see UserServiceImpl.login) — never touched for a status an admin set for
+    // an unrelated reason (BANNED, SUSPENDED, ...), which this mechanism must never undo.
+    @Column(name = "failed_login_attempts", nullable = false)
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
+    // Any access token issued before this instant is rejected regardless of its own
+    // expiry — bumped to "now" on password change so every session elsewhere is cut
+    // instantly instead of staying valid until each token's own TTL runs out. Null means
+    // no restriction (the common case: nothing has ever forced a global logout).
+    @Column(name = "token_valid_after")
+    private LocalDateTime tokenValidAfter;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -16,3 +16,12 @@ spring:
 jwt:
   secret: JGIyW31SVJyNNn5NGlMrb3rsJ2DV1/QYTRJSZjpcJa8=
   expiration: 86400000
+
+app:
+  # Scheduled jobs (BookingLifecycleScheduler, PaymentLifecycleScheduler) run on their
+  # own thread outside any test's transaction — leaving them on here would let a
+  # background tick mutate rows mid-test, or race an in-progress test transaction on the
+  # same H2 instance. Every @SpringBootTest boots the full context, so this has to be
+  # off by default for the whole test profile, not opted out per test.
+  scheduling:
+    enabled: false

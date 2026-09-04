@@ -84,6 +84,15 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.complete(id));
     }
 
+    // Normally set automatically by BookingLifecycleScheduler once check-in time plus a
+    // grace period has passed — exposed here too so front desk can flag it immediately
+    // instead of waiting for the next run.
+    @PatchMapping("/{id}/noShow")
+    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST' , 'HOTEL_MANAGER') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    public ResponseEntity<BookingResponse> noShow(@PathVariable Long id) {
+        return ResponseEntity.ok(bookingService.noShow(id));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {

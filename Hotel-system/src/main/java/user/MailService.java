@@ -72,6 +72,57 @@ public class MailService {
         send(toEmail, "Payment confirmed — " + hotelName, html, null);
     }
 
+    public void sendBookingConfirmed(String toEmail, String guestName, String hotelName, String roomNumber,
+                                      LocalDateTime checkIn, LocalDateTime checkOut) {
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut));
+        String intro = "Hi %s — your booking at <strong>%s</strong> is confirmed.".formatted(guestName, hotelName);
+        String footer = "You can view or manage this booking any time from \"My bookings\" on Folio.";
+        send(toEmail, "Booking confirmed — " + hotelName, emailShell("Booking confirmed", intro, rows, footer), null);
+    }
+
+    public void sendBookingCancelled(String toEmail, String guestName, String hotelName, String roomNumber,
+                                      LocalDateTime checkIn, LocalDateTime checkOut) {
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut));
+        String intro = "Hi %s — your booking at <strong>%s</strong> has been cancelled.".formatted(guestName, hotelName);
+        String footer = "If a payment was made and a refund applies, it will be processed separately. "
+                + "Questions? Reach out from \"My bookings\" on Folio.";
+        send(toEmail, "Booking cancelled — " + hotelName, emailShell("Booking cancelled", intro, rows, footer), null);
+    }
+
+    public void sendBookingCheckedIn(String toEmail, String guestName, String hotelName, String roomNumber,
+                                      LocalDateTime checkIn, LocalDateTime checkOut) {
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut));
+        String intro = "Hi %s — you're checked in at <strong>%s</strong>. Enjoy your stay!".formatted(guestName, hotelName);
+        String footer = "You can view or manage this booking any time from \"My bookings\" on Folio.";
+        send(toEmail, "You're checked in — " + hotelName, emailShell("Checked in", intro, rows, footer), null);
+    }
+
+    public void sendBookingCompleted(String toEmail, String guestName, String hotelName, String roomNumber,
+                                      LocalDateTime checkIn, LocalDateTime checkOut) {
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut));
+        String intro = "Hi %s — thanks for staying at <strong>%s</strong>. We hope you enjoyed it!".formatted(guestName, hotelName);
+        String footer = "We'd love to hear about your stay — leave a review any time from \"My bookings\" on Folio.";
+        send(toEmail, "Thanks for staying at " + hotelName, emailShell("Stay completed", intro, rows, footer), null);
+    }
+
+    public void sendBookingNoShow(String toEmail, String guestName, String hotelName, String roomNumber,
+                                   LocalDateTime checkIn, LocalDateTime checkOut) {
+        String rows = detailRow("Room", roomNumber)
+                + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
+                + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut));
+        String intro = "Hi %s — we marked your booking at <strong>%s</strong> as a no-show since check-in time has passed."
+                .formatted(guestName, hotelName);
+        String footer = "If this doesn't look right, reach out from \"My bookings\" on Folio.";
+        send(toEmail, "Booking marked as no-show — " + hotelName, emailShell("Marked as no-show", intro, rows, footer), null);
+    }
+
     public void sendCompanyInvite(String toEmail, String companyName, String role) {
         String rows = detailRow("Company", companyName) + detailRow("Role", humaniseRole(role));
         String intro = "You've been invited to join <strong>%s</strong> on Folio.".formatted(companyName);

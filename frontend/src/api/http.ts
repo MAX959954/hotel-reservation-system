@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios'
-import type { ApiError } from '@/types/auth'
+import type { AxiosRequestConfig } from 'axios'
+import type { ApiError, AuthResponse } from '@/types/auth'
 import { useAuthStore } from '@/stores/auth'
 import { i18n } from '@/i18n'
 
@@ -28,9 +29,50 @@ http.interceptors.request.use((config) => {
   return config
 })
 
+type RetryableConfig = AxiosRequestConfig & { _retriedAfterRefresh?: boolean }
+
+// jwt.expiration is short on purpose (~15 min) now that refresh tokens exist — this is
+// what makes that not mean re-entering a password every 15 minutes. Calls http directly
+// (not authApi.refresh) to avoid a module cycle: api/auth.ts itself imports http from here.
+let refreshInFlight: Promise<string | null> | null = null
+
+function refreshAccessToken(): Promise<string | null> {
+  const auth = useAuthStore()
+  if (!auth.refreshToken) return Promise.resolve(null)
+
+  // Concurrent 401s (several requests in flight when the access token expires) must
+  // share one refresh call — each racing off to consume the same refresh token would
+  // mean only the first succeeds and the rest get treated as a leaked/replayed token.
+  if (!refreshInFlight) {
+    refreshInFlight = http
+      .post<AuthResponse>('/api/auth/refresh', { refreshToken: auth.refreshToken })
+      .then(({ data }) => {
+        auth.setTokens(data.token, data.refreshToken)
+        return data.token
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null
+      })
+  }
+  return refreshInFlight
+}
+
 http.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const original = error.config as RetryableConfig | undefined
+    const isAuthEndpoint = original?.url?.includes('/api/auth/')
+
+    if (error.response?.status === 401 && original && !original._retriedAfterRefresh && !isAuthEndpoint) {
+      original._retriedAfterRefresh = true
+      const newToken = await refreshAccessToken()
+      if (newToken) {
+        original.headers = { ...original.headers, Authorization: `Bearer ${newToken}` }
+        return http(original)
+      }
+    }
+
     if (error.response?.status === 401) {
       useAuthStore().logout()
     }

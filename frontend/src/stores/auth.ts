@@ -5,6 +5,7 @@ const STORAGE_KEY = 'folio-auth'
 
 interface AuthState {
   token: string | null
+  refreshToken: string | null
   tokenType: string
   userId: number | null
   email: string | null
@@ -14,7 +15,15 @@ interface AuthState {
 }
 
 function emptyState(): AuthState {
-  return { token: null, tokenType: 'Bearer', userId: null, email: null, roles: [], avatarUrl: null }
+  return {
+    token: null,
+    refreshToken: null,
+    tokenType: 'Bearer',
+    userId: null,
+    email: null,
+    roles: [],
+    avatarUrl: null,
+  }
 }
 
 function loadState(): AuthState {
@@ -41,6 +50,7 @@ export const useAuthStore = defineStore('auth', {
         STORAGE_KEY,
         JSON.stringify({
           token: this.token,
+          refreshToken: this.refreshToken,
           tokenType: this.tokenType,
           userId: this.userId,
           email: this.email,
@@ -52,6 +62,7 @@ export const useAuthStore = defineStore('auth', {
 
     setSession(res: AuthResponse) {
       this.token = res.token
+      this.refreshToken = res.refreshToken
       this.tokenType = res.tokenType || 'Bearer'
       this.userId = res.userId
       this.email = res.email
@@ -59,6 +70,15 @@ export const useAuthStore = defineStore('auth', {
       // Not carried on AuthResponse — cleared here so a different account signing in on
       // the same browser doesn't briefly show the previous user's photo until refetched.
       this.avatarUrl = null
+      this.persist()
+    },
+
+    /** http.ts's 401 interceptor calls this after a successful silent refresh — same
+     *  session, just a rotated pair of tokens, so nothing else about it (avatar, roles)
+     *  needs touching. */
+    setTokens(token: string, refreshToken: string) {
+      this.token = token
+      this.refreshToken = refreshToken
       this.persist()
     },
 

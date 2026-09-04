@@ -26,10 +26,15 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.pay(request));
     }
 
+    // Idempotency-Key is optional and caller-supplied (the frontend generates one fresh
+    // per "Pay" attempt) — see PaymentServiceImpl.createIntent for why it can't safely be
+    // derived on the server from the booking instead.
     @PostMapping("/intent")
     @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
-    public ResponseEntity<PaymentIntentResponse> createIntent(@Valid @RequestBody PaymentRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createIntent(request));
+    public ResponseEntity<PaymentIntentResponse> createIntent(
+            @Valid @RequestBody PaymentRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.createIntent(request, idempotencyKey));
     }
 
     // Called by Stripe itself, not a logged-in user — there is no JWT to check. Trust is

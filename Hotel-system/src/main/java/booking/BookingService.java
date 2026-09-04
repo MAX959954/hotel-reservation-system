@@ -29,6 +29,11 @@ public interface BookingService {
 
     BookingResponse complete(Long id);
 
+    /** Flags a CONFIRMED booking whose guest never checked in. Called manually by staff,
+     *  or automatically by BookingLifecycleScheduler once check-in time plus a grace
+     *  period has passed. */
+    BookingResponse noShow(Long id);
+
     void delete(Long id );
 
 }

@@ -1,14 +1,20 @@
 package booking;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import room.Room;
 import room.RoomRepository;
 import room.RoomStatus;
+import user.MailService;
 import user.User;
 import user.UserRepository;
 
@@ -16,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService{
@@ -23,6 +30,8 @@ public class BookingServiceImpl implements BookingService{
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
+    private final MailService mailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -125,7 +134,9 @@ public class BookingServiceImpl implements BookingService{
 
         booking.setBookingStatus(BookingStatus.CONFIRMED);
         booking.setConfirmed_at(LocalDateTime.now());
-        return  toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        publishStatusChange(saved);
+        return toResponse(saved);
     }
 
     @Override
@@ -140,7 +151,9 @@ public class BookingServiceImpl implements BookingService{
         }
         booking.setBookingStatus(BookingStatus.CANCELLED);
         booking.setCancelled_at(LocalDateTime.now());
-        return toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        publishStatusChange(saved);
+        return toResponse(saved);
     }
 
     @Override
@@ -153,7 +166,9 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Only CONFIRMED bookings can be checked in");
         }
         booking.setBookingStatus(BookingStatus.CHECKED_IN);
-        return toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        publishStatusChange(saved);
+        return toResponse(saved);
     }
 
     @Override
@@ -166,13 +181,73 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Only CHECKED_IN bookings can be completed");
         }
         booking.setBookingStatus(BookingStatus.COMPLETED);
-        return toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        publishStatusChange(saved);
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
+    public BookingResponse noShow(Long id) {
+        Booking booking = findById(id);
+
+        if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
+            throw new IllegalStateException("Only CONFIRMED bookings can be marked as no-show");
+        }
+
+        booking.setBookingStatus(BookingStatus.NO_SHOW);
+        Booking saved = bookingRepository.save(booking);
+        publishStatusChange(saved);
+        return toResponse(saved);
     }
 
     @Override
     @Transactional
     public void delete(Long id) {
         bookingRepository.delete(findById(id));
+    }
+
+    // Published now but only delivered after the transaction commits (see
+    // sendStatusEmail below) — same reasoning as PaymentServiceImpl.publishConfirmation:
+    // the booking row must not depend on mail delivery succeeding.
+    private void publishStatusChange(Booking booking) {
+        eventPublisher.publishEvent(new BookingStatusChangedEvent(
+                booking.getUser().getEmail(),
+                booking.getUser().getFirstName(),
+                booking.getRoom().getHotel().getName(),
+                booking.getRoom().getNumber(),
+                booking.getCheck_in(),
+                booking.getCheck_out(),
+                booking.getBookingStatus()
+        ));
+    }
+
+    @Async("mailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendStatusEmail(BookingStatusChangedEvent event) {
+        try {
+            switch (event.status()) {
+                case CONFIRMED -> mailService.sendBookingConfirmed(
+                        event.email(), event.guestName(), event.hotelName(), event.roomNumber(),
+                        event.checkIn(), event.checkOut());
+                case CANCELLED -> mailService.sendBookingCancelled(
+                        event.email(), event.guestName(), event.hotelName(), event.roomNumber(),
+                        event.checkIn(), event.checkOut());
+                case CHECKED_IN -> mailService.sendBookingCheckedIn(
+                        event.email(), event.guestName(), event.hotelName(), event.roomNumber(),
+                        event.checkIn(), event.checkOut());
+                case COMPLETED -> mailService.sendBookingCompleted(
+                        event.email(), event.guestName(), event.hotelName(), event.roomNumber(),
+                        event.checkIn(), event.checkOut());
+                case NO_SHOW -> mailService.sendBookingNoShow(
+                        event.email(), event.guestName(), event.hotelName(), event.roomNumber(),
+                        event.checkIn(), event.checkOut());
+                default -> log.debug("No email template for booking status {}", event.status());
+            }
+        } catch (Exception e) {
+            log.warn("Could not deliver booking status email to {}: {}", event.email(), e.getMessage());
+        }
     }
 
     public Booking findById(Long id) {

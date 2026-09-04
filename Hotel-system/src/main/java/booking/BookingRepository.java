@@ -28,4 +28,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByRoom_Hotel_Company_Id(Long companyId);
 
     List<Booking> findByRoom_Hotel_Company_IdAndBookingStatus(Long companyId, BookingStatus status);
+
+    // Used by BookingLifecycleScheduler to auto-cancel requests staff never acted on —
+    // see app.bookings.pending-hold-hours.
+    @Query("SELECT b FROM Booking b WHERE b.bookingStatus = booking.BookingStatus.PENDING AND b.created_at < :cutoff")
+    List<Booking> findStalePending(@Param("cutoff") LocalDateTime cutoff);
+
+    // Used by BookingLifecycleScheduler to flag guests who never checked in — see
+    // app.bookings.no-show-grace-hours.
+    @Query("SELECT b FROM Booking b WHERE b.bookingStatus = booking.BookingStatus.CONFIRMED AND b.check_in < :cutoff")
+    List<Booking> findOverdueForNoShow(@Param("cutoff") LocalDateTime cutoff);
 }

@@ -8,8 +8,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,14 +29,40 @@ public class JwtService {
         return Jwts.builder()
                 .subject(email)
                 .claim("roles" , roles.stream().map(Enum::name).collect(Collectors.toSet()))
+                // Unique per issued token, independent of subject/issuedAt (two tokens for
+                // the same user in the same millisecond must still be distinguishable) —
+                // this is what JwtBlacklistService/RefreshTokenService key single-token
+                // revocation on, since the token itself can't just be deleted like a
+                // server-side session would be.
+                .id(UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())
                 .compact();
     }
 
+    public long getExpirationMs() {
+        return expirationMs;
+    }
+
     public String extractEmail(String token) {
         return extractClaims(token).getSubject();
+    }
+
+    public String extractJti(String token) {
+        return extractClaims(token).getId();
+    }
+
+    public LocalDateTime extractIssuedAt(String token) {
+        return LocalDateTime.ofInstant(extractClaims(token).getIssuedAt().toInstant(), ZoneId.systemDefault());
+    }
+
+    /** How much longer this token has left to live, floored at zero for an already
+     *  (or about-to-be) expired one — sized for JwtBlacklistService, whose TTL only
+     *  needs to outlive the token itself. */
+    public Duration remainingValidity(String token) {
+        long remainingMs = extractClaims(token).getExpiration().getTime() - System.currentTimeMillis();
+        return Duration.ofMillis(Math.max(remainingMs, 0));
     }
 
     public boolean isTokenValid (String token , String email) {

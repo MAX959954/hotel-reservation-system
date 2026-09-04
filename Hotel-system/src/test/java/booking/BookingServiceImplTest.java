@@ -10,11 +10,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import room.Room;
 import room.RoomRepository;
 import room.RoomStatus;
+import user.MailService;
 import user.User;
 import user.UserRepository;
 
@@ -42,6 +44,12 @@ public class BookingServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private MailService mailService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     // @InjectMocks creates a real instance of the class you're
     // testing (e.g. BookingService) and automatically injects
@@ -424,6 +432,134 @@ public class BookingServiceImplTest {
         assertThatThrownBy(() -> bookingService.complete(10L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Only CHECKED_IN bookings can be completed");
+    }
+
+    // ---------- noShow ----------
+
+    @Test
+    void noShow_setsNoShow_whenConfirmed() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.noShow(10L);
+
+        assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.NO_SHOW);
+    }
+
+    @Test
+    void noShow_throws_whenNotConfirmed() {
+        Booking booking = bookingWithStatus(BookingStatus.PENDING);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.noShow(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only CONFIRMED bookings can be marked as no-show");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    // ---------- status change emails ----------
+    // publishStatusChange fires unconditionally on every successful transition; the actual
+    // send happens later, out-of-band, in sendStatusEmail (see PaymentServiceImplTest's
+    // equivalent coverage for why the send itself isn't exercised at this layer).
+
+    @Test
+    void confirm_publishesStatusChangeEvent() {
+        Booking booking = bookingWithStatus(BookingStatus.PENDING);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.confirm(10L);
+
+        ArgumentCaptor<BookingStatusChangedEvent> captor = ArgumentCaptor.forClass(BookingStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(captor.getValue().email()).isEqualTo(user.getEmail());
+        assertThat(captor.getValue().hotelName()).isEqualTo(hotel.getName());
+    }
+
+    @Test
+    void cancel_publishesStatusChangeEvent() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancel(10L);
+
+        ArgumentCaptor<BookingStatusChangedEvent> captor = ArgumentCaptor.forClass(BookingStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(BookingStatus.CANCELLED);
+    }
+
+    @Test
+    void checkIn_publishesStatusChangeEvent() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.checkIn(10L);
+
+        ArgumentCaptor<BookingStatusChangedEvent> captor = ArgumentCaptor.forClass(BookingStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(BookingStatus.CHECKED_IN);
+    }
+
+    @Test
+    void complete_publishesStatusChangeEvent() {
+        Booking booking = bookingWithStatus(BookingStatus.CHECKED_IN);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.complete(10L);
+
+        ArgumentCaptor<BookingStatusChangedEvent> captor = ArgumentCaptor.forClass(BookingStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(BookingStatus.COMPLETED);
+    }
+
+    @Test
+    void noShow_publishesStatusChangeEvent() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.noShow(10L);
+
+        ArgumentCaptor<BookingStatusChangedEvent> captor = ArgumentCaptor.forClass(BookingStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(BookingStatus.NO_SHOW);
+    }
+
+    @Test
+    void sendStatusEmail_dispatchesToTheRightMailServiceMethod_perStatus() {
+        BookingStatusChangedEvent confirmed = new BookingStatusChangedEvent(
+                "jane@example.com", "Jane", "Grand Hotel", "101",
+                request.getCheckIn(), request.getCheckOut(), BookingStatus.CONFIRMED);
+        bookingService.sendStatusEmail(confirmed);
+        verify(mailService).sendBookingConfirmed("jane@example.com", "Jane", "Grand Hotel", "101",
+                request.getCheckIn(), request.getCheckOut());
+
+        BookingStatusChangedEvent cancelled = new BookingStatusChangedEvent(
+                "jane@example.com", "Jane", "Grand Hotel", "101",
+                request.getCheckIn(), request.getCheckOut(), BookingStatus.CANCELLED);
+        bookingService.sendStatusEmail(cancelled);
+        verify(mailService).sendBookingCancelled("jane@example.com", "Jane", "Grand Hotel", "101",
+                request.getCheckIn(), request.getCheckOut());
+    }
+
+    @Test
+    void sendStatusEmail_doesNotPropagate_whenMailServiceThrows() {
+        Mockito.doThrow(new RuntimeException("SendGrid is down"))
+                .when(mailService).sendBookingConfirmed(any(), any(), any(), any(), any(), any());
+
+        BookingStatusChangedEvent event = new BookingStatusChangedEvent(
+                "jane@example.com", "Jane", "Grand Hotel", "101",
+                request.getCheckIn(), request.getCheckOut(), BookingStatus.CONFIRMED);
+
+        // A failed email must never bubble up into whatever fired the event — mail delivery
+        // is best-effort, not part of the booking transition itself.
+        bookingService.sendStatusEmail(event);
     }
 
     // ---------- delete ----------
