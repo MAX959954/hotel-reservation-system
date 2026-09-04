@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -193,6 +194,25 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     public UserProfileResponse revokeRole(Long userId, Roles role) {
         User user = findById(userId);
         user.getRoles().remove(role);
+        return toProfileResponse(userRepository.save(user));
+    }
+
+    @Override
+    public List<UserProfileResponse> searchUsers(String search, Roles role, AccountStatus status) {
+        String normalizedSearch = (search == null || search.isBlank()) ? "" : search.trim();
+        return userRepository.search(normalizedSearch, role, status).stream().map(this::toProfileResponse).toList();
+    }
+
+    @Override
+    public UserProfileResponse getProfileById(Long userId) {
+        return toProfileResponse(findById(userId));
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateAccountStatus(Long userId, AccountStatus status) {
+        User user = findById(userId);
+        user.setAccountStatus(status);
         return toProfileResponse(userRepository.save(user));
     }
 

@@ -1,3 +1,6 @@
+import { i18n } from '@/i18n'
+import { humanise } from './room'
+
 export type Role =
   | 'GUEST'
   | 'COMPANY_CLIENT'
@@ -5,6 +8,12 @@ export type Role =
   | 'HOTEL_MANAGER'
   | 'ADMIN'
   | 'SUPPORT'
+
+export function roleLabel(role: string): string {
+  const key = `role.${role}`
+  const translated = i18n.global.t(key)
+  return translated === key ? humanise(role) : translated
+}
 
 export interface AuthResponse {
   token: string
