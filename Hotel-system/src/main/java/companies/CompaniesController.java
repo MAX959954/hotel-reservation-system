@@ -44,7 +44,11 @@ public class CompaniesController {
         return ResponseEntity.ok(companiesService.getByCity(city));
     }
 
+    // Was completely ungated — CompaniesResponse carries bankAccountHolder/bankIban, so
+    // any authenticated user could have listed every company's bank details (plus the
+    // PENDING_VERIFICATION queue, which is also just internal ops data) by status alone.
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<CompaniesResponse>> getByStatus(@PathVariable CompaniesStatus status) {
         return ResponseEntity.ok(companiesService.getByStatus(status));
     }

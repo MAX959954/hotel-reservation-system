@@ -68,17 +68,25 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getByBookingId(bookingId));
     }
 
+    // These three were completely ungated — any authenticated guest could list every
+    // payment in the system (amount, currency, Stripe transaction id, refund state)
+    // across every company, just by hitting one of these with no path scoping to filter
+    // by. Not company-scoped even for staff (same as BookingController.getByStatus)
+    // because that would need a dedicated per-company query; admin-only for now.
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<PaymentResponse>> getByStatus(@PathVariable PaymentStatus status) {
         return ResponseEntity.ok(paymentService.getByStatus(status));
     }
 
     @GetMapping("/method/{method}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<PaymentResponse>> getByMethod(@PathVariable PaymentMethod method) {
         return ResponseEntity.ok(paymentService.getByMethod(method));
     }
 
     @GetMapping("/status/{status}/method/{method}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<PaymentResponse>> getByStatusAndMethod(
             @PathVariable PaymentStatus status,
             @PathVariable PaymentMethod method) {

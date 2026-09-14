@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import payment.PaymentRepository;
+import reviews.ReviewsRepository;
 import room.RoomRepository;
 import user.UserRepository;
 
@@ -24,6 +25,7 @@ public class CompanyAuthorization {
     private final HotelsRepository hotelsRepository;
     private final RoomRepository roomRepository;
     private final CompaniesRepository companiesRepository;
+    private final ReviewsRepository reviewsRepository;
 
     public boolean hasRole(Long companyId , String... roles) {
         Long userId = currentUserId();
@@ -107,6 +109,19 @@ public class CompanyAuthorization {
         Long userId = currentUserId();
         return userId != null && paymentRepository.findById(paymentId)
                 .map(payment -> payment.getBooking().getUser().getId().equals(userId))
+                .orElse(false);
+    }
+
+    public boolean hasRoleForReview(Long reviewId, String... roles) {
+        return reviewsRepository.findById(reviewId)
+                .map(review -> hasRole(review.getRoom().getHotel().getCompany().getId(), roles))
+                .orElse(false);
+    }
+
+    public boolean isReviewOwner(Long reviewId) {
+        Long userId = currentUserId();
+        return userId != null && reviewsRepository.findById(reviewId)
+                .map(review -> review.getUser().getId().equals(userId))
                 .orElse(false);
     }
 
