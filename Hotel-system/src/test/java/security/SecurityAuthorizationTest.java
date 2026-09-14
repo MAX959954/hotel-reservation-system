@@ -1,8 +1,14 @@
 package security;
 
+import booking.Booking;
+import booking.BookingRepository;
 import booking.BookingService;
 import booking.BookingStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import companies.Companies;
+import companies.CompaniesRepository;
+import hotels.Hotels;
+import hotels.HotelsRepository;
 import org.example.hotelsystem.HotelSystemApplication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import reviews.ReviewsRequest;
 import reviews.ReviewsResponse;
 import reviews.ReviewsService;
+import room.Room;
+import room.RoomRepository;
+import room.RoomStatus;
+import room.RoomType;
 import user.MailService;
 import user.JwtService;
 import user.OtpRequestPayload;
@@ -23,6 +33,7 @@ import user.Roles;
 import user.User;
 import user.UserRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -54,6 +65,18 @@ class SecurityAuthorizationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private CompaniesRepository companiesRepository;
+
+    @Autowired
+    private HotelsRepository hotelsRepository;
+
+    @Autowired
+    private RoomRepository roomRepository;
+
+    @Autowired
+    private BookingRepository bookingRepository;
+
     @MockBean
     private BookingService bookingService;
 
@@ -65,6 +88,7 @@ class SecurityAuthorizationTest {
 
     private String guestToken;
     private String adminToken;
+    private Long guestOwnedBookingId;
 
     @BeforeEach
     void setUp() {
@@ -80,6 +104,54 @@ class SecurityAuthorizationTest {
                 .build();
         userRepository.save(guest);
         guestToken = jwtService.generateToken(guest.getEmail(), guest.getRoles());
+
+        // POST /api/reviews is now gated on @companyAuth.isBookingOwner(#request.bookingId)
+        // (see ReviewsController) — a real booking belonging to `guest` so that check has
+        // something to find, rather than a bare literal id nothing in the DB matches.
+        Companies company = companiesRepository.save(Companies.builder()
+                .name("Acme Hospitality")
+                .legal_name("Acme Hospitality LLC")
+                .email("contact@acme.com")
+                .phone("+123456789")
+                .address("1 Main St")
+                .city("Paris")
+                .country("France")
+                .website("https://acme.com")
+                .build());
+
+        Hotels hotel = hotelsRepository.save(Hotels.builder()
+                .name("Grand Hotel")
+                .city("Paris")
+                .country("France")
+                .address("1 Rue de Rivoli")
+                .star_rating(4)
+                .phone("+123456789")
+                .email("contact@grandhotel.com")
+                .description("A lovely hotel")
+                .image_url("http://example.com/image.jpg")
+                .company(company)
+                .build());
+
+        Room room = roomRepository.save(Room.builder()
+                .number("101")
+                .type(RoomType.DOUBLE)
+                .price_per_night(100.0)
+                .capacity(2)
+                .floor(1)
+                .status(RoomStatus.AVAILABLE)
+                .hotel(hotel)
+                .build());
+
+        Booking booking = bookingRepository.save(Booking.builder()
+                .user(guest)
+                .room(room)
+                .check_in(LocalDateTime.now().plusDays(1))
+                .check_out(LocalDateTime.now().plusDays(3))
+                .guestCount(2)
+                .totalPrice(200.0)
+                .bookingStatus(BookingStatus.COMPLETED)
+                .build());
+        guestOwnedBookingId = booking.getId();
 
         User admin = User.builder()
                 .firstName("Alice")
@@ -132,9 +204,9 @@ class SecurityAuthorizationTest {
     }
 
     @Test
-    void authenticatedOnlyEndpoint_returns201_forAnyAuthenticatedUser() throws Exception {
+    void authenticatedOnlyEndpoint_returns201_forTheBookingsOwnGuest() throws Exception {
         ReviewsRequest request = new ReviewsRequest();
-        request.setBookingId(1L);
+        request.setBookingId(guestOwnedBookingId);
         request.setRating(5);
 
         given(reviewsService.create(any(ReviewsRequest.class))).willReturn(ReviewsResponse.builder().id(1L).build());
@@ -144,6 +216,36 @@ class SecurityAuthorizationTest {
                         .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", "Bearer " + guestToken))
                 .andExpect(status().isCreated());
+    }
+
+    // POST /api/reviews is gated on @companyAuth.isBookingOwner(#request.bookingId) — a
+    // guest can only review their own booking, not one belonging to someone else. Without
+    // this, any authenticated user could post a review against a stranger's completed stay
+    // just by guessing its booking id.
+    @Test
+    void authenticatedOnlyEndpoint_returns403_forSomeoneElsesBooking() throws Exception {
+        User otherGuest = User.builder()
+                .firstName("Owen")
+                .lastName("Other")
+                .email("owen.other@example.com")
+                .passwordHash("hashed")
+                .phone("+100000003")
+                .roles(Set.of(Roles.GUEST))
+                .emailVerified(true)
+                .enabled(true)
+                .build();
+        userRepository.save(otherGuest);
+        String otherGuestToken = jwtService.generateToken(otherGuest.getEmail(), otherGuest.getRoles());
+
+        ReviewsRequest request = new ReviewsRequest();
+        request.setBookingId(guestOwnedBookingId);
+        request.setRating(5);
+
+        mockMvc.perform(post("/api/reviews")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", "Bearer " + otherGuestToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
