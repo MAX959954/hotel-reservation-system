@@ -1,0 +1,21 @@
+# Activated with SPRING_PROFILES_ACTIVE=prod (set this in Railway/whatever PaaS you
+# deploy to — Docker Compose's own local workflow stays on the base application.yml
+# defaults, which are meant for that). Only overrides what actually needs to differ;
+# everything else keeps inheriting from application.yml.
+
+cors:
+  # No fallback here on purpose, unlike the base file's localhost default — an unset
+  # CORS_ALLOWED_ORIGINS in prod should fail the deploy loudly (Spring refuses to start:
+  # "Could not resolve placeholder") rather than silently leave CORS on a value that can
+  # only ever match a browser on the machine running the container.
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    root: INFO
+    # These three are the chattiest loggers in a normal request/startup path and add
+    # little beyond what root:INFO already gives you — Hibernate's own SQL logging is
+    # separately gated by spring.jpa.show-sql anyway (see application.yml).
+    org.hibernate: WARN
+    org.springframework.web: WARN
+    com.zaxxer.hikari: WARN

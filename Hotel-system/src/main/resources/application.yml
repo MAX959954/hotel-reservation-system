@@ -19,7 +19,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    # Off by default so prod logs don't spell out every query (and any literal values
+    # logged alongside them) — flip on locally with SHOW_SQL=true when you need it.
+    show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -34,11 +36,29 @@ spring:
       max-file-size: 5MB
       max-request-size: 5MB
 
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
 server:
   # Railway (and most PaaS hosts) assign the listen port at runtime via $PORT rather than
   # letting you pick one — 8080 stays the default for local/Docker Compose, where nothing
   # sets that variable.
   port: ${PORT:8080}
+  # Let in-flight requests finish (up to the timeout below) instead of dropping them the
+  # instant SIGTERM arrives — matters once this runs behind an orchestrator that restarts
+  # containers routinely (deploys, autoscaling), not just on crashes.
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only health is exposed — env/beans/etc. would leak internals to anyone who can
+        # reach the port, and nothing here needs them.
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 jwt:
   secret: ${JWT_SECRET}
