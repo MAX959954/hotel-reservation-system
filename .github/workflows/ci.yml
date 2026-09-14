@@ -38,6 +38,12 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Windows has no concept of the unix exec bit, so a commit made from a Windows
+      # checkout can silently flip gradlew back to non-executable in the git index even
+      # though the fix is already committed — this keeps CI working regardless.
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Run tests
         run: ./gradlew test --no-daemon
 
