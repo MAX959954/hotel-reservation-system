@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Container/orchestrator healthcheck hits this with no JWT to send.
+                        .requestMatchers("/actuator/health/**").permitAll()
                         // Public browsing: hotel/room search and detail reads don't require
                         // an account, matching how every OTA works — only booking does.
                         .requestMatchers(HttpMethod.GET,

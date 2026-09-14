@@ -54,6 +54,16 @@ services:
       - hotel_uploads_data:/app/uploads
     ports:
       - "8081:8080"
+    # Also baked into the image as a HEALTHCHECK instruction (so it still applies on
+    # hosts that run the image directly, outside Compose) — repeated here so `docker
+    # compose ps` shows status without digging into the Dockerfile, and so anything
+    # added later can depends_on: app with condition: service_healthy.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     restart: unless-stopped
 
 volumes:

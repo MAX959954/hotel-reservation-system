@@ -85,3 +85,25 @@ built from `Hotel-system/Dockerfile` and `frontend/Dockerfile` respectively (the
 frontend's build serves the compiled Vite output through nginx). Both need their Root
 Directory set accordingly in the service's Settings, plus a Postgres and Redis instance
 provisioned in the same project and referenced via environment variables.
+
+On the backend service, also set:
+
+- `SPRING_PROFILES_ACTIVE=prod` — activates `application-prod.yml` (quieter logging,
+  and it removes `CORS_ALLOWED_ORIGINS`'s local-dev default so a misconfigured deploy
+  fails to start instead of silently allowing only `localhost` origins).
+- `JWT_SECRET` — a fresh value, not whatever you used locally. Generate with
+  `openssl rand -base64 32`; see `.env.example` for why the length matters.
+- `CORS_ALLOWED_ORIGINS` — the deployed frontend's real HTTPS origin(s), no `localhost`.
+
+Railway (like most PaaS hosts) terminates TLS for you at its own edge and forwards
+plain HTTP to the container on `$PORT` — confirm the public URL is `https://` and that
+nothing downstream (a custom domain's DNS/CDN, if you add one) serves it over plain
+HTTP.
+
+### Known limitations
+
+- **No general-purpose API rate limiting.** Login and OTP requests are specifically
+  throttled (`app.login.*` in `application.yml`, `OtpService.MAX_REQUESTS_PER_HOUR`),
+  but there's no per-IP/per-user limit on the rest of the API. Acceptable for this
+  project's current scope; a production system with real traffic would want this at
+  the reverse proxy (e.g. a WAF/CDN) or in-app (e.g. Bucket4j).
