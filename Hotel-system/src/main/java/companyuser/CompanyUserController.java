@@ -44,7 +44,11 @@ public class CompanyUserController {
         return ResponseEntity.noContent().build();
     }
 
+    // Was completely ungated — CompanyUserResponse carries userEmail/invitedEmail, so any
+    // authenticated user could list any company's staff roster (names, emails, roles)
+    // just by guessing a companyId.
     @GetMapping("/company/{companyId}")
+    @PreAuthorize("hasRole('ADMIN') or @companyAuth.isMember(#companyId)")
     public ResponseEntity<List<CompanyUserResponse>> getByCompany(@PathVariable Long companyId){
         return ResponseEntity.ok(companyUserService.getByCompany(companyId));
     }
