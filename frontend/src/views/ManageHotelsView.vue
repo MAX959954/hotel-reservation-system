@@ -250,6 +250,9 @@ onMounted(async () => {
   if (hasGlobalAccess.value) {
     tasks.push(companiesApi.getByStatus('ACTIVE').then((list) => {
       allCompanies.value = list.map((c) => ({ companyId: c.id, companyName: c.name }))
+    }).catch(() => {
+      // A failed list must not leave the page stuck on its spinner (Promise.all below).
+      allCompanies.value = []
     }))
   }
   await Promise.all(tasks)

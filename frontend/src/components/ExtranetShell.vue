@@ -4,15 +4,20 @@ import { useRoute } from 'vue-router'
 import AccountMenu from './AccountMenu.vue'
 import LanguageSwitcher from './LanguageSwitcher.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCompanyStore } from '@/stores/company'
 
 withDefaults(defineProps<{ badge?: string }>(), { badge: '' })
 
 const route = useRoute()
 const auth = useAuthStore()
+const company = useCompanyStore()
+company.load()
 
-// RECEPTIONIST only ever manages bookings, not hotel listings — the hotels link would
-// just 404 their access on every company picker entry, so it's not worth showing them.
-const showHotelsLink = computed(() => auth.hasRole('HOTEL_MANAGER') || auth.hasRole('ADMIN'))
+// Same gate as the /manage/hotels route and the hotel/room API: ADMIN, or OWNER/MANAGER
+// of some company. A RECEPTIONIST only ever manages bookings, not hotel listings. (This
+// used to key off the global HOTEL_MANAGER role, which hid the link from invited
+// company MANAGERs who don't have that role.)
+const showHotelsLink = computed(() => company.managesAny || auth.hasRole('ADMIN'))
 </script>
 
 <template>

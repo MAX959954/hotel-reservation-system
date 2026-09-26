@@ -40,6 +40,12 @@ public class BookingServiceImpl implements BookingService{
         if (!request.getCheckOut().isAfter(request.getCheckIn())){
             throw new IllegalStateException("Check-out must be after check-in");
         }
+        // Price is nights (calendar dates, see below) * rate, so a same-day stay
+        // (e.g. 10:00 -> 18:00 on one date) passed the check above but priced at 0 —
+        // a free booking that still blocked the room.
+        if (!request.getCheckOut().toLocalDate().isAfter(request.getCheckIn().toLocalDate())) {
+            throw new IllegalStateException("A booking must be at least one night");
+        }
 
         Room room = findByRoomId(request.getRoomId());
         // The booking always belongs to whoever the JWT says is calling — never to a
@@ -145,9 +151,15 @@ public class BookingServiceImpl implements BookingService{
     public BookingResponse cancel(Long id) {
         Booking booking = findById(id);
 
-        if(booking.getBookingStatus() == BookingStatus.COMPLETED ||
-        booking.getBookingStatus() == BookingStatus.CANCELLED) {
-            throw new IllegalStateException("Cannot cancel a " + booking.getBookingStatus() + "booking");
+        // Cancelling is only meaningful before the stay starts. It used to be allowed from
+        // any non-terminal status, so a guest could cancel a stay they were already
+        // checked in to (freeing the room's dates while they occupied it) or retro-cancel
+        // a NO_SHOW. Once CHECKED_IN, the only way forward is complete().
+        BookingStatus current = booking.getBookingStatus();
+        if (current != BookingStatus.PENDING &&
+                current != BookingStatus.CONFIRMED &&
+                current != BookingStatus.PAYMENT_FAILED) {
+            throw new IllegalStateException("Cannot cancel a " + current + " booking");
         }
         booking.setBookingStatus(BookingStatus.CANCELLED);
         booking.setCancelled_at(LocalDateTime.now());

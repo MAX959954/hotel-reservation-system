@@ -27,15 +27,13 @@ const initial = () => (auth.email ? auth.email.charAt(0).toUpperCase() : '?')
 const avatarSrc = () => resolveUploadUrl(auth.avatarUrl)
 const badgeLabel = computed(() => (notifications.unreadCount > 9 ? '9+' : String(notifications.unreadCount)))
 
-// Company staff (OWNER/MANAGER/RECEPTIONIST at a specific company) always qualify;
-// platform-wide staff roles bypass the per-company membership check the same way the
-// backend's own @PreAuthorize expressions do for these endpoints — a plain GUEST with
-// neither gets no entry point into a panel the API would reject them from anyway.
-const canManageBookings = computed(
-  () => company.hasAny || auth.hasRole('ADMIN') || auth.hasRole('RECEPTIONIST') || auth.hasRole('HOTEL_MANAGER'),
-)
+// Company staff (OWNER/MANAGER/RECEPTIONIST at a specific company) qualify, plus ADMIN —
+// the same rule the backend's @PreAuthorize expressions enforce. The global
+// HOTEL_MANAGER/RECEPTIONIST roles no longer bypass the per-company check there, so they
+// don't here either (an approved host is OWNER of their company and qualifies that way).
+const canManageBookings = computed(() => company.hasAny || auth.hasRole('ADMIN'))
 
-const canManageHotels = computed(() => company.managesAny || auth.hasRole('ADMIN') || auth.hasRole('HOTEL_MANAGER'))
+const canManageHotels = computed(() => company.managesAny || auth.hasRole('ADMIN'))
 
 function toggle() {
   open.value = !open.value

@@ -21,7 +21,7 @@ public class PaymentController {
     // isBookingOwner; staff is allowed through the same company-scoped check used
     // everywhere else in this controller.
     @PostMapping
-    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasRole('ADMIN') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> pay(@Valid @RequestBody PaymentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentService.pay(request));
     }
@@ -30,7 +30,7 @@ public class PaymentController {
     // per "Pay" attempt) — see PaymentServiceImpl.createIntent for why it can't safely be
     // derived on the server from the booking instead.
     @PostMapping("/intent")
-    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("@companyAuth.isBookingOwner(#request.bookingId) or hasRole('ADMIN') or @companyAuth.hasRoleForBooking(#request.bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentIntentResponse> createIntent(
             @Valid @RequestBody PaymentRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
@@ -51,19 +51,28 @@ public class PaymentController {
     }
 
     @PostMapping("/{id}/confirm")
-    @PreAuthorize("@companyAuth.isPaymentOwner(#id) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("@companyAuth.isPaymentOwner(#id) or hasRole('ADMIN') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> confirm(@PathVariable Long id) {
         return ResponseEntity.ok(paymentService.confirm(id));
     }
 
+    // Front desk confirms that a cash / bank transfer / crypto payment has actually been
+    // received. Company-scoped staff or admin only — never the guest, who could otherwise
+    // mark their own "cash on arrival" booking as paid.
+    @PatchMapping("/{id}/received")
+    @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    public ResponseEntity<PaymentResponse> markReceived(@PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.markReceived(id));
+    }
+
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(paymentService.getById(id));
     }
 
     @GetMapping("/booking/{bookingId}")
-    @PreAuthorize("@companyAuth.isBookingOwner(#bookingId) or hasAnyRole('ADMIN' , 'RECEPTIONIST') or @companyAuth.hasRoleForBooking(#bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
+    @PreAuthorize("@companyAuth.isBookingOwner(#bookingId) or hasRole('ADMIN') or @companyAuth.hasRoleForBooking(#bookingId , 'OWNER' , 'MANAGER' , 'RECEPTIONIST')")
     public ResponseEntity<PaymentResponse> getByBookingId(@PathVariable Long bookingId) {
         return ResponseEntity.ok(paymentService.getByBookingId(bookingId));
     }

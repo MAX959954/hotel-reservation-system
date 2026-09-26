@@ -37,6 +37,12 @@ public class OtpService {
     @Value("${app.otp.resend-cooldown-seconds:30}")
     private long resendCooldownSeconds;
 
+    // LOCAL DEVELOPMENT ONLY (MAIL_DEV_LOG_OTP=true, set by docker-compose.yml): also
+    // print each code to the backend log, so sign-up/sign-in can be tested without a
+    // SendGrid account. Off by default - production never logs codes.
+    @Value("${app.mail.dev-log-otp:false}")
+    private boolean devLogOtp;
+
     /**
      * Entry point for the registration flow's own OTP step — anyone can hit this
      * unauthenticated, so it must refuse addresses that already have an account. Now that
@@ -58,8 +64,14 @@ public class OtpService {
      * UserServiceImpl.login() after the password has already been checked, never directly
      * from a controller. No existence guard here: the caller already confirmed the account
      * exists as part of verifying the password.
+     *
+     * noRollbackFor: this joins UserServiceImpl.login()'s transaction. With the default
+     * rollback rule, a cooldown/rate-limit IllegalStateException thrown here would mark
+     * that shared transaction rollback-only, and login() (which itself must not roll back
+     * on IllegalStateException — see there) would then fail with UnexpectedRollbackException
+     * (a 500) instead of the intended 400. Nothing is written before those throws.
      */
-    @Transactional
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public void sendLoginCode(String normalizedIdentifier) {
         generateAndSendCode(normalizedIdentifier);
     }
@@ -103,6 +115,9 @@ public class OtpService {
     @Async("mailTaskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void sendOtpEmail(OtpCodeGeneratedEvent event) {
+        if (devLogOtp) {
+            log.warn("[DEV] Verification code for {}: {}", event.identifier(), event.code());
+        }
         try {
             mailService.sendOtpCode(event.identifier(), event.code());
         } catch (Exception e) {
@@ -112,8 +127,13 @@ public class OtpService {
 
     /**
      * @return the normalized identifier, once the code is confirmed to belong to it.
+     *
+     * noRollbackFor: a wrong code saves attempts+1 and then throws IllegalStateException.
+     * Under the default rule (roll back on any RuntimeException) that increment was undone
+     * every time, so MAX_ATTEMPTS could never be reached and a code could be guessed
+     * without limit. The caller (UserServiceImpl.verifyOtp) carries the same rule.
      */
-    @Transactional
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public String verifyCode(String identifier, String code) {
         String normalized = normalize(identifier);
 

@@ -17,6 +17,14 @@ export function paymentMethodLabel(method: PaymentMethod): string {
   return i18n.global.t(`payment.${PAYMENT_METHOD_KEYS[method]}`)
 }
 
+/** Paid outside Stripe (mirrors the backend's non-GATEWAY_METHODS). Choosing one records
+ *  a PENDING payment; hotel staff mark it COMPLETED once the money actually arrives. */
+export const OFFLINE_METHODS: PaymentMethod[] = ['BANK_TRANSFER', 'CASH', 'CRYPTO']
+
+export function isAwaitingOfflinePayment(payment: { method: PaymentMethod; status: PaymentStatus } | null | undefined): boolean {
+  return !!payment && payment.status === 'PENDING' && OFFLINE_METHODS.includes(payment.method)
+}
+
 export type PaymentStatus =
   | 'PENDING'
   | 'PROCESSING'

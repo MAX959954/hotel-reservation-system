@@ -45,7 +45,11 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     }
 
     @Override
-    @Transactional
+    // noRollbackFor: every failed attempt is recorded (registerFailedLogin) and THEN
+    // signalled by throwing IllegalStateException. With the default rollback rule that
+    // throw undid the counter/lockout write, so the brute-force lockout never actually
+    // took effect against a real database (the Mockito unit tests can't see this).
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public void login(LoginRequest request) {
         String normalized = request.getIdentifier().trim().toLowerCase();
 
@@ -117,7 +121,9 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     }
 
     @Override
-    @Transactional
+    // Same reason as login(): OtpService.verifyCode persists the failed-attempt count
+    // before throwing, and this outer transaction must not roll that back either.
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public OtpVerifyResponse verifyOtp(OtpVerifyPayload payload) {
         String identifier = otpService.verifyCode(payload.getIdentifier(), payload.getCode());
 

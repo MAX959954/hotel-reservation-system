@@ -1,17 +1,20 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:hotel_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    # Testcontainers JDBC URL: the first connection starts a throwaway PostgreSQL 16
+    # container (Docker must be running), shared by every Spring context in the test run
+    # (TC_DAEMON) and removed afterwards. Same database engine as production, so tests
+    # catch what H2 used to hide (PostgreSQL-specific SQL, constraints, types).
+    url: jdbc:tc:postgresql:16-alpine:///hotel_test?TC_DAEMON=true
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    username: test
+    password: test
 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # Schema comes from the real Flyway migrations (spring.flyway in application.yml);
+      # Hibernate only checks that the entities match it - exactly as in production.
+      ddl-auto: validate
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
 
 jwt:
   secret: JGIyW31SVJyNNn5NGlMrb3rsJ2DV1/QYTRJSZjpcJa8=
@@ -21,7 +24,7 @@ app:
   # Scheduled jobs (BookingLifecycleScheduler, PaymentLifecycleScheduler) run on their
   # own thread outside any test's transaction — leaving them on here would let a
   # background tick mutate rows mid-test, or race an in-progress test transaction on the
-  # same H2 instance. Every @SpringBootTest boots the full context, so this has to be
+  # same database. Every @SpringBootTest boots the full context, so this has to be
   # off by default for the whole test profile, not opted out per test.
   scheduling:
     enabled: false

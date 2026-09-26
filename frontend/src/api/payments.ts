@@ -27,6 +27,13 @@ export const paymentsApi = {
     return data
   },
 
+  /** Staff only: a cash / bank transfer / crypto payment has actually been received —
+   *  moves it from PENDING to COMPLETED (see PaymentController.markReceived). */
+  async markReceived(paymentId: number): Promise<PaymentResponse> {
+    const { data } = await http.patch<PaymentResponse>(`/api/payments/${paymentId}/received`)
+    return data
+  },
+
   /** null means "no payment recorded yet" — the server 400s that case rather than 404ing. */
   async getByBooking(bookingId: number): Promise<PaymentResponse | null> {
     try {

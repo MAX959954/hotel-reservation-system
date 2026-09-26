@@ -39,8 +39,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     // These three go through Stripe (createIntent + confirm); the rest — bank transfer,
     // cash on arrival, crypto — are "pay later / pay offline" methods no gateway can
-    // charge on our behalf, so pay() below still records them directly, same as Airbnb's
-    // own "pay at property" options never touch a card processor either.
+    // charge on our behalf. pay() below records them as PENDING (the guest has only
+    // chosen how they will pay), and hotel staff mark them COMPLETED via
+    // markReceived() once the money has actually arrived.
     private static final Set<PaymentMethod> GATEWAY_METHODS =
             EnumSet.of(PaymentMethod.CREDIT_CARD, PaymentMethod.DEBIT_CARD, PaymentMethod.GOOGLE_PAY);
 
@@ -66,18 +67,41 @@ public class PaymentServiceImpl implements PaymentService {
         Booking booking = findByBookingId(request.getBookingId());
         assertPayable(booking);
 
+        // PENDING, not COMPLETED: choosing "cash on arrival" / bank transfer / crypto is a
+        // promise to pay, not a payment. Recording it as COMPLETED let a guest mark their
+        // own booking as paid without any money moving. Staff confirm receipt through
+        // markReceived(); PaymentLifecycleScheduler only expires Stripe intents, so this
+        // row stays PENDING until then (cash is typically handed over at check-in).
         Payment payment = Payment.builder()
                 .booking(booking)
                 .amount(booking.getTotalPrice())
                 .method(request.getMethod())
                 .currency(request.getCurrency())
                 .transaction_id(request.getTransactionId())
-                .status(PaymentStatus.COMPLETED)
-                .paidAt(LocalDateTime.now())
+                .status(PaymentStatus.PENDING)
                 .build();
 
+        return toResponse(paymentRepository.save(payment));
+    }
+
+    @Override
+    @Transactional
+    public PaymentResponse markReceived(Long paymentId) {
+        Payment payment = findById(paymentId);
+
+        if (GATEWAY_METHODS.contains(payment.getMethod())) {
+            // Card/Google Pay completion is decided by Stripe only (confirm() / webhook) —
+            // staff must not be able to declare a card payment paid by hand.
+            throw new IllegalStateException("Card and Google Pay payments are confirmed by Stripe, not manually");
+        }
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            throw new IllegalStateException("Only PENDING payments can be marked as received");
+        }
+
+        payment.setStatus(PaymentStatus.COMPLETED);
+        payment.setPaidAt(LocalDateTime.now());
         Payment saved = paymentRepository.save(payment);
-        publishConfirmation(booking, saved);
+        publishConfirmation(payment.getBooking(), saved);
         return toResponse(saved);
     }
 
@@ -166,7 +190,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private void assertPayable(Booking booking) {
         if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
-            throw new IllegalStateException("Payment is only allowed for confrimed bookings");
+            throw new IllegalStateException("Payment is only allowed for confirmed bookings");
         }
 
         paymentRepository.findByBookingId(booking.getId()).ifPresent(existing -> {

@@ -1,6 +1,9 @@
 package companies;
 
+import exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.PathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -56,6 +59,25 @@ public class CompanyDocumentStorageService {
         }
 
         return PUBLIC_PREFIX + filename;
+    }
+
+    /**
+     * Resolves a stored fileUrl (as returned by {@link #store}) back to the file on disk.
+     * The stored value keeps its historical "/uploads/documents/" prefix, but nothing
+     * serves that path publicly any more — this is only reached through the authorized
+     * download endpoint.
+     */
+    public Resource load(String fileUrl) {
+        if (fileUrl == null || !fileUrl.startsWith(PUBLIC_PREFIX)) {
+            throw new ResourceNotFoundException("Document file not found");
+        }
+        Path dir = documentsDir().toAbsolutePath().normalize();
+        Path file = dir.resolve(fileUrl.substring(PUBLIC_PREFIX.length())).normalize();
+        // Defence in depth: fileUrl is server-generated, but never let it escape the dir.
+        if (!file.startsWith(dir) || !Files.isRegularFile(file)) {
+            throw new ResourceNotFoundException("Document file not found");
+        }
+        return new PathResource(file);
     }
 
     private Path documentsDir() {

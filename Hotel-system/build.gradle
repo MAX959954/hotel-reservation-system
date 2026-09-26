@@ -19,6 +19,12 @@ repositories {
 	mavenCentral()
 }
 
+// Spring Boot 3.3 pins Testcontainers 1.19.8, which Docker Engine 29+ (current Docker
+// Desktop) rejects - its default Docker API version is below the new minimum, so every
+// container-based test failed with "Could not find a valid Docker environment" (400).
+// See also src/test/resources/docker-java.properties.
+ext['testcontainers.version'] = '1.21.3'
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -29,6 +35,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	// SMTP delivery for local development (Mailpit) - see user.SmtpEmailSender
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
@@ -41,7 +49,10 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	testRuntimeOnly 'com.h2database:h2'
+	// Integration tests run against a real PostgreSQL 16 in Docker (Testcontainers) with
+	// the real Flyway migrations, instead of H2 - see src/test/resources/application-test.yml.
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 

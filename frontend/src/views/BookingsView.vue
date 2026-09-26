@@ -13,7 +13,7 @@ import { useConfirmModalStore } from '@/stores/confirmModal'
 import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
 import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
-import { paymentMethodLabel, type PaymentResponse } from '@/types/payment'
+import { isAwaitingOfflinePayment, paymentMethodLabel, type PaymentResponse } from '@/types/payment'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -41,9 +41,9 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
-/** The server refuses to cancel exactly these two, so the button would only ever 400. */
+/** Mirrors BookingServiceImpl.cancel: only before the stay starts. Anything else would 400. */
 function canCancel(status: BookingStatus) {
-  return status !== 'COMPLETED' && status !== 'CANCELLED'
+  return status === 'PENDING' || status === 'CONFIRMED' || status === 'PAYMENT_FAILED'
 }
 
 // Matches PaymentServiceImpl.pay(): it 400s for anything but a CONFIRMED booking, so a
@@ -197,6 +197,13 @@ onMounted(load)
             >
               <CreditCard class="w-3 h-3" aria-hidden="true" />
               {{ $t('bookings.paidVia', { method: paymentMethodLabel(payments[booking.id].method) }) }}
+            </span>
+            <span
+              v-else-if="isAwaitingOfflinePayment(payments[booking.id])"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-amber-300/90 bg-amber-300/10 border border-amber-300/20"
+            >
+              <CreditCard class="w-3 h-3" aria-hidden="true" />
+              {{ $t('bookings.awaitingVia', { method: paymentMethodLabel(payments[booking.id].method) }) }}
             </span>
 
             <div class="flex items-center gap-2">

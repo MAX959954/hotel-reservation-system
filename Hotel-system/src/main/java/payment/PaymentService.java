@@ -19,6 +19,10 @@ public interface PaymentService {
      *  claim of success) and, only if Stripe agrees it succeeded, marks the Payment
      *  COMPLETED and fires the confirmation email. */
     PaymentResponse confirm(Long paymentId);
+    /** Offline methods only (cash, bank transfer, crypto): staff record that the money
+     *  was actually received, moving the PENDING payment created by {@link #pay} to
+     *  COMPLETED and sending the confirmation email. */
+    PaymentResponse markReceived(Long paymentId);
     PaymentResponse getById(Long id);
     PaymentResponse getByBookingId(Long bookingId);
     List<PaymentResponse> getByStatus(PaymentStatus status);

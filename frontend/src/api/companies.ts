@@ -43,4 +43,12 @@ export const companiesApi = {
     const { data } = await http.get<CompanyDocumentResponse[]>(`/api/companies/${companyId}/documents`)
     return data
   },
+
+  /** Documents are no longer public static files — `doc.fileUrl` is an authenticated API
+   *  path, so a plain <a href> (which can't send the JWT) would 401. Fetch the bytes
+   *  through `http` instead and hand the browser a short-lived object URL. */
+  async downloadDocument(doc: CompanyDocumentResponse): Promise<Blob> {
+    const { data } = await http.get<Blob>(doc.fileUrl, { responseType: 'blob' })
+    return data
+  },
 }
