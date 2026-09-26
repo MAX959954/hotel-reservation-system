@@ -3,11 +3,13 @@ package payment;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
 import com.stripe.model.Dispute;
 import com.stripe.model.Event;
+import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Refund;
 import com.stripe.model.StripeObject;
@@ -412,14 +414,23 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalStateException("Invalid Stripe webhook signature: " + e.getMessage(), e);
         }
 
-        // Absent only when this event's payload can't be resolved against the API
-        // version stripe-java was generated for (a Stripe-side/library mismatch) —
-        // nothing safe to act on. Acknowledge anyway so Stripe stops retrying a delivery
-        // we will never be able to parse.
-        StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        // getObject() is empty whenever the webhook endpoint's API version differs from
+        // the one this stripe-java release is pinned to. The Stripe Dashboard only offers
+        // current API versions for new endpoints, so that is the normal case, not an
+        // edge case: without the fallback every event was silently dropped. The fields
+        // read below (ids, status, amounts) are stable across API versions, so lenient
+        // parsing is safe here. Only a payload that can't be parsed at all is skipped
+        // (and acknowledged, so Stripe stops retrying a delivery we can never handle).
+        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+        StripeObject stripeObject = deserializer.getObject().orElse(null);
         if (stripeObject == null) {
-            log.warn("Could not deserialize Stripe webhook event {} ({})", event.getId(), event.getType());
-            return;
+            try {
+                stripeObject = deserializer.deserializeUnsafe();
+            } catch (EventDataObjectDeserializationException e) {
+                log.warn("Could not deserialize Stripe webhook event {} ({}): {}",
+                        event.getId(), event.getType(), e.getMessage());
+                return;
+            }
         }
 
         switch (event.getType()) {

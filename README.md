@@ -93,7 +93,7 @@ Spring profile and environment variables differ:
 | Profile | Used by | What it sets |
 |---|---|---|
 | `local` (`application-local.yml`) | `docker compose`, IDE runs | e-mail via SMTP to Mailpit, a public dev JWT key, sign-in codes also printed to the log |
-| `prod` (`application-prod.yml`) | Railway | real secrets from environment variables, SendGrid for e-mail; **refuses to start** if a dev setting (dev JWT key, codes in the log) is present |
+| `prod` (`application-prod.yml`) | production server (`deploy/`) | real secrets from environment variables, real e-mail over SMTP (e.g. Gmail); **refuses to start** if a dev setting (dev JWT key, codes in the log) is present |
 | `test` (`src/test/resources/application-test.yml`) | `./gradlew test` | throwaway PostgreSQL container (Testcontainers) |
 
 **Database: schema and demo data are separate.** On start the backend runs Flyway
@@ -407,35 +407,39 @@ every start, with no uptime guarantee. Fine for a demo, not for a permanent link
 
 ## 11. Production deployment
 
-The backend and frontend deploy as separate services on [Railway](https://railway.app),
-built from `Hotel-system/Dockerfile` and `frontend/Dockerfile` (nginx serves the compiled
-Vite output). Set each service's Root Directory accordingly, and provision Postgres and
-Redis in the same project, referenced via environment variables. The local
-`docker-compose.yml` files are **not** used in production.
+Production runs on a single Linux server (VPS) with Docker: Caddy (automatic HTTPS),
+the frontend, the API with the `prod` Spring profile, PostgreSQL and Redis, all on one
+domain. **Step-by-step guide: [`deploy/README.md`](deploy/README.md)**: server, domain,
+Gmail SMTP / Stripe / Google setup, deploy, backups, automatic deploys from GitHub Actions.
 
-On the backend service set:
+**No server yet?** The production stack also runs on your own PC with `DOMAIN=localhost`
+(HTTPS, `prod` profile, real e-mail), see
+[Try the production build on your own PC first](deploy/README.md#try-the-production-build-on-your-own-pc-first).
 
-- `SPRING_PROFILES_ACTIVE=prod`: activates `application-prod.yml` (quieter logging, and
-  no localhost default for `CORS_ALLOWED_ORIGINS`, so a misconfigured deploy fails to
-  start instead of silently allowing only localhost).
-- `JWT_SECRET`: a fresh secret (`openssl rand -base64 32`). **Never** the local dev
-  default from `docker-compose.yml`.
-- `CORS_ALLOWED_ORIGINS`: the deployed frontend's HTTPS origin(s), no localhost.
-- `SENDGRID_API_KEY`, `MAIL_FROM`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-  `GOOGLE_CLIENT_ID` as needed. Leave `MAIL_DEV_LOG_OTP` unset (off).
-- Optional, for a **public portfolio demo** with the hotel catalogue pre-filled:
-  `SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/seed`. Never add
-  `db/seed-accounts` there: those passwords are public (the app refuses to start with it).
+In short, on the server:
+
+```bash
+git clone https://github.com/<owner>/<repo>.git ~/folio && cd ~/folio
+sudo bash deploy/setup-server.sh          # once: Docker, firewall, auto-updates
+cp deploy/.env.example deploy/.env        # fill in domain + secrets
+bash deploy/deploy.sh                     # build, start, wait until healthy
+```
+
+**How production differs from local:**
+
+| | Local (`docker compose up`) | Production (`deploy/`) |
+|---|---|---|
+| Spring profile | `local` | `prod` |
+| E-mail | Mailpit (fake inbox) | real SMTP, e.g. Gmail (or SendGrid) |
+| Secrets | public dev defaults | `deploy/.env` on the server only |
+| Data | schema + demo catalogue + test accounts | schema + demo catalogue (configurable), **no** test accounts |
+| HTTPS | no | Caddy + Let's Encrypt |
+| Exposed ports | all services, for debugging | only 80/443 |
 
 With `prod` active, `config.ProductionSafetyCheck` stops the application at startup if
 `JWT_SECRET` is missing, too short or equal to the public dev key, if `MAIL_DEV_LOG_OTP`
-is on, or if the local test accounts (`db/seed-accounts`) are enabled. Missing SendGrid or Stripe keys only log a warning.
-
-On the frontend service pass `VITE_API_BASE_URL`, `VITE_STRIPE_PUBLISHABLE_KEY` and
-`VITE_GOOGLE_CLIENT_ID` as build variables.
-
-Railway terminates TLS at its edge and forwards plain HTTP to the container on `$PORT`.
-Make sure the public URL is `https://`.
+is on, or if the local test accounts (`db/seed-accounts`) are enabled. Missing e-mail
+or Stripe credentials only log a warning.
 
 ### Known limitations
 

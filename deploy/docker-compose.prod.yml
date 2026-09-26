@@ -1,0 +1,122 @@
+# PRODUCTION stack for a single Linux server (VPS). One command on the server:
+#
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+#
+# (deploy/deploy.sh wraps exactly that.) Everything is served on ONE domain over HTTPS:
+# Caddy terminates TLS (automatic Let's Encrypt certificates) and routes /api/** and the
+# other backend paths to the Spring Boot API, everything else to the frontend. Same origin
+# means no cross-site cookies/CORS surprises; CORS_ALLOWED_ORIGINS is still set explicitly.
+#
+# Only Caddy publishes ports (80/443). Postgres, Redis and the API are reachable solely on
+# the internal Docker network. All secrets come from deploy/.env (see .env.example there).
+
+name: folio-prod
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      SITE_ADDRESS: ${DOMAIN:?DOMAIN must be set in deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates - keep this volume
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - app
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        # Same origin as the site itself - Caddy forwards the API paths.
+        VITE_API_BASE_URL: https://${DOMAIN}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+    restart: unless-stopped
+
+  app:
+    build: ../Hotel-system
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # Schema always; the demo hotel catalogue only while DEMO_CATALOG=true (default).
+      # db/seed-accounts (public test passwords) is never loaded here - the prod profile
+      # refuses to start if it is (config.ProductionSafetyCheck).
+      SPRING_FLYWAY_LOCATIONS: ${FLYWAY_LOCATIONS:-classpath:db/migration,classpath:db/seed}
+      # Behind Caddy: trust X-Forwarded-* so the app knows requests arrived over HTTPS.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      # Leave headroom for the rest of the stack on a small VPS.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hotel_db}
+      POSTGRES_USER: ${POSTGRES_USER:-hotel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in deploy/.env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in deploy/.env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in deploy/.env}
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      # "smtp" (default; e.g. Gmail with an app password) or "sendgrid" (HTTP API, paid).
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-smtp}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hotel_db}
+      POSTGRES_USER: ${POSTGRES_USER:-hotel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in deploy/.env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hotel_user} -d ${POSTGRES_DB:-hotel_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Password even though Redis is internal-only: defence in depth.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in deploy/.env}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in deploy/.env}
+
+volumes:
+  db_data:
+  redis_data:
+  uploads:
+  caddy_data:
+  caddy_config:

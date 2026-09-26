@@ -42,6 +42,12 @@ public class ProductionSafetyCheck {
     @Value("${app.mail.from:}")
     private String mailFrom;
 
+    @Value("${spring.mail.username:}")
+    private String smtpUsername;
+
+    @Value("${spring.mail.password:}")
+    private String smtpPassword;
+
     @Value("${stripe.secret-key:}")
     private String stripeSecretKey;
 
@@ -76,8 +82,10 @@ public class ProductionSafetyCheck {
             throw new IllegalStateException("Unsafe production configuration: " + String.join("; ", problems));
         }
 
-        if (!"sendgrid".equalsIgnoreCase(mailProvider)) {
-            log.warn("app.mail.provider is '{}' in production - SMTP is usually blocked on PaaS hosts", mailProvider);
+        if ("smtp".equalsIgnoreCase(mailProvider)) {
+            if (isBlank(smtpUsername) || isBlank(smtpPassword) || isBlank(mailFrom)) {
+                log.warn("SMTP_USERNAME, SMTP_PASSWORD or MAIL_FROM is not set - sign-in codes and notifications cannot be e-mailed");
+            }
         } else if (isBlank(sendgridApiKey) || isBlank(mailFrom)) {
             log.warn("SENDGRID_API_KEY or MAIL_FROM is not set - sign-in codes and notifications cannot be e-mailed");
         }
