@@ -27,7 +27,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// Crosses review/booking/room/user repositories against a real (H2) database,
+// Crosses review/booking/room/user repositories against a real PostgreSQL database (Testcontainers),
 // exercising the "only one review per completed booking" rule end to end
 // rather than through stubbed repository responses.
 @SpringBootTest(classes = HotelSystemApplication.class)

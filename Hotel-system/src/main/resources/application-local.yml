@@ -1,0 +1,41 @@
+# LOCAL DEVELOPMENT profile. Activated by docker-compose.yml (SPRING_PROFILES_ACTIVE=local);
+# to run the backend from an IDE against `docker compose up -d postgres redis mailpit`,
+# start it with the same profile. Never used in production (see application-prod.yml).
+#
+# Everything here only overrides application.yml, and every value can still be
+# overridden by an environment variable / Hotel-system/.env.
+
+spring:
+  datasource:
+    # Same default password the local Postgres container is created with.
+    password: ${POSTGRES_PASSWORD:hotel_local_dev}
+  # Mailpit (docker-compose.yml): an SMTP server that accepts everything and shows it in
+  # a web inbox at http://localhost:8025 instead of delivering it.
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+  flyway:
+    # Schema + demo catalogue (db/seed) + local test accounts (db/seed-accounts). Both
+    # seed folders hold Flyway afterMigrate callbacks that only insert into an empty
+    # database, so they never clash with data created while using the app.
+    locations: classpath:db/migration,classpath:db/seed,classpath:db/seed-accounts
+
+jwt:
+  # Dev-only signing key so the app boots with zero setup. It is public (it's in git):
+  # never use it anywhere real - the prod profile refuses to start with it.
+  secret: ${JWT_SECRET:ROtT1yoDWN5HCnojHm6ygpUNb7soRNGYqSeaw3qShcM=}
+
+# Mailpit being down should not mark the whole API unhealthy (and fail the Docker
+# healthcheck) - it only affects the local inbox.
+management:
+  health:
+    mail:
+      enabled: false
+
+app:
+  mail:
+    provider: ${MAIL_PROVIDER:smtp}
+    # Codes are also printed to the backend log - handy if Mailpit isn't running.
+    dev-log-otp: ${MAIL_DEV_LOG_OTP:true}
+  uploads:
+    dir: ${UPLOADS_DIR:./uploads}

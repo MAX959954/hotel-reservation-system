@@ -75,6 +75,13 @@ cors:
 app:
   mail:
     from: ${MAIL_FROM:}
+    # How e-mail is delivered: "sendgrid" (HTTPS API, production default) or "smtp"
+    # (plain SMTP; the "local" profile uses it with the Mailpit container).
+    provider: ${MAIL_PROVIDER:sendgrid}
+    # Local development only: also print sign-in/sign-up codes to the log (see
+    # OtpService). The "local" profile turns it on; the "prod" profile refuses to start
+    # with it enabled (config.ProductionSafetyCheck).
+    dev-log-otp: ${MAIL_DEV_LOG_OTP:false}
   otp:
     expiry-minutes: 10
     resend-cooldown-seconds: 30

@@ -168,6 +168,21 @@ public class BookingServiceImplTest {
     }
 
     @Test
+    void create_throws_whenStayIsSameCalendarDay() {
+        // Later the same day passes the isAfter check but is 0 nights — used to be
+        // priced at 0 * rate = a free booking.
+        LocalDateTime checkIn = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        request.setCheckIn(checkIn);
+        request.setCheckOut(checkIn.withHour(18));
+
+        assertThatThrownBy(() -> bookingService.create(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("A booking must be at least one night");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
     void create_throws_whenRoomNotFound() {
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.empty());
 
@@ -365,6 +380,37 @@ public class BookingServiceImplTest {
         // to AVAILABLE. Freeing the dates is handled by excluding CANCELLED bookings
         // from the overlap query, not by mutating RoomStatus.
         assertThat(room.getStatus()).isEqualTo(RoomStatus.MAINTENANCE);
+    }
+
+    @Test
+    void cancel_throws_whenGuestAlreadyCheckedIn() {
+        Booking booking = bookingWithStatus(BookingStatus.CHECKED_IN);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.cancel(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Cannot cancel a CHECKED_IN booking");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void cancel_throws_whenNoShow() {
+        Booking booking = bookingWithStatus(BookingStatus.NO_SHOW);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.cancel(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot cancel a NO_SHOW");
+    }
+
+    @Test
+    void cancel_setsCancelled_whenPending() {
+        Booking booking = bookingWithStatus(BookingStatus.PENDING);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(bookingService.cancel(10L).getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
     }
 
     @Test

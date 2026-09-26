@@ -5,7 +5,7 @@ import { Check, FileText, Loader2, RotateCw, X } from 'lucide-vue-next'
 import ExtranetShell from '@/components/ExtranetShell.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
 import { companiesApi } from '@/api/companies'
-import { apiErrorMessage, resolveUploadUrl } from '@/api/http'
+import { apiErrorMessage } from '@/api/http'
 import type { CompanyDocumentResponse, CompanyResponse } from '@/types/company'
 
 const { t } = useI18n()
@@ -65,6 +65,29 @@ async function confirmReject() {
   }
 }
 
+async function openDocument(doc: CompanyDocumentResponse) {
+  // Opened synchronously, inside the click, so popup blockers allow it; filled in once
+  // the authenticated download finishes.
+  const win = window.open('', '_blank')
+  error.value = ''
+  try {
+    const blob = await companiesApi.downloadDocument(doc)
+    const url = URL.createObjectURL(blob)
+    if (win) {
+      win.location.href = url
+    } else {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.originalFilename || 'document'
+      a.click()
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (e) {
+    win?.close()
+    error.value = apiErrorMessage(e, t('adminApplications.loadError'))
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -114,15 +137,14 @@ onMounted(load)
 
               <ul v-if="documentsByCompany[company.id]?.length" class="flex flex-col gap-1.5 mt-3">
                 <li v-for="doc in documentsByCompany[company.id]" :key="doc.id">
-                  <a
-                    :href="resolveUploadUrl(doc.fileUrl)!"
-                    target="_blank"
-                    rel="noopener"
+                  <button
+                    type="button"
                     class="flex items-center gap-2 text-xs text-champagne hover:text-champagne-bright transition-colors w-fit"
+                    @click="openDocument(doc)"
                   >
                     <FileText class="w-3.5 h-3.5" aria-hidden="true" />
                     {{ doc.originalFilename }}
-                  </a>
+                  </button>
                 </li>
               </ul>
               <p v-else class="text-xs font-light text-bone-dim/60 mt-3">{{ $t('adminApplications.noDocuments') }}</p>

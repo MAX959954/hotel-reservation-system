@@ -27,7 +27,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-// Crosses room/booking/user/hotel repositories against a real (H2) database,
+// Crosses room/booking/user/hotel repositories against a real PostgreSQL database (Testcontainers),
 // exercising the overlap-detection query that BookingServiceImplTest can only
 // stub around.
 // create() derives the booking's owner from the authenticated principal (see

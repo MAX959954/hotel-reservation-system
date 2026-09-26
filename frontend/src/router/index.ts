@@ -65,16 +65,18 @@ const router = createRouter({
       path: '/manage/bookings',
       name: 'manage-bookings',
       component: () => import('@/views/ManageBookingsView.vue'),
-      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'RECEPTIONIST', 'ADMIN'], allowCompanyRole: 'any' },
+      // Same rule as the API (BookingController): ADMIN, or staff of a specific company.
+      // The global HOTEL_MANAGER/RECEPTIONIST roles no longer grant cross-company access.
+      meta: { requiresAuth: true, requiresRole: ['ADMIN'], allowCompanyRole: 'any' },
     },
     {
       // OWNER/MANAGER-only in practice (enforced server-side too) — allowCompanyRole:
       // 'manager' is what actually lets an invited-but-not-platform-roled company
-      // OWNER/MANAGER in; requiresRole alone would only ever match ADMIN/HOTEL_MANAGER.
+      // OWNER/MANAGER in (an approved host is OWNER of their own company).
       path: '/manage/hotels',
       name: 'manage-hotels',
       component: () => import('@/views/ManageHotelsView.vue'),
-      meta: { requiresAuth: true, requiresRole: ['HOTEL_MANAGER', 'ADMIN'], allowCompanyRole: 'manager' },
+      meta: { requiresAuth: true, requiresRole: ['ADMIN'], allowCompanyRole: 'manager' },
     },
     {
       // Any signed-in guest can apply — this is the application form itself, not a

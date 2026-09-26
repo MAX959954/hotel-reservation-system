@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
                 <ArrowLeft class="w-4 h-4" aria-hidden="true" />
               </button>
               <h2 id="payment-modal-title" class="font-display text-2xl text-bone">
-                <template v-if="step === 'receipt'">{{ $t('payment.received') }}</template>
+                <template v-if="step === 'receipt'">{{ receipt?.status === 'PENDING' ? $t('payment.methodSaved') : $t('payment.received') }}</template>
                 <template v-else>{{ $t('payment.payFor', { hotel: booking.hotelName }) }}</template>
               </h2>
             </div>
@@ -410,6 +410,10 @@ onBeforeUnmount(() => {
             </div>
             <p class="text-sm font-light text-bone-dim">
               {{ booking.hotelName }} · {{ $t('payment.roomNumber', { number: booking.roomNumber }) }}
+            </p>
+            <!-- Offline methods are recorded as PENDING: nothing has been paid yet. -->
+            <p v-if="receipt!.status === 'PENDING'" class="text-xs font-light text-bone-dim/80">
+              {{ $t('payment.awaitingNote') }}
             </p>
             <button
               type="button"

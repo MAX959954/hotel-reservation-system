@@ -24,7 +24,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByStatusAndMethod(PaymentStatus status, PaymentMethod method);
 
     // Used by PaymentLifecycleScheduler to expire abandoned Stripe PaymentIntents that
-    // never resolved — see app.payments.pending-expiry-hours.
-    @Query("SELECT p FROM Payment p WHERE p.status = payment.PaymentStatus.PENDING AND p.createdAt < :cutoff")
+    // never resolved — see app.payments.pending-expiry-hours. Gateway methods only:
+    // offline payments (cash on arrival, bank transfer, crypto) legitimately stay PENDING
+    // until staff mark them received, often days later at check-in.
+    @Query("SELECT p FROM Payment p WHERE p.status = payment.PaymentStatus.PENDING AND p.createdAt < :cutoff " +
+            "AND p.method IN (payment.PaymentMethod.CREDIT_CARD, payment.PaymentMethod.DEBIT_CARD, payment.PaymentMethod.GOOGLE_PAY)")
     List<Payment> findStalePending(@Param("cutoff") LocalDateTime cutoff);
 }

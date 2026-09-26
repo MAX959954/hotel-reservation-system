@@ -162,6 +162,17 @@ class PaymentControllerTest {
     }
 
     @Test
+    void markReceived_returns200() throws Exception {
+        PaymentResponse received = sampleResponse();
+        received.setStatus(PaymentStatus.COMPLETED);
+        given(paymentService.markReceived(1L)).willReturn(received);
+
+        mockMvc.perform(patch("/api/payments/{id}/received", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
     void cancel_returns400_whenServiceThrows() throws Exception {
         given(paymentService.cancel(1L)).willThrow(new IllegalStateException("Payment cannot be cancelled"));
 

@@ -1,4 +1,19 @@
+# LOCAL DEVELOPMENT stack. Everything has a working default, so a fresh clone starts
+# with no .env at all (`docker compose up --build` from the repository root also brings
+# up the frontend - see ../docker-compose.yml). Values in Hotel-system/.env override the
+# defaults. The API runs with the "local" Spring profile (application-local.yml).
+# Production (Railway) does not use this file; it sets its own real secrets.
 services:
+  # Catches every e-mail the app sends (sign-in codes, booking/payment notifications)
+  # and shows it in a web inbox: http://localhost:8025. Nothing is delivered for real.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: hotel_mailpit
+    ports:
+      - "8025:8025"   # web inbox
+      - "1025:1025"   # SMTP
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: hotel_redis
@@ -12,7 +27,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hotel_db}
       POSTGRES_USER: ${POSTGRES_USER:-hotel_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hotel_local_dev}
     ports:
       - "5432:5432"
     volumes:
@@ -32,18 +47,36 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      mailpit:
+        condition: service_started
     environment:
+      # Local-development profile: SMTP to Mailpit, dev JWT key, codes also in the log.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      # "smtp" = Mailpit. Set MAIL_PROVIDER=sendgrid (plus SENDGRID_API_KEY / MAIL_FROM)
+      # in Hotel-system/.env to send real e-mails instead.
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-smtp}
       DB_HOST: postgres
       DB_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-hotel_db}
       POSTGRES_USER: ${POSTGRES_USER:-hotel_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env)}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see .env)}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hotel_local_dev}
+      # Dev-only default so the stack boots without any setup. It is public (it's in
+      # git), so never reuse it anywhere real - production sets its own JWT_SECRET.
+      JWT_SECRET: ${JWT_SECRET:-ROtT1yoDWN5HCnojHm6ygpUNb7soRNGYqSeaw3qShcM=}
+      # 15 min, same as application.yml's own default — this used to default to 24h here,
+      # silently overriding the short access-token lifetime refresh tokens exist for.
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900000}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS:-30}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY must be set (see .env)}
+      # Optional locally: the app starts without it, only card payments need it.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      # Was never passed into the container, so /api/payments/webhook could not verify
+      # any Stripe signature under Compose even with the value set in .env.
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       UPLOADS_DIR: /app/uploads

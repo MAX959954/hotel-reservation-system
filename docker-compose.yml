@@ -1,0 +1,36 @@
+# One-command local run of the whole project:
+#
+#   docker compose up --build
+#
+# then open http://localhost:5173  (API: http://localhost:8081).
+#
+# Needs only Docker Desktop - no Java, Node, Postgres or Redis on the machine, and no
+# .env files (every value has a local default; see Hotel-system/docker-compose.yml).
+# Stop with Ctrl+C, or `docker compose down` if started with -d.
+#
+# Project name matches the one scripts/start-tunnels.ps1 uses, so both share the same
+# containers and the same database volume instead of creating a second copy.
+name: hotel-system
+
+include:
+  # Postgres, Redis and the Spring Boot API. Its variables are read from
+  # Hotel-system/.env when that file exists.
+  - Hotel-system/docker-compose.yml
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      # Vite bakes these into the bundle at build time. Override them in a .env file
+      # next to this compose file (e.g. VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...).
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8081}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
+    container_name: hotel_frontend
+    # 5173 on purpose: it is already in the backend's default CORS allow-list.
+    ports:
+      - "5173:80"
+    depends_on:
+      - app
+    restart: unless-stopped

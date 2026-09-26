@@ -24,22 +24,31 @@ public class CompaniesController {
         return ResponseEntity.status(HttpStatus.CREATED).body(companiesService.create(request));
     }
 
+    // Same reason getByStatus below is locked down: CompaniesResponse carries
+    // bankAccountHolder/bankIban. These four lookups were open to any authenticated
+    // account (any guest could pull every company's bank details by city/country/email).
+    // The frontend never calls them; a company's own members and its applicant can still
+    // read their own record by id.
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @companyAuth.isMember(#id) or @companyAuth.isCompanySubmitter(#id)")
     public ResponseEntity<CompaniesResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(companiesService.getById(id));
     }
 
     @GetMapping("/email")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CompaniesResponse> getByEmail(@RequestParam String email) {
         return ResponseEntity.ok(companiesService.getByEmail(email));
     }
 
     @GetMapping("/country/{country}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<CompaniesResponse>> getByCountry(@PathVariable String country) {
         return ResponseEntity.ok(companiesService.getByCountry(country));
     }
 
     @GetMapping("/city/{city}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<CompaniesResponse>> getByCity(@PathVariable String city) {
         return ResponseEntity.ok(companiesService.getByCity(city));
     }

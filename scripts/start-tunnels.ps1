@@ -89,9 +89,21 @@ function Wait-ForDocker {
     if (Test-DockerReady) { return }
 
     Write-Host "==> Docker Desktop is not running - starting it..." -ForegroundColor Cyan
-    $dockerDesktopExe = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
-    if (-not (Test-Path $dockerDesktopExe)) {
-        throw "Docker Desktop.exe not found at '$dockerDesktopExe' - adjust the path in Wait-ForDocker if it is installed elsewhere."
+    # Docker Desktop installs either machine-wide (Program Files) or per-user
+    # (%LOCALAPPDATA%\Programs). As a last resort, derive it from docker.exe on PATH,
+    # which lives in <install dir>\resources\bin\docker.exe.
+    $candidates = @(
+        (Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Docker\Docker\Docker Desktop.exe')
+    )
+    $dockerCli = Get-Command docker -ErrorAction SilentlyContinue
+    if ($dockerCli) {
+        $installDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $dockerCli.Source))
+        $candidates += (Join-Path $installDir 'Docker Desktop.exe')
+    }
+    $dockerDesktopExe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $dockerDesktopExe) {
+        throw "Docker Desktop.exe not found (looked in: $($candidates -join '; ')). Start Docker Desktop manually and run this script again."
     }
     Start-Process $dockerDesktopExe
 
@@ -105,18 +117,93 @@ function Wait-ForDocker {
     throw "Timed out after ${TimeoutSeconds}s waiting for Docker Desktop to start."
 }
 
+# ---- Preflight: fail early with a clear message instead of half-starting everything ----
+
+# cloudflared: the hard-coded path above, else whatever is on PATH (winget/scoop/choco
+# install to different places).
+if (-not (Test-Path $cloudflared)) {
+    $onPath = Get-Command cloudflared -ErrorAction SilentlyContinue
+    if ($onPath) {
+        $cloudflared = $onPath.Source
+    } else {
+        throw "cloudflared not found. Install it with:  winget install Cloudflare.cloudflared  (then open a NEW PowerShell window and run this script again)."
+    }
+}
+
+# Backend .env is optional (docker-compose.yml has local defaults for everything), but
+# this script writes CORS_ALLOWED_ORIGINS into it below, so make sure it exists.
+$backendEnv = Join-Path $backendDir '.env'
+if (-not (Test-Path $backendEnv)) {
+    Copy-Item (Join-Path $backendDir '.env.example') $backendEnv
+    Write-Host "==> Created Hotel-system\.env from .env.example (local defaults apply to empty values)" -ForegroundColor Cyan
+}
+
+# Frontend .env is rewritten below (VITE_API_BASE_URL) - create it from the example if absent.
+$frontendEnv = Join-Path $frontendDir '.env'
+if (-not (Test-Path $frontendEnv)) {
+    Copy-Item (Join-Path $frontendDir '.env.example') $frontendEnv
+    Write-Host "==> Created frontend\.env from .env.example" -ForegroundColor Cyan
+}
+
+# `npm run dev` needs dependencies installed.
+if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
+    Write-Host "==> Installing frontend dependencies (npm install)..." -ForegroundColor Cyan
+    Push-Location $frontendDir
+    cmd.exe /c npm install
+    $npmExit = $LASTEXITCODE
+    Pop-Location
+    if ($npmExit -ne 0) { throw "npm install failed (exit code $npmExit)." }
+}
+
+# "Started" from docker compose only means the container process launched - Spring Boot
+# still needs ~20-60s (Flyway migrations, context start) before it answers. Tunnelling
+# before that is what produced Cloudflare's 502 / "Cannot reach the server".
+function Wait-ForBackend {
+    param([int]$TimeoutSeconds = 180)
+    Write-Host "==> Waiting for the backend to become healthy (up to ${TimeoutSeconds}s)..." -ForegroundColor Cyan
+    for ($i = 0; $i -lt $TimeoutSeconds; $i += 3) {
+        try {
+            $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8081/actuator/health' -UseBasicParsing -TimeoutSec 3
+            if ($r.StatusCode -eq 200) {
+                Write-Host "    Backend is up." -ForegroundColor Green
+                return
+            }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    Write-Host "Backend did not become healthy. Last log lines of hotel_app:" -ForegroundColor Red
+    docker logs hotel_app --tail 60
+    throw "Backend failed to start - see the log above."
+}
+
 Wait-ForDocker
 
-Write-Host "==> Starting Postgres, Redis, backend (Docker)..." -ForegroundColor Cyan
-Push-Location $backendDir
-docker compose up -d postgres redis app
+# All docker compose calls run from the repository root: ../docker-compose.yml includes
+# Hotel-system/docker-compose.yml, so this is the same project `docker compose up` uses.
+Push-Location $root
+# The all-in-Docker frontend (docker compose up) also publishes port 5173 - stop it so
+# the Vite dev server started below gets that port and the tunnel points at the right thing.
+docker compose stop frontend 2>$null | Out-Null
+
+Write-Host "==> Building and starting Postgres, Redis, backend (Docker)..." -ForegroundColor Cyan
+# --build: without it Docker keeps running whatever image it built the first time, so
+# backend code changes silently never made it into the container.
+docker compose up -d --build postgres redis app
+$composeExit = $LASTEXITCODE
 Pop-Location
+# $ErrorActionPreference = 'Stop' does not apply to native programs' exit codes - without
+# this check a failed `docker compose up` was ignored and the script carried on.
+if ($composeExit -ne 0) {
+    throw "docker compose up failed (exit code $composeExit) - see the errors above."
+}
+Wait-ForBackend
 
 Write-Host "==> Starting backend tunnel..." -ForegroundColor Cyan
 $backendOutLog = Join-Path $logDir 'backend.out.log'
 $backendErrLog = Join-Path $logDir 'backend.err.log'
 Remove-Item $backendOutLog, $backendErrLog -ErrorAction SilentlyContinue
-$backendTunnel = Start-Process $cloudflared -ArgumentList 'tunnel --url http://localhost:8081' `
+# 127.0.0.1, not localhost: cloudflared may resolve localhost to IPv6 ::1 first.
+$backendTunnel = Start-Process $cloudflared -ArgumentList 'tunnel --url http://127.0.0.1:8081' `
     -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog -WindowStyle Hidden -PassThru
 $backendUrl = Wait-ForTunnelUrl -OutPath $backendOutLog -ErrPath $backendErrLog
 Write-Host "    Backend URL: $backendUrl" -ForegroundColor Green
@@ -145,10 +232,14 @@ $frontendUrl = Wait-ForTunnelUrl -OutPath $frontendOutLog -ErrPath $frontendErrL
 Write-Host "    Frontend URL: $frontendUrl" -ForegroundColor Green
 
 Write-Host "==> Writing CORS_ALLOWED_ORIGINS into Hotel-system/.env and recreating the app container..." -ForegroundColor Cyan
-Set-EnvValue -EnvPath (Join-Path $backendDir '.env') -Key 'CORS_ALLOWED_ORIGINS' -Value $frontendUrl
-Push-Location $backendDir
+# Tunnel origin PLUS the local ones - writing only the tunnel URL here used to break
+# plain local use (http://localhost:5173) until someone edited .env by hand.
+$corsOrigins = "$frontendUrl,http://localhost:5173,http://127.0.0.1:5173"
+Set-EnvValue -EnvPath $backendEnv -Key 'CORS_ALLOWED_ORIGINS' -Value $corsOrigins
+Push-Location $root
 docker compose up -d app
 Pop-Location
+Wait-ForBackend
 
 @{
     backendTunnelPid  = $backendTunnel.Id

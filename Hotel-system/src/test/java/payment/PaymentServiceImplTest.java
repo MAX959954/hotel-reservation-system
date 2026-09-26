@@ -114,7 +114,7 @@ public class PaymentServiceImplTest {
     // ---------- pay ----------
 
     @Test
-    void pay_createsCompletedPayment_whenBookingConfirmedAndUnpaid() {
+    void pay_createsPendingPayment_whenBookingConfirmedAndUnpaid() {
         given(bookingRepository.findById(1L)).willReturn(Optional.of(booking));
         given(paymentRepository.findByBookingId(1L)).willReturn(Optional.empty());
         given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> {
@@ -130,12 +130,59 @@ public class PaymentServiceImplTest {
         assertThat(response.getAmount())
                 .as("amount must come from the booking, not the request")
                 .isEqualTo(booking.getTotalPrice());
-        assertThat(response.getStatus()).isEqualTo(PaymentStatus.COMPLETED);
-        assertThat(response.getPaidAt()).isNotNull();
+        // Offline methods (here CASH) are only a promise to pay — staff confirm receipt
+        // via markReceived(). The guest must not be able to mark their own booking paid.
+        assertThat(response.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(response.getPaidAt()).isNull();
 
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
         verify(paymentRepository).save(captor.capture());
-        assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.COMPLETED);
+        assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(eventPublisher, never()).publishEvent(any(PaymentCompletedEvent.class));
+    }
+
+    // ---------- markReceived ----------
+
+    private Payment offlinePayment(PaymentStatus status) {
+        Payment payment = paymentWithStatus(status);
+        payment.setMethod(PaymentMethod.CASH);
+        payment.setPaidAt(null);
+        return payment;
+    }
+
+    @Test
+    void markReceived_completesPendingOfflinePayment_andSendsConfirmation() {
+        Payment payment = offlinePayment(PaymentStatus.PENDING);
+        given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentResponse response = paymentService.markReceived(10L);
+
+        assertThat(response.getStatus()).isEqualTo(PaymentStatus.COMPLETED);
+        assertThat(response.getPaidAt()).isNotNull();
+        verify(eventPublisher).publishEvent(any(PaymentCompletedEvent.class));
+    }
+
+    @Test
+    void markReceived_throws_forGatewayPayment() {
+        given(paymentRepository.findById(10L)).willReturn(Optional.of(paymentWithStatus(PaymentStatus.PENDING)));
+
+        assertThatThrownBy(() -> paymentService.markReceived(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("confirmed by Stripe");
+
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void markReceived_throws_whenNotPending() {
+        given(paymentRepository.findById(10L)).willReturn(Optional.of(offlinePayment(PaymentStatus.COMPLETED)));
+
+        assertThatThrownBy(() -> paymentService.markReceived(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only PENDING payments can be marked as received");
+
+        verify(paymentRepository, never()).save(any());
     }
 
     @Test
@@ -167,7 +214,7 @@ public class PaymentServiceImplTest {
 
         assertThatThrownBy(() -> paymentService.pay(request))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("confrimed bookings"); // matches production message verbatim
+                .hasMessageContaining("confirmed bookings"); // matches production message verbatim
 
         verify(paymentRepository, never()).save(any());
     }

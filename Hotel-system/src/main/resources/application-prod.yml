@@ -1,7 +1,9 @@
 # Activated with SPRING_PROFILES_ACTIVE=prod (set this in Railway/whatever PaaS you
-# deploy to — Docker Compose's own local workflow stays on the base application.yml
-# defaults, which are meant for that). Only overrides what actually needs to differ;
-# everything else keeps inheriting from application.yml.
+# deploy to — the local Docker Compose workflow uses the "local" profile instead, see
+# application-local.yml). Only overrides what actually needs to differ; everything else
+# keeps inheriting from application.yml. config.ProductionSafetyCheck additionally
+# refuses to start this profile with local-development settings (dev JWT key, codes in
+# the log).
 
 cors:
   # No fallback here on purpose, unlike the base file's localhost default — an unset

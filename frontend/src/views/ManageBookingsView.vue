@@ -5,6 +5,7 @@ import { Loader2, RotateCw, UserPlus } from 'lucide-vue-next'
 import ExtranetShell from '@/components/ExtranetShell.vue'
 import SiteFooter from '@/components/SiteFooter.vue'
 import { bookingsApi } from '@/api/bookings'
+import { paymentsApi } from '@/api/payments'
 import { companiesApi } from '@/api/companies'
 import { companyUsersApi } from '@/api/companyUsers'
 import { apiErrorMessage } from '@/api/http'
@@ -15,6 +16,7 @@ import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
 import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
 import { companyRoleLabel, type CompanyRole, type CompanyUserResponse } from '@/types/companyUser'
+import { isAwaitingOfflinePayment, paymentMethodLabel, type PaymentResponse } from '@/types/payment'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -22,12 +24,12 @@ const company = useCompanyStore()
 const confirmModal = useConfirmModalStore()
 const currency = useCurrencyStore()
 
-// Mirrors the backend's own @PreAuthorize bypass on these endpoints: ADMIN/RECEPTIONIST/
-// HOTEL_MANAGER can act on any company's bookings, not just ones they're a company_user
-// row for — so for them the picker is "every active company", not "my memberships".
-const hasGlobalAccess = computed(
-  () => auth.hasRole('ADMIN') || auth.hasRole('RECEPTIONIST') || auth.hasRole('HOTEL_MANAGER'),
-)
+// Only ADMIN gets the "every active company" picker: the list itself comes from
+// GET /api/companies/status/ACTIVE, which is admin-only. Previously HOTEL_MANAGER (which
+// every approved host is granted) and RECEPTIONIST counted as global too — that call then
+// 403'd, Promise.all below rejected, and the page never left its loading state for hosts.
+// Everyone else picks from their own company memberships, same as ManageHotelsView.
+const hasGlobalAccess = computed(() => auth.hasRole('ADMIN'))
 const allCompanies = ref<{ companyId: number; companyName: string }[]>([])
 
 const STATUS_CLASSES: Record<BookingStatus, string> = {
@@ -115,13 +117,27 @@ const loading = ref(true)
 const error = ref('')
 const acting = ref<number | null>(null)
 
-type ActionKind = 'confirm' | 'checkIn' | 'complete' | 'cancel'
+/** Keyed by booking id; only bookings that can carry a payment are looked up. */
+const payments = ref<Record<number, PaymentResponse>>({})
+
+type ActionKind = 'confirm' | 'checkIn' | 'complete' | 'cancel' | 'markPaid'
 
 const ACTION_LABEL_KEYS: Record<ActionKind, string> = {
   confirm: 'manageBookings.actionConfirm',
   checkIn: 'manageBookings.actionCheckIn',
   complete: 'manageBookings.actionComplete',
   cancel: 'manageBookings.actionCancel',
+  markPaid: 'manageBookings.actionMarkPaid',
+}
+
+type Action = { kind: ActionKind; run: () => Promise<unknown>; danger?: boolean }
+
+/** A guest who chose cash on arrival / bank transfer / crypto has a PENDING payment until
+ *  staff confirm the money arrived — offered on CONFIRMED and CHECKED_IN stays, since cash
+ *  is usually handed over at the desk. */
+function markPaidAction(booking: BookingResponse): Action[] {
+  const payment = payments.value[booking.id]
+  return isAwaitingOfflinePayment(payment) ? [{ kind: 'markPaid', run: () => paymentsApi.markReceived(payment.id) }] : []
 }
 
 /** Server-side transitions this panel drives: confirm, check-in, complete, cancel.
@@ -129,7 +145,7 @@ const ACTION_LABEL_KEYS: Record<ActionKind, string> = {
  *  danger action) the confirmation copy are both resolved from it separately, since
  *  concatenating a translated verb into an English sentence template would produce
  *  broken grammar in most other languages. */
-function actionsFor(booking: BookingResponse): { kind: ActionKind; run: () => Promise<BookingResponse>; danger?: boolean }[] {
+function actionsFor(booking: BookingResponse): Action[] {
   switch (booking.bookingStatus) {
     case 'PENDING':
       return [
@@ -138,11 +154,12 @@ function actionsFor(booking: BookingResponse): { kind: ActionKind; run: () => Pr
       ]
     case 'CONFIRMED':
       return [
+        ...markPaidAction(booking),
         { kind: 'checkIn', run: () => bookingsApi.checkIn(booking.id) },
         { kind: 'cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
       ]
     case 'CHECKED_IN':
-      return [{ kind: 'complete', run: () => bookingsApi.complete(booking.id) }]
+      return [...markPaidAction(booking), { kind: 'complete', run: () => bookingsApi.complete(booking.id) }]
     default:
       return []
   }
@@ -154,6 +171,16 @@ async function load() {
   error.value = ''
   try {
     bookings.value = await bookingsApi.getByCompany(companyId.value, status.value ?? undefined)
+    // Payment state per booking, for the "awaiting payment" badge and "Mark as paid".
+    // A failed lookup just leaves that booking without a badge rather than failing the list.
+    const candidates = bookings.value.filter((b) => ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(b.bookingStatus))
+    const results = await Promise.all(candidates.map((b) => paymentsApi.getByBooking(b.id).catch(() => null)))
+    const next: Record<number, PaymentResponse> = {}
+    candidates.forEach((b, i) => {
+      const payment = results[i]
+      if (payment) next[b.id] = payment
+    })
+    payments.value = next
   } catch (e) {
     error.value = apiErrorMessage(e, t('manageBookings.loadError'))
   } finally {
@@ -161,10 +188,7 @@ async function load() {
   }
 }
 
-async function runAction(
-  booking: BookingResponse,
-  action: { kind: ActionKind; run: () => Promise<BookingResponse>; danger?: boolean },
-) {
+async function runAction(booking: BookingResponse, action: Action) {
   if (action.danger) {
     // Only 'cancel' is ever marked danger, so this modal copy doesn't need to vary by kind.
     const confirmed = await confirmModal.ask({
@@ -217,6 +241,9 @@ onMounted(async () => {
   if (hasGlobalAccess.value) {
     tasks.push(companiesApi.getByStatus('ACTIVE').then((list) => {
       allCompanies.value = list.map((c) => ({ companyId: c.id, companyName: c.name }))
+    }).catch(() => {
+      // A failed list must not leave the page stuck on its spinner (Promise.all below).
+      allCompanies.value = []
     }))
   }
   await Promise.all(tasks)
@@ -324,6 +351,18 @@ onMounted(async () => {
                   :class="STATUS_CLASSES[booking.bookingStatus]"
                 >
                   {{ bookingStatusLabel(booking.bookingStatus) }}
+                </span>
+                <span
+                  v-if="isAwaitingOfflinePayment(payments[booking.id])"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-medium border text-amber-300/90 bg-amber-300/10 border-amber-300/20"
+                >
+                  {{ $t('bookings.awaitingVia', { method: paymentMethodLabel(payments[booking.id].method) }) }}
+                </span>
+                <span
+                  v-else-if="payments[booking.id]?.status === 'COMPLETED'"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-medium border text-champagne bg-champagne/10 border-champagne/25"
+                >
+                  {{ $t('bookings.paidVia', { method: paymentMethodLabel(payments[booking.id].method) }) }}
                 </span>
               </div>
               <p class="text-sm font-light text-bone-dim mt-2">

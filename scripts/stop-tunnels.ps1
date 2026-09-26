@@ -29,4 +29,26 @@ if (Test-Path $pidFile) {
 # any unrelated Node process you happen to have running.
 Get-Process cloudflared | Stop-Process -Force
 
-Write-Host "Tunnels and dev server stopped. Docker containers are still running." -ForegroundColor Yellow
+# start-tunnels.ps1 wrote the (now dead) tunnel URLs into both .env files. Put them back
+# to local values, otherwise the next plain local run (docker compose up / npm run dev)
+# talks to a tunnel that no longer exists and gets blocked by CORS.
+$root = Split-Path -Parent $PSScriptRoot
+function Reset-EnvValue {
+    param([string]$EnvPath, [string]$Key, [string]$Value)
+    if (-not (Test-Path $EnvPath)) { return }
+    $content = Get-Content $EnvPath
+    if ($content -match "^$Key=") {
+        $content = $content -replace "^$Key=.*", "$Key=$Value"
+        Set-Content -Path $EnvPath -Value $content
+    }
+}
+# Empty = docker-compose.yml's default localhost allow-list.
+Reset-EnvValue -EnvPath (Join-Path $root 'Hotel-system\.env') -Key 'CORS_ALLOWED_ORIGINS' -Value ''
+Reset-EnvValue -EnvPath (Join-Path $root 'frontend\.env') -Key 'VITE_API_BASE_URL' -Value 'http://localhost:8081'
+
+# Recreate the API container so it picks up the local CORS list again.
+Push-Location $root
+docker compose up -d app 2>$null | Out-Null
+Pop-Location
+
+Write-Host "Tunnels and dev server stopped; .env files reset to local URLs. Docker containers are still running." -ForegroundColor Yellow
