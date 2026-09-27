@@ -3,6 +3,7 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Loader2, Lock, Mail, X } from 'lucide-vue-next'
 import DatePicker from './DatePicker.vue'
+import GoogleSignInButton from './GoogleSignInButton.vue'
 import { authApi } from '@/api/auth'
 import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -270,6 +271,21 @@ function finish(session: Parameters<typeof auth.setSession>[0]) {
   if (intended) router.push(intended)
 }
 
+/** Google returns an ID token; the backend verifies it and signs in (or creates) the
+ *  matching account in one step - no password or e-mail code involved. */
+async function signInWithGoogle(idToken: string) {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    finish(await authApi.google(idToken))
+  } catch (e) {
+    error.value = apiErrorMessage(e)
+  } finally {
+    busy.value = false
+  }
+}
+
 function close() {
   modal.close(false)
 }
@@ -365,6 +381,8 @@ function backToForm() {
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
               Continue
             </button>
+
+            <GoogleSignInButton @credential="signInWithGoogle" />
 
             <p class="text-xs font-light text-bone-dim text-center">
               New to Folio?
@@ -483,6 +501,8 @@ function backToForm() {
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
               Continue
             </button>
+
+            <GoogleSignInButton @credential="signInWithGoogle" />
 
             <p class="text-xs font-light text-bone-dim text-center">
               Already have an account?

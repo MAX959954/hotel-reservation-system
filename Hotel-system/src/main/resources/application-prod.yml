@@ -5,6 +5,30 @@
 # refuses to start this profile with local-development settings (dev JWT key, codes in
 # the log).
 
+# E-mail over SMTP (app.mail.provider=smtp, the default in deploy/docker-compose.prod.yml),
+# e.g. Gmail with an app password: host smtp.gmail.com, port 587, STARTTLS. SendGrid's
+# HTTP API remains available with MAIL_PROVIDER=sendgrid (it no longer has a free plan).
+spring:
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
+# An unreachable mail server must not mark the whole API unhealthy (that would make the
+# deploy script / Docker healthcheck treat a working site as down).
+management:
+  health:
+    mail:
+      enabled: false
+
 cors:
   # No fallback here on purpose, unlike the base file's localhost default — an unset
   # CORS_ALLOWED_ORIGINS in prod should fail the deploy loudly (Spring refuses to start:

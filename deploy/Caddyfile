@@ -1,0 +1,35 @@
+# Caddy: HTTPS (automatic Let's Encrypt certificates) + routing for the whole site.
+# SITE_ADDRESS (= DOMAIN) and ACME_EMAIL come from deploy/.env via docker-compose.prod.yml.
+# docker-compose.home.yml sets SITE_ADDRESS to ":80" instead: plain HTTP, because there
+# Tailscale Funnel terminates HTTPS in front of Caddy.
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Company documents may be up to 10MB (see application.yml).
+	request_body {
+		max_size 12MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# Backend paths. Everything else is the Vue app (its nginx falls back to index.html
+	# for client-side routes like /hotels/12).
+	@backend path /api/* /company_users /company_users/* /uploads/avatars/* /actuator/health
+	handle @backend {
+		reverse_proxy app:8080
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}

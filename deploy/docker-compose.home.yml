@@ -1,0 +1,21 @@
+# HOME HOSTING: run the production stack on your own PC and make it public through
+# Tailscale Funnel, with no server, no router port forwarding and a fixed HTTPS address
+# (https://<machine>.<tailnet>.ts.net). Used together with the production file:
+#
+#   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env up -d --build
+#   tailscale funnel --bg 8088
+#
+# Differences from the server setup:
+# - Tailscale terminates HTTPS, so Caddy serves plain HTTP (site address ":80") and gets
+#   no Let's Encrypt certificate;
+# - Caddy is published only on 127.0.0.1:8088, not on 80/443 of every interface. Nothing
+#   on the PC is reachable from the network except through the Funnel.
+# DOMAIN in deploy/.env must be the Funnel hostname (it is baked into the frontend and
+# used for CORS). Full guide: deploy/README.md, "Host it from your own PC".
+
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:8088:80"
+    environment:
+      SITE_ADDRESS: ":80"

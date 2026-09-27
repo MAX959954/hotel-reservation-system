@@ -1,0 +1,39 @@
+name: Deploy
+
+# Deploys to the production server after CI has passed on main (or manually from the
+# Actions tab). Disabled until you set the repository variable DEPLOY_ENABLED=true and
+# the secrets below - see deploy/README.md, section "Automatic deploys".
+#
+# Repository secrets:   DEPLOY_HOST (server IP or domain), DEPLOY_USER, DEPLOY_SSH_KEY
+#                       (private key whose public half is in the server's authorized_keys)
+# Repository variables: DEPLOY_ENABLED=true, DEPLOY_PATH (optional, default ~/folio)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '~/folio' }}
+            bash deploy/deploy.sh

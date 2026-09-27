@@ -597,6 +597,34 @@ public class PaymentServiceImplTest {
         return event;
     }
 
+    // A webhook endpoint created in the Dashboard today uses a newer API version than
+    // stripe-java is pinned to, so getObject() comes back empty - the event must still be
+    // handled through the lenient deserializer instead of being silently dropped.
+    @Test
+    void handleWebhookEvent_fallsBackToUnsafeDeserialization_whenApiVersionDiffers() throws Exception {
+        Payment payment = paymentWithStatus(PaymentStatus.PENDING);
+        payment.setPaidAt(null);
+        given(paymentRepository.findByTransactionId("txn-123")).willReturn(Optional.of(payment));
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentIntent intent = Mockito.mock(PaymentIntent.class);
+        given(intent.getId()).willReturn("txn-123");
+        Event event = Mockito.mock(Event.class);
+        EventDataObjectDeserializer deserializer = Mockito.mock(EventDataObjectDeserializer.class);
+        given(event.getType()).willReturn("payment_intent.succeeded");
+        given(event.getDataObjectDeserializer()).willReturn(deserializer);
+        given(deserializer.getObject()).willReturn(Optional.empty());
+        given(deserializer.deserializeUnsafe()).willReturn(intent);
+
+        try (MockedStatic<Webhook> webhookStatic = Mockito.mockStatic(Webhook.class)) {
+            webhookStatic.when(() -> Webhook.constructEvent(any(), any(), any())).thenReturn(event);
+
+            paymentService.handleWebhookEvent("{}", "sig");
+        }
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.COMPLETED);
+    }
+
     @Test
     void handleWebhookEvent_throws_whenSignatureInvalid() {
         try (MockedStatic<Webhook> webhookStatic = Mockito.mockStatic(Webhook.class)) {

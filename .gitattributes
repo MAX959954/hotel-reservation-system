@@ -1,0 +1,5 @@
+# Files executed on Linux (server / containers) must keep LF line endings even when
+# committed from Windows - a CRLF shell script fails with "$'\r': command not found".
+*.sh            text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.yml    text eol=lf
