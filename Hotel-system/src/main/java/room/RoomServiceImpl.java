@@ -1,5 +1,6 @@
 package room;
 
+import exception.ResourceNotFoundException;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import lombok.RequiredArgsConstructor;
@@ -106,11 +107,11 @@ public class RoomServiceImpl implements RoomService{
     }
 
     private Room findById(Long id) {
-        return roomRepository.findById(id).orElseThrow(() -> new IllegalStateException("Room not found by that id: " + id));
+        return roomRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Room not found by that id: " + id));
     }
 
     private Hotels findHotelById(Long id){
-        return hotelsRepository.findById(id).orElseThrow(() -> new IllegalStateException("Hotel not found by that id " + id));
+        return hotelsRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Hotel not found by that id " + id));
     }
 
     private RoomResponse toResponse(Room room) {

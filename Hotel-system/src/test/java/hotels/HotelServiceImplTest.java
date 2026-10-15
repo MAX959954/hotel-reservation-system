@@ -1,5 +1,6 @@
 package hotels;
 
+import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,7 +103,7 @@ public class HotelServiceImplTest {
         given(companiesRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> hotelService.create(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Company not found");
 
         verify(hotelsRepository , never()).save(any());
@@ -123,7 +124,7 @@ public class HotelServiceImplTest {
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> hotelService.getById(1L, "en"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Hotel not found");
     }
 
@@ -185,7 +186,7 @@ public class HotelServiceImplTest {
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> hotelService.updateStatus(1L , Hotel_Status.CLOSED))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Hotel not found");
 
         verify(hotelsRepository , never()).save(any());
@@ -204,7 +205,7 @@ public class HotelServiceImplTest {
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> hotelService.delete(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Hotel not found");
     }
 

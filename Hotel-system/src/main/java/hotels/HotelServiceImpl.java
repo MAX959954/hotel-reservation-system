@@ -1,5 +1,6 @@
 package hotels;
 
+import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,7 @@ public class HotelServiceImpl implements HotelService{
     @Transactional
     @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
     public  HotelResponse create(CreateHotelRequest request) {
-        Companies company = companiesRepository.findById(request.getCompanyId()).orElseThrow(() -> new IllegalStateException("Company not found"+ request.getCompanyId()));
+        Companies company = companiesRepository.findById(request.getCompanyId()).orElseThrow(() -> new ResourceNotFoundException("Company not found "+ request.getCompanyId()));
 
         Hotels hotel = Hotels.builder()
                 .name(request.getName())
@@ -134,7 +135,7 @@ public class HotelServiceImpl implements HotelService{
     }
 
     private Hotels findById(Long id) {
-        return hotelsRepository.findById(id).orElseThrow(() -> new IllegalStateException("Hotel not found " + id));
+        return hotelsRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Hotel not found " + id));
     }
 
     /** Falls back to the base (English) description whenever the requested locale is

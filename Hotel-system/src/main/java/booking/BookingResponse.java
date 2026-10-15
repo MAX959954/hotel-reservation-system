@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class BookingResponse {
-    private Long Id;
+    private Long id;
     private Long userId;
     private String userFullName;
     private Long roomId;

@@ -36,7 +36,7 @@ class BookingControllerTest {
 
     private BookingResponse sampleResponse() {
         return BookingResponse.builder()
-                .Id(1L)
+                .id(1L)
                 .userId(1L)
                 .userFullName("Jane Doe")
                 .roomId(1L)

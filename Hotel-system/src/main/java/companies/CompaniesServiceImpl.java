@@ -1,5 +1,6 @@
 package companies;
 
+import exception.ResourceNotFoundException;
 import companyuser.CompanyRole;
 import companyuser.CompanyUser;
 import companyuser.CompanyUserRepository;
@@ -53,7 +54,7 @@ public class CompaniesServiceImpl implements CompaniesService {
     @Override
     public CompaniesResponse getByEmail(String email) {
         return toResponse(companiesRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("Company not found with that email: " + email)));
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found with that email: " + email)));
     }
 
     @Override
@@ -91,7 +92,7 @@ public class CompaniesServiceImpl implements CompaniesService {
         }
 
         User submitter = userRepository.findById(company.getSubmittedByUserId())
-                .orElseThrow(() -> new IllegalStateException("Submitting user not found: " + company.getSubmittedByUserId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Submitting user not found: " + company.getSubmittedByUserId()));
 
         company.setStatus(CompaniesStatus.ACTIVE);
         Companies saved = companiesRepository.save(company);
@@ -183,7 +184,7 @@ public class CompaniesServiceImpl implements CompaniesService {
 
     private Companies findById(Long id) {
         return companiesRepository.findById(id)
-                .orElseThrow(() -> new IllegalStateException("Company not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + id));
     }
 
     // Mirrors UserServiceImpl.currentUser(): the authenticated principal's name is the
@@ -191,7 +192,7 @@ public class CompaniesServiceImpl implements CompaniesService {
     private User currentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found by that email: " + email));
     }
 
     private Companies toEntity(CompaniesRequest request) {

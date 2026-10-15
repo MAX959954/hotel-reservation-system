@@ -1,5 +1,6 @@
 package payment;
 
+import exception.ResourceNotFoundException;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
@@ -256,7 +257,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentResponse getByBookingId(Long bookingId) {
-        return  toResponse(paymentRepository.findByBookingId(bookingId).orElseThrow(() -> new IllegalStateException("Payment not found for booking id" + bookingId)));
+        return  toResponse(paymentRepository.findByBookingId(bookingId).orElseThrow(() -> new ResourceNotFoundException("Payment not found for booking id " + bookingId)));
     }
 
     @Override
@@ -527,11 +528,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private Payment findById(Long id) {
-        return paymentRepository.findById(id).orElseThrow(() -> new IllegalStateException("Payment not found by id: " + id));
+        return paymentRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Payment not found by id: " + id));
     }
 
     private Booking findByBookingId (Long id) {
-        return bookingRepository.findById(id).orElseThrow(() -> new IllegalStateException("Booking with that id not found" + id));
+        return bookingRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Booking with that id not found " + id));
     }
 
     public PaymentResponse toResponse(Payment payment){

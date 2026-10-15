@@ -1,5 +1,6 @@
 package booking;
 
+import exception.ResourceNotFoundException;
 import hotels.Hotels;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -187,7 +188,7 @@ public class BookingServiceImplTest {
         given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> bookingService.create(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Room not found");
     }
 
@@ -198,7 +199,7 @@ public class BookingServiceImplTest {
         given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> bookingService.create(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("User not found");
     }
 
@@ -288,7 +289,7 @@ public class BookingServiceImplTest {
         given(bookingRepository.findById(10L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> bookingService.getById(10L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Booking not found");
     }
 
@@ -625,7 +626,7 @@ public class BookingServiceImplTest {
         given(bookingRepository.findById(10L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> bookingService.delete(10L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Booking not found");
 
         verify(bookingRepository, never()).delete(any());

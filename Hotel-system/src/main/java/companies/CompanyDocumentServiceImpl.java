@@ -21,7 +21,7 @@ public class CompanyDocumentServiceImpl implements CompanyDocumentService {
     @Transactional
     public CompanyDocumentResponse upload(Long companyId, MultipartFile file) {
         Companies company = companiesRepository.findById(companyId)
-                .orElseThrow(() -> new IllegalStateException("Company not found: " + companyId));
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found: " + companyId));
 
         if (company.getStatus() != CompaniesStatus.PENDING_VERIFICATION) {
             throw new IllegalStateException("Documents can only be added while the application is pending review");
