@@ -1,5 +1,6 @@
 package room;
 
+import exception.ResourceNotFoundException;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,7 +99,7 @@ public class RoomServiceImplTest {
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.create(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Hotel not found by that id");
 
         verify(roomRepository, never()).save(any());
@@ -121,7 +122,7 @@ public class RoomServiceImplTest {
         given(roomRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.getById(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Room not found by that id");
     }
 
@@ -231,7 +232,7 @@ public class RoomServiceImplTest {
         given(roomRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.updateStatus(1L, RoomStatus.MAINTENANCE))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Room not found by that id");
 
         verify(roomRepository, never()).save(any());
@@ -272,7 +273,7 @@ public class RoomServiceImplTest {
         given(roomRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.update(1L, request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Room not found by that id");
 
         verify(roomRepository, never()).save(any());
@@ -284,7 +285,7 @@ public class RoomServiceImplTest {
         given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.update(1L, request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Hotel not found by that id");
 
         verify(roomRepository, never()).save(any());
@@ -306,7 +307,7 @@ public class RoomServiceImplTest {
         given(roomRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.delete(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Room not found by that id");
     }
 }

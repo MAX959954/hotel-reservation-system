@@ -1,5 +1,6 @@
 package payment;
 
+import exception.ResourceNotFoundException;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
@@ -201,7 +202,7 @@ public class PaymentServiceImplTest {
         given(bookingRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.pay(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Booking with that id not found");
 
         verify(paymentRepository, never()).save(any());
@@ -344,7 +345,7 @@ public class PaymentServiceImplTest {
         given(paymentRepository.findById(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.getById(99L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Payment not found by id: 99");
     }
 
@@ -364,7 +365,7 @@ public class PaymentServiceImplTest {
         given(paymentRepository.findByBookingId(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> paymentService.getByBookingId(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Payment not found for booking id");
     }
 

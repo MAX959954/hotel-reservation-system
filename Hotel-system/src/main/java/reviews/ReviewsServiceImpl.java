@@ -1,5 +1,6 @@
 package reviews;
 
+import exception.ResourceNotFoundException;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
@@ -65,7 +66,7 @@ public class ReviewsServiceImpl implements ReviewsService {
         return reviewsRepository.findByBookingId(bookingId).stream()
                 .findFirst()
                 .map(this::toResponse)
-                .orElseThrow(() -> new IllegalStateException("Review not found for booking id: " + bookingId));
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found for booking id: " + bookingId));
     }
 
     @Override
@@ -92,12 +93,12 @@ public class ReviewsServiceImpl implements ReviewsService {
     }
 
     private Reviews findById(Long id) {
-        return reviewsRepository.findById(id).orElseThrow(() -> new IllegalStateException("Review not found by id: " + id));
+        return reviewsRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Review not found by id: " + id));
     }
 
     private Booking findBookingById(Long id) {
         return bookingRepository.findById(id)
-                .orElseThrow(() -> new IllegalStateException("Booking not found by that id " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found by that id " + id));
     }
 
     private ReviewsResponse toResponse(Reviews reviews) {

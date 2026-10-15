@@ -1,5 +1,6 @@
 package user;
 
+import exception.ResourceNotFoundException;
 import companyuser.CompanyUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -324,7 +325,7 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
 
     private User findById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new IllegalStateException("User not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
     }
 
     // Mirrors the "current user from the JWT" pattern already used in BookingServiceImpl:
@@ -333,7 +334,7 @@ public class UserServiceImpl implements  UserService , UserDetailsService {
     private User currentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found by that email: " + email));
     }
 
     private UserProfileResponse toProfileResponse(User user) {

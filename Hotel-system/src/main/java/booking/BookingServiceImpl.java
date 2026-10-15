@@ -1,5 +1,6 @@
 package booking;
 
+import exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -79,7 +80,7 @@ public class BookingServiceImpl implements BookingService{
         // 11am), so ChronoUnit.DAYS.between on the full timestamps would floor a 3-night
         // stay (Mon 3pm -> Thu 11am, 68 hours) down to 2.
         long nights = ChronoUnit.DAYS.between(request.getCheckIn().toLocalDate() , request.getCheckOut().toLocalDate());
-        double totalPrirce = nights * room.getPrice_per_night();
+        double totalPrice = nights * room.getPrice_per_night();
 
         Booking booking = Booking.builder()
                 .user(user)
@@ -87,7 +88,7 @@ public class BookingServiceImpl implements BookingService{
                 .check_in(request.getCheckIn())
                 .check_out(request.getCheckOut())
                 .guestCount(request.getGuestCount())
-                .totalPrice(totalPrirce)
+                .totalPrice(totalPrice)
                 .special_request(request.getSpecialRequest())
                 .build();
 
@@ -263,22 +264,22 @@ public class BookingServiceImpl implements BookingService{
     }
 
     public Booking findById(Long id) {
-        return bookingRepository.findById(id).orElseThrow(() -> new IllegalStateException("Booking not found by id: " + id));
+        return bookingRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Booking not found by id: " + id));
     }
 
     private Room findByRoomId (Long roomId) {
-        return roomRepository.findByIdForUpdate(roomId).orElseThrow(() -> new IllegalStateException("Room not found by that id " + roomId));
+        return roomRepository.findByIdForUpdate(roomId).orElseThrow(() -> new ResourceNotFoundException("Room not found by that id " + roomId));
     }
 
     private User currentUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found by that email: " + email));
     }
 
     private BookingResponse toResponse(Booking booking) {
         return BookingResponse.builder()
-                .Id(booking.getId())
+                .id(booking.getId())
                 .userId(booking.getUser().getId())
                 .userFullName(booking.getUser().getFirstName() + " " + booking.getUser().getLastName())
                 .roomId(booking.getRoom().getId())

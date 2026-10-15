@@ -1,4 +1,5 @@
 package reviews;
+import exception.ResourceNotFoundException;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
@@ -117,7 +118,7 @@ public class ReviewsServiceImplTest {
         given(bookingRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewsService.create(request))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Booking not found by that id");
         verify(reviewsRepository , never()).save(any());
     }
@@ -149,7 +150,7 @@ public class ReviewsServiceImplTest {
         given(reviewsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewsService.getById(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Review not found by id");
     }
 
@@ -198,7 +199,7 @@ public class ReviewsServiceImplTest {
         given(reviewsRepository.findByBookingId(1L)).willReturn(List.of());
 
         assertThatThrownBy(() -> reviewsService.getByBooking(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Review not found for booking id");
     }
 
@@ -246,7 +247,7 @@ public class ReviewsServiceImplTest {
         given(reviewsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewsService.approve(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Review not found by id");
 
         verify(reviewsRepository, never()).save(any());
@@ -268,7 +269,7 @@ public class ReviewsServiceImplTest {
         given(reviewsRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewsService.delete(1L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Review not found by id");
     }
 

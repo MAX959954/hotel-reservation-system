@@ -1,5 +1,6 @@
 package companyuser;
 
+import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,14 +38,14 @@ public class CompanyUserServiceImpl implements CompanyUserService {
         }
 
         Companies company = companiesRepository.findById(request.getCompanyId())
-                .orElseThrow(() -> new IllegalStateException("Company not found by that id " + request.getCompanyId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found by that id " + request.getCompanyId()));
 
         // A userId (or an email that resolves to an existing account) behaves exactly as
         // before. An email with no matching account yet gets a row with no user attached —
         // linkPendingInvites() fills that in the moment that address registers.
         User existingUser = request.getUserId() != null
                 ? userRepository.findById(request.getUserId())
-                        .orElseThrow(() -> new IllegalStateException("User not found by that id " + request.getUserId()))
+                        .orElseThrow(() -> new ResourceNotFoundException("User not found by that id " + request.getUserId()))
                 : userRepository.findByEmail(request.getEmail()).orElse(null);
 
         CompanyUser member;
@@ -136,12 +137,12 @@ public class CompanyUserServiceImpl implements CompanyUserService {
     public List<CompanyUserResponse> getMine() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("User not found by that email: " + email));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found by that email: " + email));
         return companyUserRepository.findByUserId(user.getId()).stream().map(this :: toResponse).toList();
     }
 
     private CompanyUser findById(Long id) {
-        return companyUserRepository.findById(id).orElseThrow(() -> new IllegalStateException("Company member not found by that id " + id));
+        return companyUserRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Company member not found by that id " + id));
     }
 
     private CompanyUserResponse toResponse(CompanyUser member){
