@@ -587,6 +587,147 @@ public class PaymentServiceImplTest {
         verify(paymentRepository, never()).save(any());
     }
 
+    // ---------- settleForCancelledBooking ----------
+
+    @Test
+    void settle_refundsInFull_whenPaymentCompleted() {
+        booking.setBookingStatus(BookingStatus.CANCELLED); // BookingServiceImpl.cancel() sets this first
+        Payment payment = paymentWithStatus(PaymentStatus.COMPLETED);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        Refund stripeRefund = Mockito.mock(Refund.class);
+        given(stripeRefund.getId()).willReturn("re_cancel");
+
+        try (MockedStatic<Refund> refundStatic = Mockito.mockStatic(Refund.class)) {
+            refundStatic.when(() -> Refund.create(any(RefundCreateParams.class), any(RequestOptions.class)))
+                    .thenReturn(stripeRefund);
+
+            paymentService.settleForCancelledBooking(1L);
+
+            ArgumentCaptor<RefundCreateParams> paramsCaptor = ArgumentCaptor.forClass(RefundCreateParams.class);
+            refundStatic.verify(() -> Refund.create(paramsCaptor.capture(), any(RequestOptions.class)));
+            assertThat(paramsCaptor.getValue().getAmount()).isEqualTo(25000L);
+        }
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(250.0);
+        assertThat(payment.getRefund_transaction_id()).isEqualTo("re_cancel");
+    }
+
+    @Test
+    void settle_refundsRemainingBalance_whenPartiallyRefunded() {
+        Payment payment = paymentWithStatus(PaymentStatus.PARTIALLY_REFUNDED);
+        payment.setMethod(PaymentMethod.BANK_TRANSFER);
+        payment.setRefundedAmount(100.0);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        paymentService.settleForCancelledBooking(1L);
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(250.0);
+    }
+
+    @Test
+    void settle_throws_andLeavesPaymentCompleted_whenStripeRefundFails() {
+        Payment payment = paymentWithStatus(PaymentStatus.COMPLETED);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+
+        try (MockedStatic<Refund> refundStatic = Mockito.mockStatic(Refund.class)) {
+            refundStatic.when(() -> Refund.create(any(RefundCreateParams.class), any(RequestOptions.class)))
+                    .thenThrow(new ApiException("declined", null, null, null, null));
+
+            assertThatThrownBy(() -> paymentService.settleForCancelledBooking(1L))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Could not refund payment with Stripe");
+        }
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.COMPLETED);
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void settle_cancelsOpenStripeIntent_whenCardPaymentPending() throws StripeException {
+        Payment payment = paymentWithStatus(PaymentStatus.PENDING);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+        PaymentIntent intent = Mockito.mock(PaymentIntent.class);
+        given(intent.getStatus()).willReturn("requires_payment_method");
+
+        try (MockedStatic<PaymentIntent> intentStatic = Mockito.mockStatic(PaymentIntent.class)) {
+            intentStatic.when(() -> PaymentIntent.retrieve("txn-123")).thenReturn(intent);
+
+            paymentService.settleForCancelledBooking(1L);
+        }
+        verify(intent).cancel();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
+        verify(paymentRepository).save(payment);
+    }
+
+    @Test
+    void settle_refunds_whenPendingCardPaymentActuallySucceededAtStripe() throws StripeException {
+        Payment payment = paymentWithStatus(PaymentStatus.PENDING);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+        given(paymentRepository.save(any(Payment.class))).willAnswer(invocation -> invocation.getArgument(0));
+        PaymentIntent intent = Mockito.mock(PaymentIntent.class);
+        given(intent.getStatus()).willReturn("succeeded");
+        Refund stripeRefund = Mockito.mock(Refund.class);
+        given(stripeRefund.getId()).willReturn("re_race");
+
+        try (MockedStatic<PaymentIntent> intentStatic = Mockito.mockStatic(PaymentIntent.class);
+             MockedStatic<Refund> refundStatic = Mockito.mockStatic(Refund.class)) {
+            intentStatic.when(() -> PaymentIntent.retrieve("txn-123")).thenReturn(intent);
+            refundStatic.when(() -> Refund.create(any(RefundCreateParams.class), any(RequestOptions.class)))
+                    .thenReturn(stripeRefund);
+
+            paymentService.settleForCancelledBooking(1L);
+        }
+        verify(intent, never()).cancel();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefund_transaction_id()).isEqualTo("re_race");
+    }
+
+    @Test
+    void settle_throws_whenStripeIntentCannotBeCancelled() {
+        Payment payment = paymentWithStatus(PaymentStatus.PENDING);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+
+        try (MockedStatic<PaymentIntent> intentStatic = Mockito.mockStatic(PaymentIntent.class)) {
+            intentStatic.when(() -> PaymentIntent.retrieve("txn-123"))
+                    .thenThrow(new ApiException("Stripe is down", null, null, null, null));
+
+            assertThatThrownBy(() -> paymentService.settleForCancelledBooking(1L))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Could not cancel the payment with Stripe");
+        }
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void settle_cancelsOfflinePendingPayment_withoutCallingStripe() {
+        Payment payment = paymentWithStatus(PaymentStatus.PENDING);
+        payment.setMethod(PaymentMethod.CASH);
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.of(payment));
+
+        try (MockedStatic<PaymentIntent> intentStatic = Mockito.mockStatic(PaymentIntent.class)) {
+            paymentService.settleForCancelledBooking(1L);
+            intentStatic.verifyNoInteractions();
+        }
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
+    }
+
+    @Test
+    void settle_isNoOp_whenNoPaymentOrNoMoneyMoved() {
+        given(paymentRepository.findByBookingId(1L)).willReturn(Optional.empty());
+        paymentService.settleForCancelledBooking(1L);
+
+        Payment expired = paymentWithStatus(PaymentStatus.EXPIRED);
+        given(paymentRepository.findByBookingId(2L)).willReturn(Optional.of(expired));
+        paymentService.settleForCancelledBooking(2L);
+
+        assertThat(expired.getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        verify(paymentRepository, never()).save(any());
+    }
+
     // ---------- webhook ----------
 
     private Event stubbedEvent(String type, com.stripe.model.StripeObject dataObject) {

@@ -284,8 +284,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResponse refund (Long id, Double amount) {
-        Payment payment = findById(id);
+        return refundPayment(findById(id), amount);
+    }
 
+    private PaymentResponse refundPayment(Payment payment, Double amount) {
         if (payment.getStatus() != PaymentStatus.COMPLETED && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new IllegalStateException("Only COMPLETED or PARTIALLY_REFUNDED payments can be refunded");
         }
@@ -359,6 +361,51 @@ public class PaymentServiceImpl implements PaymentService {
             booking.setCancelled_at(LocalDateTime.now());
             bookingRepository.save(booking);
         }
+    }
+
+    // Called by BookingServiceImpl.cancel() inside its transaction, after the booking is
+    // already CANCELLED. Cancelling used to leave the payment untouched: a guest who had
+    // paid lost the money while the room was freed for someone else, and a card payment
+    // still in progress could complete on a booking that no longer existed. Any failure
+    // here (e.g. Stripe refusing the refund) is thrown, so the booking cancellation rolls
+    // back with it instead of leaving the two out of sync.
+    @Override
+    @Transactional
+    public void settleForCancelledBooking(Long bookingId) {
+        paymentRepository.findByBookingId(bookingId).ifPresent(payment -> {
+            switch (payment.getStatus()) {
+                case COMPLETED, PARTIALLY_REFUNDED -> refundPayment(payment, null);
+                case PENDING -> cancelPendingPayment(payment);
+                // FAILED, CANCELLED, EXPIRED: no money moved. REFUNDED: already returned.
+                // CHARGEBACK: being settled by the card issuer, needs a human.
+                default -> { }
+            }
+        });
+    }
+
+    private void cancelPendingPayment(Payment payment) {
+        if (GATEWAY_METHODS.contains(payment.getMethod()) && payment.getTransaction_id() != null) {
+            try {
+                PaymentIntent intent = PaymentIntent.retrieve(payment.getTransaction_id());
+                if ("succeeded".equals(intent.getStatus())) {
+                    // Charged, but neither confirm() nor the webhook has recorded it yet —
+                    // record the charge so it can be refunded like any completed payment.
+                    payment.setStatus(PaymentStatus.COMPLETED);
+                    payment.setPaidAt(LocalDateTime.now());
+                    refundPayment(payment, null);
+                    return;
+                }
+                if (!"canceled".equals(intent.getStatus())) {
+                    intent.cancel();
+                }
+            } catch (StripeException e) {
+                // Unlike markExpired() this is not best-effort: an intent left open could
+                // still charge the guest for a booking that no longer exists.
+                throw new IllegalStateException("Could not cancel the payment with Stripe: " + e.getMessage(), e);
+            }
+        }
+        payment.setStatus(PaymentStatus.CANCELLED);
+        paymentRepository.save(payment);
     }
 
     @Override

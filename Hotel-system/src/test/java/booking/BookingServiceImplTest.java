@@ -1,6 +1,12 @@
 package booking;
 
+import exception.ConflictException;
 import exception.ResourceNotFoundException;
+import payment.Payment;
+import payment.PaymentRepository;
+import payment.PaymentService;
+import reviews.Reviews;
+import reviews.ReviewsRepository;
 import hotels.Hotels;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +57,15 @@ public class BookingServiceImplTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private PaymentService paymentService;
+
+    @Mock
+    private PaymentRepository paymentRepository;
+
+    @Mock
+    private ReviewsRepository reviewsRepository;
 
     // @InjectMocks creates a real instance of the class you're
     // testing (e.g. BookingService) and automatically injects
@@ -425,6 +440,42 @@ public class BookingServiceImplTest {
     }
 
     @Test
+    void cancel_settlesPayment_soPaidBookingIsRefunded() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancel(10L);
+
+        verify(paymentService).settleForCancelledBooking(10L);
+    }
+
+    @Test
+    void cancel_propagatesRefundFailure_soCancellationRollsBack() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+        Mockito.doThrow(new IllegalStateException("Could not refund payment with Stripe: declined"))
+                .when(paymentService).settleForCancelledBooking(10L);
+
+        assertThatThrownBy(() -> bookingService.cancel(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Could not refund");
+
+        // No "cancelled" email for a cancellation that is about to be rolled back.
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void cancel_doesNotTouchPayment_whenCancellationRejected() {
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(bookingWithStatus(BookingStatus.CHECKED_IN)));
+
+        assertThatThrownBy(() -> bookingService.cancel(10L)).isInstanceOf(IllegalStateException.class);
+
+        verify(paymentService, never()).settleForCancelledBooking(any());
+    }
+
+    @Test
     void cancel_throws_whenAlreadyCancelled() {
         Booking booking = bookingWithStatus(BookingStatus.CANCELLED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
@@ -619,6 +670,32 @@ public class BookingServiceImplTest {
         bookingService.delete(10L);
 
         verify(bookingRepository).delete(booking);
+    }
+
+    @Test
+    void delete_throwsConflict_whenBookingHasPayment() {
+        Booking booking = bookingWithStatus(BookingStatus.CANCELLED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(paymentRepository.findByBookingId(10L)).willReturn(Optional.of(Mockito.mock(Payment.class)));
+
+        assertThatThrownBy(() -> bookingService.delete(10L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("payment record");
+
+        verify(bookingRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_throwsConflict_whenBookingHasReview() {
+        Booking booking = bookingWithStatus(BookingStatus.COMPLETED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(reviewsRepository.findByBookingId(10L)).willReturn(List.of(Mockito.mock(Reviews.class)));
+
+        assertThatThrownBy(() -> bookingService.delete(10L))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("review");
+
+        verify(bookingRepository, never()).delete(any());
     }
 
     @Test

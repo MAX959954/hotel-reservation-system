@@ -40,6 +40,13 @@ public interface PaymentService {
     PaymentResponse refund(Long id, Double amount);
     PaymentResponse cancel(Long id);
 
+    /** Settles the payment of a booking that was just cancelled: a completed (or
+     *  partially refunded) payment is refunded in full, a pending one is cancelled
+     *  (including its Stripe PaymentIntent). A no-op when the booking has no payment or
+     *  no money moved. Throws if the refund/cancellation fails, so the caller's booking
+     *  cancellation rolls back with it. */
+    void settleForCancelledBooking(Long bookingId);
+
     /** Verifies {@code signatureHeader} against {@code stripe.webhook-secret} and
      *  reconciles a payment's status from the Stripe event, independent of any client
      *  call. Covers cases confirm()/refund() can't: the guest's browser dying after
