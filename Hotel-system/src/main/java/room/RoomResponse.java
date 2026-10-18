@@ -1,5 +1,6 @@
 package room;
 
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,7 +18,7 @@ public class RoomResponse {
     private Long id;
     private String number;
     private RoomType type;
-    private Double pricePerNight;
+    private BigDecimal pricePerNight;
     private Integer capacity;
     private Integer floor;
     private RoomStatus status;

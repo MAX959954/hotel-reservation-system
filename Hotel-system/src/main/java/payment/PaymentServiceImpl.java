@@ -1,10 +1,14 @@
 package payment;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import exception.ResourceNotFoundException;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
+import booking.BookingStatusChangedEvent;
 import com.stripe.exception.EventDataObjectDeserializationException;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
@@ -21,6 +25,7 @@ import com.stripe.param.RefundCreateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -126,7 +131,7 @@ public class PaymentServiceImpl implements PaymentService {
             // this: it's a wallet UI in front of Stripe, not a distinct PaymentIntent type —
             // the Payment Request Button confirms it as a "card" payment method too.
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                    .setAmount(Math.round(booking.getTotalPrice() * 100))
+                    .setAmount(toCents(booking.getTotalPrice()))
                     .setCurrency("eur")
                     .addPaymentMethodType("card")
                     .putMetadata("bookingId", String.valueOf(booking.getId()))
@@ -276,32 +281,37 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
 
-    // Amounts are compared in whole cents (rounded) to avoid floating-point noise (e.g.
-    // 149.99999999999997) producing a false "exceeds remaining balance" or a refund that
-    // never quite reaches REFUNDED.
-    private static final long REMAINING_BALANCE_EPSILON_CENTS = 1;
+    // Stripe takes amounts as an integer number of the currency's smallest unit (cents).
+    // Money is BigDecimal with scale 2 throughout, so this conversion is exact.
+    private static long toCents(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
 
     @Override
     @Transactional
-    public PaymentResponse refund (Long id, Double amount) {
+    // A full refund cancels a CONFIRMED booking (cancelBookingAfterFullRefund), freeing its dates.
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
+    public PaymentResponse refund (Long id, BigDecimal amount) {
         return refundPayment(findById(id), amount);
     }
 
-    private PaymentResponse refundPayment(Payment payment, Double amount) {
+    private PaymentResponse refundPayment(Payment payment, BigDecimal amount) {
         if (payment.getStatus() != PaymentStatus.COMPLETED && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
             throw new IllegalStateException("Only COMPLETED or PARTIALLY_REFUNDED payments can be refunded");
         }
-        if (amount != null && amount <= 0) {
+        if (amount != null && amount.signum() <= 0) {
             throw new IllegalStateException("Refund amount must be positive");
         }
+        if (amount != null && amount.stripTrailingZeros().scale() > 2) {
+            throw new IllegalStateException("Refund amount can have at most 2 decimal places");
+        }
 
-        double alreadyRefunded = payment.getRefundedAmount() != null ? payment.getRefundedAmount() : 0.0;
-        double remaining = payment.getAmount() - alreadyRefunded;
-        double refundAmount = amount != null ? amount : remaining;
-        long refundAmountCents = Math.round(refundAmount * 100);
-        long remainingCents = Math.round(remaining * 100);
+        BigDecimal alreadyRefunded = payment.getRefundedAmount() != null ? payment.getRefundedAmount() : BigDecimal.ZERO;
+        BigDecimal remaining = payment.getAmount().subtract(alreadyRefunded);
+        BigDecimal refundAmount = amount != null ? amount : remaining;
+        long refundAmountCents = toCents(refundAmount);
 
-        if (refundAmountCents - remainingCents > REMAINING_BALANCE_EPSILON_CENTS) {
+        if (refundAmount.compareTo(remaining) > 0) {
             throw new IllegalStateException(
                     "Refund amount " + refundAmount + " exceeds the remaining refundable amount of " + remaining);
         }
@@ -324,7 +334,7 @@ public class PaymentServiceImpl implements PaymentService {
                         // its own key — a single per-payment key would make Stripe silently
                         // replay the first refund instead of creating the second one.
                         .setIdempotencyKey("refund-payment-" + payment.getId() + "-"
-                                + Math.round(alreadyRefunded * 100) + "-" + refundAmountCents)
+                                + toCents(alreadyRefunded) + "-" + refundAmountCents)
                         .build();
                 Refund refund = Refund.create(params, options);
                 payment.setRefund_transaction_id(refund.getId());
@@ -336,10 +346,9 @@ public class PaymentServiceImpl implements PaymentService {
         // gateway — same as pay(), the money movement happens outside this system and
         // this call only records that staff already returned it.
 
-        double newRefundedTotal = alreadyRefunded + refundAmount;
+        BigDecimal newRefundedTotal = alreadyRefunded.add(refundAmount);
         payment.setRefundedAmount(newRefundedTotal);
-        boolean fullyRefunded = Math.round(payment.getAmount() * 100) - Math.round(newRefundedTotal * 100)
-                <= REMAINING_BALANCE_EPSILON_CENTS;
+        boolean fullyRefunded = newRefundedTotal.compareTo(payment.getAmount()) >= 0;
         payment.setStatus(fullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED);
         Payment saved = paymentRepository.save(payment);
 
@@ -360,6 +369,17 @@ public class PaymentServiceImpl implements PaymentService {
             booking.setBookingStatus(BookingStatus.CANCELLED);
             booking.setCancelled_at(LocalDateTime.now());
             bookingRepository.save(booking);
+            // Same cancellation email BookingServiceImpl.cancel() sends (delivered after
+            // commit by its listener); the freed dates are handled by the roomsAvailability
+            // evict on refund() and handleWebhookEvent().
+            eventPublisher.publishEvent(new BookingStatusChangedEvent(
+                    booking.getUser().getEmail(),
+                    booking.getUser().getFirstName(),
+                    booking.getRoom().getHotel().getName(),
+                    booking.getRoom().getNumber(),
+                    booking.getCheck_in(),
+                    booking.getCheck_out(),
+                    BookingStatus.CANCELLED));
         }
     }
 
@@ -371,11 +391,12 @@ public class PaymentServiceImpl implements PaymentService {
     // back with it instead of leaving the two out of sync.
     @Override
     @Transactional
-    public void settleForCancelledBooking(Long bookingId) {
+    public void settleForCancelledBooking(Long bookingId, BigDecimal retainedFee) {
+        BigDecimal fee = retainedFee != null ? retainedFee : BigDecimal.ZERO;
         paymentRepository.findByBookingId(bookingId).ifPresent(payment -> {
             switch (payment.getStatus()) {
-                case COMPLETED, PARTIALLY_REFUNDED -> refundPayment(payment, null);
-                case PENDING -> cancelPendingPayment(payment);
+                case COMPLETED, PARTIALLY_REFUNDED -> refundKeepingFee(payment, fee);
+                case PENDING -> cancelPendingPayment(payment, fee);
                 // FAILED, CANCELLED, EXPIRED: no money moved. REFUNDED: already returned.
                 // CHARGEBACK: being settled by the card issuer, needs a human.
                 default -> { }
@@ -383,20 +404,46 @@ public class PaymentServiceImpl implements PaymentService {
         });
     }
 
-    private void cancelPendingPayment(Payment payment) {
-        if (GATEWAY_METHODS.contains(payment.getMethod()) && payment.getTransaction_id() != null) {
+    // Returns true when Stripe has already charged this intent (confirm() and the webhook
+    // just haven't recorded it yet); otherwise makes sure the intent can no longer charge.
+    private boolean cancelIntentUnlessCharged(Payment payment) throws StripeException {
+        PaymentIntent intent = PaymentIntent.retrieve(payment.getTransaction_id());
+        if ("succeeded".equals(intent.getStatus())) {
+            return true;
+        }
+        if (!"canceled".equals(intent.getStatus())) {
+            intent.cancel();
+        }
+        return false;
+    }
+
+    private boolean isGatewayPaymentWithIntent(Payment payment) {
+        return GATEWAY_METHODS.contains(payment.getMethod()) && payment.getTransaction_id() != null;
+    }
+
+    // Refunds whatever is still owed minus the late-cancellation fee the hotel keeps. A
+    // fee that covers everything still owed leaves the payment as it is: nothing to return.
+    private void refundKeepingFee(Payment payment, BigDecimal fee) {
+        BigDecimal alreadyRefunded = payment.getRefundedAmount() != null ? payment.getRefundedAmount() : BigDecimal.ZERO;
+        BigDecimal toRefund = payment.getAmount().subtract(alreadyRefunded).subtract(fee);
+        if (toRefund.signum() > 0) {
+            refundPayment(payment, toRefund);
+        }
+    }
+
+    // A pending payment never collects a fee: no money has moved yet, and there's nothing
+    // this system could charge it against (cash/transfer are only promises to pay).
+    private void cancelPendingPayment(Payment payment, BigDecimal fee) {
+        if (isGatewayPaymentWithIntent(payment)) {
             try {
-                PaymentIntent intent = PaymentIntent.retrieve(payment.getTransaction_id());
-                if ("succeeded".equals(intent.getStatus())) {
+                if (cancelIntentUnlessCharged(payment)) {
                     // Charged, but neither confirm() nor the webhook has recorded it yet —
                     // record the charge so it can be refunded like any completed payment.
                     payment.setStatus(PaymentStatus.COMPLETED);
                     payment.setPaidAt(LocalDateTime.now());
-                    refundPayment(payment, null);
+                    paymentRepository.save(payment);
+                    refundKeepingFee(payment, fee);
                     return;
-                }
-                if (!"canceled".equals(intent.getStatus())) {
-                    intent.cancel();
                 }
             } catch (StripeException e) {
                 // Unlike markExpired() this is not best-effort: an intent left open could
@@ -409,11 +456,25 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional
     public PaymentResponse cancel(Long id) {
         Payment payment =findById(id);
 
         if(payment.getStatus() != PaymentStatus.PENDING){
             throw new IllegalStateException("Only PENDING payments can be cancelled");
+        }
+
+        // Marking only our row CANCELLED left the Stripe PaymentIntent open: the guest
+        // could still complete it and be charged, and the webhook would then ignore the
+        // charge because the row was no longer PENDING.
+        if (isGatewayPaymentWithIntent(payment)) {
+            try {
+                if (cancelIntentUnlessCharged(payment)) {
+                    throw new IllegalStateException("Stripe has already charged this payment; refund it instead of cancelling");
+                }
+            } catch (StripeException e) {
+                throw new IllegalStateException("Could not cancel the payment with Stripe: " + e.getMessage(), e);
+            }
         }
 
         payment.setStatus(PaymentStatus.CANCELLED);
@@ -431,14 +492,26 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
 
-        if (GATEWAY_METHODS.contains(payment.getMethod()) && payment.getTransaction_id() != null) {
-            // Best-effort, same as the stale-PENDING cleanup in assertPayable: leaving an
-            // abandoned PaymentIntent open costs nothing on Stripe's side, so a failure
-            // here isn't worth failing the whole job over.
+        if (isGatewayPaymentWithIntent(payment)) {
             try {
-                PaymentIntent.retrieve(payment.getTransaction_id()).cancel();
+                if (cancelIntentUnlessCharged(payment)) {
+                    // The guest did pay — only the confirm() call and the webhook were lost.
+                    // Expiring it would hide a real charge; record it as the webhook would.
+                    payment.setStatus(PaymentStatus.COMPLETED);
+                    payment.setPaidAt(LocalDateTime.now());
+                    Payment saved = paymentRepository.save(payment);
+                    publishConfirmation(payment.getBooking(), saved);
+                    return;
+                }
+            } catch (InvalidRequestException e) {
+                // The intent doesn't exist on Stripe's side, so it can never charge anyone.
+                log.warn("Stripe PaymentIntent {} not found, expiring payment {}: {}",
+                        payment.getTransaction_id(), id, e.getMessage());
             } catch (StripeException e) {
-                log.warn("Could not cancel stale Stripe PaymentIntent {}: {}", payment.getTransaction_id(), e.getMessage());
+                // Can't tell whether the guest was charged — leave it PENDING; the next
+                // scheduler run tries again rather than guessing.
+                log.warn("Could not check Stripe PaymentIntent {}, will retry: {}", payment.getTransaction_id(), e.getMessage());
+                return;
             }
         }
 
@@ -448,6 +521,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    // charge.refunded can cancel a booking too (see onChargeRefunded).
+    @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public void handleWebhookEvent(String payload, String signatureHeader) {
         if (webhookSecret == null || webhookSecret.isBlank()) {
             // Refusing to process is the safe failure mode here: without a configured
@@ -535,8 +610,8 @@ public class PaymentServiceImpl implements PaymentService {
                 return;
             }
             long amountRefundedCents = charge.getAmountRefunded() != null ? charge.getAmountRefunded() : 0L;
-            boolean fullyRefunded = amountRefundedCents >= Math.round(payment.getAmount() * 100);
-            payment.setRefundedAmount(amountRefundedCents / 100.0);
+            boolean fullyRefunded = amountRefundedCents >= toCents(payment.getAmount());
+            payment.setRefundedAmount(BigDecimal.valueOf(amountRefundedCents, 2));
             payment.setStatus(fullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED);
             latestRefundId(charge).ifPresent(payment::setRefund_transaction_id);
             paymentRepository.save(payment);

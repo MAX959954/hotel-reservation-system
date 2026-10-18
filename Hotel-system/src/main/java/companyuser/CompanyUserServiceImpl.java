@@ -1,5 +1,6 @@
 package companyuser;
 
+import exception.ConflictException;
 import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
@@ -7,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,12 +31,16 @@ public class CompanyUserServiceImpl implements CompanyUserService {
     private final CompaniesRepository companiesRepository;
     private final MailService mailService;
     private final ApplicationEventPublisher eventPublisher;
+    private final CompanyAuthorization companyAuth;
 
     @Override
     @Transactional
     public CompanyUserResponse invite (CompanyUserRequest request) {
         if (request.getUserId() == null && (request.getEmail() == null || request.getEmail().isBlank())) {
             throw new IllegalStateException("Either userId or email is required");
+        }
+        if (request.getCompanyRole() == CompanyRole.OWNER) {
+            assertCanManageOwners(request.getCompanyId());
         }
 
         Companies company = companiesRepository.findById(request.getCompanyId())
@@ -118,6 +124,13 @@ public class CompanyUserServiceImpl implements CompanyUserService {
     @Transactional
     public CompanyUserResponse changeRole(Long id , CompanyRole role) {
         CompanyUser member = findById(id);
+        boolean isOwner = member.getCompany_role() == CompanyRole.OWNER;
+        if (isOwner || role == CompanyRole.OWNER) {
+            assertCanManageOwners(member.getCompany().getId());
+        }
+        if (isOwner && role != CompanyRole.OWNER) {
+            assertNotLastActiveOwner(member);
+        }
         member.setCompany_role(role);
         return toResponse(companyUserRepository.save(member));
     }
@@ -125,7 +138,33 @@ public class CompanyUserServiceImpl implements CompanyUserService {
     @Override
     @Transactional
     public void  remove (Long id) {
-        companyUserRepository.delete(findById(id));
+        CompanyUser member = findById(id);
+        if (member.getCompany_role() == CompanyRole.OWNER) {
+            assertCanManageOwners(member.getCompany().getId());
+            assertNotLastActiveOwner(member);
+        }
+        companyUserRepository.delete(member);
+    }
+
+    private void assertCanManageOwners(Long companyId) {
+        if (!companyAuth.canManageOwners(companyId)) {
+            throw new AccessDeniedException("Only a company OWNER can grant, change or revoke the OWNER role");
+        }
+    }
+
+    // A company with no active OWNER can no longer delete its hotels or appoint a new
+    // owner by itself — only an admin could recover it.
+    private void assertNotLastActiveOwner(CompanyUser member) {
+        if (member.getStatus() != CompanyUserStatus.ACTIVE) {
+            return;
+        }
+        long activeOwners = companyUserRepository
+                .findByCompanyIdAndCompany_role(member.getCompany().getId(), CompanyRole.OWNER).stream()
+                .filter(m -> m.getStatus() == CompanyUserStatus.ACTIVE)
+                .count();
+        if (activeOwners <= 1) {
+            throw new ConflictException("A company must keep at least one active OWNER");
+        }
     }
 
     @Override

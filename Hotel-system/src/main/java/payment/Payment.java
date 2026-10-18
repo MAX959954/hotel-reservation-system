@@ -1,5 +1,6 @@
 package payment;
 
+import java.math.BigDecimal;
 import booking.Booking;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -21,8 +22,8 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "amount", nullable = false)
-    private Double amount;
+    @Column(name = "amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "method", nullable = false)
@@ -44,9 +45,9 @@ public class Payment {
     // Running total across possibly-multiple partial refunds, so a further partial
     // refund (or the webhook reconciling one issued from the Stripe Dashboard) knows
     // how much of `amount` is still owed rather than assuming this is the first refund.
-    @Column(name = "refunded_amount", nullable = false)
+    @Column(name = "refunded_amount", nullable = false, precision = 12, scale = 2)
     @Builder.Default
-    private Double refundedAmount = 0.0;
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)

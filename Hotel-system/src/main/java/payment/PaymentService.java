@@ -1,6 +1,7 @@
 package payment;
 
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface PaymentService {
@@ -37,22 +38,23 @@ public interface PaymentService {
      *  exhausts the remaining balance also cancels the booking, provided it's still
      *  CONFIRMED (a stay already checked in or completed is left alone — see
      *  PaymentServiceImpl.cancelBookingAfterFullRefund). */
-    PaymentResponse refund(Long id, Double amount);
+    PaymentResponse refund(Long id, BigDecimal amount);
     PaymentResponse cancel(Long id);
 
     /** Settles the payment of a booking that was just cancelled: a completed (or
-     *  partially refunded) payment is refunded in full, a pending one is cancelled
+     *  partially refunded) payment is refunded except for retainedFee (the
+     *  late-cancellation fee; zero for a free cancellation), a pending one is cancelled
      *  (including its Stripe PaymentIntent). A no-op when the booking has no payment or
      *  no money moved. Throws if the refund/cancellation fails, so the caller's booking
      *  cancellation rolls back with it. */
-    void settleForCancelledBooking(Long bookingId);
+    void settleForCancelledBooking(Long bookingId, BigDecimal retainedFee);
 
     /** Verifies {@code signatureHeader} against {@code stripe.webhook-secret} and
      *  reconciles a payment's status from the Stripe event, independent of any client
      *  call. Covers cases confirm()/refund() can't: the guest's browser dying after
      *  Stripe already charged the card (payment_intent.succeeded), an async decline
      *  (payment_intent.payment_failed), and a refund issued directly from the Stripe
-     *  Dashboard rather than through {@link #refund(Long, Double)} (charge.refunded). */
+     *  Dashboard rather than through {@link #refund(Long, BigDecimal)} (charge.refunded). */
     void handleWebhookEvent(String payload, String signatureHeader);
 
     /** Marks a stale PENDING payment EXPIRED and best-effort cancels its Stripe

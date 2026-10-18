@@ -23,7 +23,13 @@ public interface BookingService {
 
     BookingResponse confirm(Long id);
 
+    /** Cancellation by the hotel, an admin or the system: any payment is refunded in full. */
     BookingResponse cancel(Long id);
+
+    /** Cancellation by the guest: applies the cancellation policy — free until
+     *  app.bookings.free-cancellation-hours before check-in, after that the hotel keeps
+     *  the late-cancellation fee and refunds the rest. */
+    BookingResponse cancelByGuest(Long id);
 
     BookingResponse checkIn(Long id);
 

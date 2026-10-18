@@ -1,6 +1,8 @@
 package companyuser;
 
 import companies.Companies;
+import exception.ConflictException;
+import org.springframework.security.access.AccessDeniedException;
 import companies.CompaniesRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,7 @@ class CompanyUserServiceImplTest {
     @Mock private CompaniesRepository companiesRepository;
     @Mock private MailService mailService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private CompanyAuthorization companyAuth;
 
     @InjectMocks
     private CompanyUserServiceImpl companyUserService;
@@ -146,5 +149,140 @@ class CompanyUserServiceImplTest {
         companyUserService.linkPendingInvites(newUser);
 
         verify(companyUserRepository).saveAll(List.of());
+    }
+
+    // ---------- OWNER role protection ----------
+
+    private CompanyUser member(Long id, CompanyRole role, CompanyUserStatus status) {
+        return CompanyUser.builder()
+                .id(id)
+                .user(User.builder().id(id).email("m" + id + "@example.com").build())
+                .company(company)
+                .company_role(role)
+                .status(status)
+                .build();
+    }
+
+    @Test
+    void invite_throws_whenNonOwnerInvitesAnOwner() {
+        given(companyAuth.canManageOwners(1L)).willReturn(false);
+
+        CompanyUserRequest request = new CompanyUserRequest();
+        request.setEmail("new@example.com");
+        request.setCompanyId(1L);
+        request.setCompanyRole(CompanyRole.OWNER);
+
+        assertThatThrownBy(() -> companyUserService.invite(request))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(companyUserRepository, never()).save(any());
+    }
+
+    @Test
+    void changeRole_throws_whenManagerPromotesSomeoneToOwner() {
+        CompanyUser manager = member(5L, CompanyRole.MANAGER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(5L)).willReturn(Optional.of(manager));
+        given(companyAuth.canManageOwners(1L)).willReturn(false);
+
+        assertThatThrownBy(() -> companyUserService.changeRole(5L, CompanyRole.OWNER))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(manager.getCompany_role()).isEqualTo(CompanyRole.MANAGER);
+        verify(companyUserRepository, never()).save(any());
+    }
+
+    @Test
+    void changeRole_throws_whenManagerDemotesTheOwner() {
+        CompanyUser owner = member(1L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(1L)).willReturn(Optional.of(owner));
+        given(companyAuth.canManageOwners(1L)).willReturn(false);
+
+        assertThatThrownBy(() -> companyUserService.changeRole(1L, CompanyRole.STAFF))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(companyUserRepository, never()).save(any());
+    }
+
+    @Test
+    void changeRole_allowsOwnerToPromoteManager() {
+        CompanyUser manager = member(5L, CompanyRole.MANAGER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(5L)).willReturn(Optional.of(manager));
+        given(companyAuth.canManageOwners(1L)).willReturn(true);
+        given(companyUserRepository.save(any(CompanyUser.class))).willAnswer(inv -> inv.getArgument(0));
+
+        CompanyUserResponse response = companyUserService.changeRole(5L, CompanyRole.OWNER);
+
+        assertThat(response.getCompanyRole()).isEqualTo(CompanyRole.OWNER);
+    }
+
+    @Test
+    void changeRole_allowsManagerToChangeNonOwnerRoles_withoutOwnerCheck() {
+        CompanyUser staff = member(6L, CompanyRole.STAFF, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(6L)).willReturn(Optional.of(staff));
+        given(companyUserRepository.save(any(CompanyUser.class))).willAnswer(inv -> inv.getArgument(0));
+
+        CompanyUserResponse response = companyUserService.changeRole(6L, CompanyRole.RECEPTIONIST);
+
+        assertThat(response.getCompanyRole()).isEqualTo(CompanyRole.RECEPTIONIST);
+        verify(companyAuth, never()).canManageOwners(any());
+    }
+
+    @Test
+    void changeRole_throws_whenDemotingTheLastActiveOwner() {
+        CompanyUser owner = member(1L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(1L)).willReturn(Optional.of(owner));
+        given(companyAuth.canManageOwners(1L)).willReturn(true);
+        given(companyUserRepository.findByCompanyIdAndCompany_role(1L, CompanyRole.OWNER))
+                .willReturn(List.of(owner));
+
+        assertThatThrownBy(() -> companyUserService.changeRole(1L, CompanyRole.MANAGER))
+                .isInstanceOf(ConflictException.class);
+        verify(companyUserRepository, never()).save(any());
+    }
+
+    @Test
+    void changeRole_allowsDemotingAnOwner_whenAnotherActiveOwnerRemains() {
+        CompanyUser owner = member(1L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        CompanyUser coOwner = member(2L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(1L)).willReturn(Optional.of(owner));
+        given(companyAuth.canManageOwners(1L)).willReturn(true);
+        given(companyUserRepository.findByCompanyIdAndCompany_role(1L, CompanyRole.OWNER))
+                .willReturn(List.of(owner, coOwner));
+        given(companyUserRepository.save(any(CompanyUser.class))).willAnswer(inv -> inv.getArgument(0));
+
+        CompanyUserResponse response = companyUserService.changeRole(1L, CompanyRole.MANAGER);
+
+        assertThat(response.getCompanyRole()).isEqualTo(CompanyRole.MANAGER);
+    }
+
+    @Test
+    void remove_throws_whenManagerRemovesTheOwner() {
+        CompanyUser owner = member(1L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(1L)).willReturn(Optional.of(owner));
+        given(companyAuth.canManageOwners(1L)).willReturn(false);
+
+        assertThatThrownBy(() -> companyUserService.remove(1L))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(companyUserRepository, never()).delete(any());
+    }
+
+    @Test
+    void remove_throws_whenRemovingTheLastActiveOwner() {
+        CompanyUser owner = member(1L, CompanyRole.OWNER, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(1L)).willReturn(Optional.of(owner));
+        given(companyAuth.canManageOwners(1L)).willReturn(true);
+        given(companyUserRepository.findByCompanyIdAndCompany_role(1L, CompanyRole.OWNER))
+                .willReturn(List.of(owner));
+
+        assertThatThrownBy(() -> companyUserService.remove(1L))
+                .isInstanceOf(ConflictException.class);
+        verify(companyUserRepository, never()).delete(any());
+    }
+
+    @Test
+    void remove_deletesNonOwnerMember() {
+        CompanyUser staff = member(6L, CompanyRole.STAFF, CompanyUserStatus.ACTIVE);
+        given(companyUserRepository.findById(6L)).willReturn(Optional.of(staff));
+
+        companyUserService.remove(6L);
+
+        verify(companyUserRepository).delete(staff);
     }
 }

@@ -88,14 +88,19 @@ public class RoomServiceImpl implements RoomService{
     @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     public RoomResponse update(Long id , RoomRequest request) {
         Room room = findById(id);
-        Hotels hotel = findHotelById(request.getHotelId());
+        // Access is checked against the room's current hotel only (RoomController), so
+        // accepting a different hotelId here would let staff of one company move a room
+        // into another company's hotel. Same rule as HotelServiceImpl.update: an edit
+        // form never moves an entity to another owner.
+        if (!room.getHotel().getId().equals(request.getHotelId())) {
+            throw new IllegalStateException("A room cannot be moved to another hotel");
+        }
         room.setNumber(request.getNumber());
         room.setType(request.getType());
         room.setPrice_per_night(request.getPricePerNight());
         room.setCapacity(request.getCapacity());
         room.setFloor(request.getFloor());
         room.setDescription(request.getDescription());
-        room.setHotel(hotel);
         return toResponse(roomRepository.save(room));
     }
 

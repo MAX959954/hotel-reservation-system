@@ -1,5 +1,6 @@
 package payment;
 
+import java.math.BigDecimal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -128,7 +129,7 @@ public class PaymentController {
     @PatchMapping("/{id}/refund")
     @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForPayment(#id , 'OWNER' , 'MANAGER')")
     public ResponseEntity<PaymentResponse> refund(@PathVariable Long id,
-                                                   @RequestParam(required = false) Double amount) {
+                                                   @RequestParam(required = false) BigDecimal amount) {
         return ResponseEntity.ok(paymentService.refund(id, amount));
     }
 

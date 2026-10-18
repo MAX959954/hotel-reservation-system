@@ -1,5 +1,6 @@
 package room;
 
+import java.math.BigDecimal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class RoomControllerTest {
                 .id(1L)
                 .number("101")
                 .type(RoomType.DOUBLE)
-                .pricePerNight(100.0)
+                .pricePerNight(new BigDecimal("100.0"))
                 .capacity(2)
                 .floor(1)
                 .status(RoomStatus.AVAILABLE)
@@ -57,7 +58,7 @@ class RoomControllerTest {
         RoomRequest request = new RoomRequest();
         request.setNumber("101");
         request.setType(RoomType.DOUBLE);
-        request.setPricePerNight(100.0);
+        request.setPricePerNight(new BigDecimal("100.0"));
         request.setCapacity(2);
         request.setFloor(1);
         request.setDescription("Nice room");

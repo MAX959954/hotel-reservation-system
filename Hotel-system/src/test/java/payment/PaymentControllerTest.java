@@ -1,5 +1,6 @@
 package payment;
 
+import java.math.BigDecimal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.BDDMockito.given;
@@ -40,7 +42,7 @@ class PaymentControllerTest {
         return PaymentResponse.builder()
                 .id(1L)
                 .bookingId(1L)
-                .amount(200.0)
+                .amount(new BigDecimal("200.0"))
                 .method(PaymentMethod.CREDIT_CARD)
                 .currency("USD")
                 .status(PaymentStatus.COMPLETED)
@@ -132,7 +134,7 @@ class PaymentControllerTest {
     void refund_returns200() throws Exception {
         PaymentResponse refunded = sampleResponse();
         refunded.setStatus(PaymentStatus.REFUNDED);
-        given(paymentService.refund(anyLong(), nullable(Double.class))).willReturn(refunded);
+        given(paymentService.refund(anyLong(), nullable(BigDecimal.class))).willReturn(refunded);
 
         mockMvc.perform(patch("/api/payments/{id}/refund", 1L))
                 .andExpect(status().isOk())
@@ -143,7 +145,7 @@ class PaymentControllerTest {
     void refund_withAmount_passesItThrough_andReturns200() throws Exception {
         PaymentResponse refunded = sampleResponse();
         refunded.setStatus(PaymentStatus.PARTIALLY_REFUNDED);
-        given(paymentService.refund(eq(1L), eq(50.0))).willReturn(refunded);
+        given(paymentService.refund(eq(1L), argThat(a -> a != null && a.compareTo(new BigDecimal("50")) == 0))).willReturn(refunded);
 
         mockMvc.perform(patch("/api/payments/{id}/refund", 1L).param("amount", "50.0"))
                 .andExpect(status().isOk())

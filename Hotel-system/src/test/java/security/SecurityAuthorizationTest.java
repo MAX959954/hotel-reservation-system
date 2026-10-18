@@ -1,5 +1,6 @@
 package security;
 
+import java.math.BigDecimal;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingService;
@@ -7,6 +8,7 @@ import booking.BookingStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import companies.Companies;
 import companies.CompaniesRepository;
+import companies.CompaniesStatus;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import org.example.hotelsystem.HotelSystemApplication;
@@ -117,6 +119,8 @@ class SecurityAuthorizationTest {
                 .city("Paris")
                 .country("France")
                 .website("https://acme.com")
+                // Only an approved (ACTIVE) company takes bookings and keeps staff permissions.
+                .status(CompaniesStatus.ACTIVE)
                 .build());
 
         Hotels hotel = hotelsRepository.save(Hotels.builder()
@@ -135,7 +139,7 @@ class SecurityAuthorizationTest {
         Room room = roomRepository.save(Room.builder()
                 .number("101")
                 .type(RoomType.DOUBLE)
-                .price_per_night(100.0)
+                .price_per_night(new BigDecimal("100.0"))
                 .capacity(2)
                 .floor(1)
                 .status(RoomStatus.AVAILABLE)
@@ -148,7 +152,7 @@ class SecurityAuthorizationTest {
                 .check_in(LocalDateTime.now().plusDays(1))
                 .check_out(LocalDateTime.now().plusDays(3))
                 .guestCount(2)
-                .totalPrice(200.0)
+                .totalPrice(new BigDecimal("200.0"))
                 .bookingStatus(BookingStatus.COMPLETED)
                 .build());
         guestOwnedBookingId = booking.getId();

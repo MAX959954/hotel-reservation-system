@@ -1,5 +1,6 @@
 package booking;
 
+import java.math.BigDecimal;
 import exception.ConflictException;
 import exception.ResourceNotFoundException;
 import payment.Payment;
@@ -8,11 +9,15 @@ import payment.PaymentService;
 import reviews.Reviews;
 import reviews.ReviewsRepository;
 import hotels.Hotels;
+import hotels.Hotel_Status;
+import companies.Companies;
+import companies.CompaniesStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -34,6 +39,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -80,13 +86,19 @@ public class BookingServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        hotel = Hotels.builder().id(1L).name("Grand Hotel").build();
+        // @Value fields aren't populated without a Spring context.
+        ReflectionTestUtils.setField(bookingService, "freeCancellationHours", 48L);
+        ReflectionTestUtils.setField(bookingService, "lateCancellationFeeNights", 1L);
+
+        hotel = Hotels.builder().id(1L).name("Grand Hotel")
+                .company(Companies.builder().id(1L).status(CompaniesStatus.ACTIVE).build())
+                .build();
 
         room = Room.builder()
                 .id(1L)
                 .number("101")
                 .capacity(2)
-                .price_per_night(100.0)
+                .price_per_night(new BigDecimal("100.0"))
                 .status(RoomStatus.AVAILABLE)
                 .hotel(hotel)
                 .build();
@@ -121,7 +133,7 @@ public class BookingServiceImplTest {
                 .check_in(request.getCheckIn())
                 .check_out(request.getCheckOut())
                 .guestCount(2)
-                .totalPrice(200.0)
+                .totalPrice(new BigDecimal("200.0"))
                 .bookingStatus(status)
                 .build();
     }
@@ -143,12 +155,12 @@ public class BookingServiceImplTest {
         assertThat(response.getRoomId()).isEqualTo(1L);
         assertThat(response.getUserId()).isEqualTo(1L);
         assertThat(response.getUserFullName()).isEqualTo("Jane Doe");
-        assertThat(response.getTotalPrice()).isEqualTo(200.0); // 2 nights * 100
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("200.0"); // 2 nights * 100
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
 
         ArgumentCaptor<Booking> captor = ArgumentCaptor.forClass(Booking.class);
         verify(bookingRepository).save(captor.capture());
-        assertThat(captor.getValue().getTotalPrice()).isEqualTo(200.0);
+        assertThat(captor.getValue().getTotalPrice()).isEqualByComparingTo("200.0");
     }
 
     @Test
@@ -169,7 +181,7 @@ public class BookingServiceImplTest {
 
         BookingResponse response = bookingService.create(request);
 
-        assertThat(response.getTotalPrice()).isEqualTo(300.0); // 3 nights * 100, not 2
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("300.0"); // 3 nights * 100, not 2
     }
 
     @Test
@@ -228,6 +240,32 @@ public class BookingServiceImplTest {
         assertThatThrownBy(() -> bookingService.create(request))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Room is not available for booking");
+    }
+
+    @Test
+    void create_throws_whenHotelIsNotActive() {
+        hotel.setStatus(Hotel_Status.CLOSED);
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> bookingService.create(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("This hotel is not accepting bookings");
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void create_throws_whenHotelsCompanyIsSuspended() {
+        hotel.getCompany().setStatus(CompaniesStatus.SUSPENDED);
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> bookingService.create(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("This hotel is not accepting bookings");
+        verify(bookingRepository, never()).save(any());
     }
 
     @Test
@@ -447,7 +485,7 @@ public class BookingServiceImplTest {
 
         bookingService.cancel(10L);
 
-        verify(paymentService).settleForCancelledBooking(10L);
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
     }
 
     @Test
@@ -456,7 +494,7 @@ public class BookingServiceImplTest {
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
         Mockito.doThrow(new IllegalStateException("Could not refund payment with Stripe: declined"))
-                .when(paymentService).settleForCancelledBooking(10L);
+                .when(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
 
         assertThatThrownBy(() -> bookingService.cancel(10L))
                 .isInstanceOf(IllegalStateException.class)
@@ -466,13 +504,93 @@ public class BookingServiceImplTest {
         verify(eventPublisher, never()).publishEvent(any());
     }
 
+    // ---------- cancellation policy (free until 48h before check-in, then 1 night kept) ----------
+
+    @Test
+    void cancelByGuest_isFree_beforeTheDeadline() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        booking.setCheck_in(LocalDateTime.now().plusDays(5));
+        booking.setCheck_out(LocalDateTime.now().plusDays(7));
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancelByGuest(10L);
+
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
+    }
+
+    @Test
+    void cancelByGuest_keepsFirstNight_whenCancelledAfterTheDeadline() {
+        // Check-in in ~24h (inside the 48h window); 2 nights for 200.0 -> 100.00 kept.
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.cancelByGuest(10L);
+
+        ArgumentCaptor<BigDecimal> fee = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(paymentService).settleForCancelledBooking(eq(10L), fee.capture());
+        assertThat(fee.getValue()).isEqualByComparingTo("100.00");
+        assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+    }
+
+    @Test
+    void cancelByGuest_keepsNoFee_forBookingNotYetConfirmed() {
+        // Only a CONFIRMED booking can have been paid, so there's nothing to keep.
+        Booking booking = bookingWithStatus(BookingStatus.PENDING);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancelByGuest(10L);
+
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
+    }
+
+    @Test
+    void cancel_byHotel_isAlwaysFullRefund_evenAfterTheDeadline() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED); // check-in in ~24h
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancel(10L);
+
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
+    }
+
+    @Test
+    void response_exposesCancellationPolicy() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+
+        BookingResponse response = bookingService.getById(10L);
+
+        assertThat(response.getFreeCancellationUntil()).isEqualTo(booking.getCheck_in().minusHours(48));
+        assertThat(response.getLateCancellationFee()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void create_computesExactPrice_withoutFloatingPointError() {
+        // 0.10 * 3 as double is 0.30000000000000004; BigDecimal keeps exact cents.
+        room.setPrice_per_night(new BigDecimal("0.10"));
+        request.setCheckOut(request.getCheckIn().plusDays(3));
+        authenticateAs("jane@example.com");
+        given(roomRepository.findByIdForUpdate(1L)).willReturn(Optional.of(room));
+        given(userRepository.findByEmail("jane@example.com")).willReturn(Optional.of(user));
+        given(bookingRepository.findOverlappingBookings(any(), any(), any())).willReturn(List.of());
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.create(request);
+
+        assertThat(response.getTotalPrice()).isEqualTo(new BigDecimal("0.30"));
+    }
+
     @Test
     void cancel_doesNotTouchPayment_whenCancellationRejected() {
         given(bookingRepository.findById(10L)).willReturn(Optional.of(bookingWithStatus(BookingStatus.CHECKED_IN)));
 
         assertThatThrownBy(() -> bookingService.cancel(10L)).isInstanceOf(IllegalStateException.class);
 
-        verify(paymentService, never()).settleForCancelledBooking(any());
+        verify(paymentService, never()).settleForCancelledBooking(any(), any());
     }
 
     @Test

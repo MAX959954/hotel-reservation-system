@@ -1,10 +1,12 @@
 package reviews;
 
+import java.math.BigDecimal;
 import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
 import companies.Companies;
 import companies.CompaniesRepository;
+import companies.CompaniesStatus;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import org.example.hotelsystem.HotelSystemApplication;
@@ -65,6 +67,8 @@ class ReviewIntegrationTest {
                 .city("Paris")
                 .country("France")
                 .website("https://acme.com")
+                // Only an approved (ACTIVE) company takes bookings and keeps staff permissions.
+                .status(CompaniesStatus.ACTIVE)
                 .build());
 
         Hotels hotel = hotelsRepository.save(Hotels.builder()
@@ -83,7 +87,7 @@ class ReviewIntegrationTest {
         Room room = roomRepository.save(Room.builder()
                 .number("101")
                 .type(RoomType.DOUBLE)
-                .price_per_night(100.0)
+                .price_per_night(new BigDecimal("100.0"))
                 .capacity(2)
                 .floor(1)
                 .status(RoomStatus.AVAILABLE)
@@ -108,7 +112,7 @@ class ReviewIntegrationTest {
                 .check_out(java.time.LocalDateTime.now().minusDays(2))
                 .guestCount(2)
                 .bookingStatus(status)
-                .totalPrice(300.0)
+                .totalPrice(new BigDecimal("300.0"))
                 .build());
     }
 

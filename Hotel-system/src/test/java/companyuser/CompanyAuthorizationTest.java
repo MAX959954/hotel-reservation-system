@@ -3,6 +3,7 @@ package companyuser;
 import booking.Booking;
 import booking.BookingRepository;
 import companies.Companies;
+import companies.CompaniesStatus;
 import hotels.Hotels;
 import hotels.HotelsRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -59,7 +60,7 @@ class CompanyAuthorizationTest {
 
     @BeforeEach
     void setUp() {
-        company = Companies.builder().id(1L).build();
+        company = Companies.builder().id(1L).status(CompaniesStatus.ACTIVE).build();
         hotel = Hotels.builder().id(1L).company(company).build();
         room = Room.builder().id(1L).hotel(hotel).build();
         currentUser = User.builder().id(1L).email("alice@example.com").build();
@@ -98,6 +99,15 @@ class CompanyAuthorizationTest {
         given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.MANAGER, CompanyUserStatus.ACTIVE)));
 
         assertThat(companyAuthorization.hasRole(1L, "OWNER", "MANAGER")).isTrue();
+    }
+
+    @Test
+    void hasRole_false_whenCompanyIsSuspended() {
+        company.setStatus(CompaniesStatus.SUSPENDED);
+        authenticateAs(currentUser);
+        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.OWNER, CompanyUserStatus.ACTIVE)));
+
+        assertThat(companyAuthorization.hasRole(1L, "OWNER", "MANAGER")).isFalse();
     }
 
     @Test

@@ -26,14 +26,31 @@ export function nightsBetween(checkInDate: string, checkOutDate: string): number
   return Math.max(0, Math.round((end - start) / 86_400_000))
 }
 
+/**
+ * `YYYY-MM-DD` from the LOCAL calendar date. `toISOString()` converts to UTC first, so
+ * east of UTC (all of Europe) local midnight lands on the previous day — that made
+ * `addDaysIso(d, 1)` return `d` itself and `todayIso()` return yesterday after midnight.
+ */
+function toLocalIsoDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalIsoDate(new Date())
 }
 
 export function addDaysIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`)
   d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
+  return toLocalIsoDate(d)
+}
+
+/** A backend LocalDateTime (`YYYY-MM-DDTHH:mm:ss`, local, no zone) as date + time. */
+export function formatDateTime(value: string, locale = i18n.global.locale.value): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 export function formatDateRange(checkIn: string, checkOut: string, locale = i18n.global.locale.value): string {

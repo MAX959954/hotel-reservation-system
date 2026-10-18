@@ -57,13 +57,13 @@ public class HotelServiceImpl implements HotelService{
     @Override
     @Cacheable(cacheNames = "hotelsByCity", key = "#city + '-' + #locale")
     public List<HotelResponse> getByCity(String city, String locale) {
-        return hotelsRepository.findByCity(city).stream().map(h -> toResponse(h, locale)).toList();
+        return hotelsRepository.findListedByCity(city).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
     @Cacheable(cacheNames = "hotelsByCountry", key = "#country + '-' + #locale")
     public List<HotelResponse> getByCountry(String country, String locale) {
-        return hotelsRepository.findByCountry(country).stream().map(h -> toResponse(h, locale)).toList();
+        return hotelsRepository.findListedByCountry(country).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
@@ -75,13 +75,13 @@ public class HotelServiceImpl implements HotelService{
     @Override
     @Cacheable(cacheNames = "hotelsByRating", key = "#rating + '-' + #locale")
     public List<HotelResponse> getByRating(Integer rating, String locale) {
-        return hotelsRepository.findByStar_rating(rating).stream().map(h -> toResponse(h, locale)).toList();
+        return hotelsRepository.findListedByStarRating(rating).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
     @Cacheable(cacheNames = "hotelsByType", key = "#propertyType + '-' + #locale")
     public List<HotelResponse> getByPropertyType(PropertyType propertyType, String locale) {
-        return hotelsRepository.findByPropertyType(propertyType).stream().map(h -> toResponse(h, locale)).toList();
+        return hotelsRepository.findListedByPropertyType(propertyType).stream().map(h -> toResponse(h, locale)).toList();
     }
 
     @Override
@@ -92,7 +92,9 @@ public class HotelServiceImpl implements HotelService{
     // correct (if slightly broader) fix.
     @Caching(evict = {
             @CacheEvict(cacheNames = "hotelById", allEntries = true),
-            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true)
+            @CacheEvict(cacheNames = {"hotelsByCity", "hotelsByCountry", "hotelsByCompany", "hotelsByRating", "hotelsByType"}, allEntries = true),
+            // availability only lists rooms of ACTIVE hotels (RoomRepository.findAvailableRooms)
+            @CacheEvict(cacheNames = "roomsAvailability", allEntries = true)
     })
     public HotelResponse updateStatus(Long id , Hotel_Status status) {
         Hotels hotel =  findById(id);

@@ -7,6 +7,7 @@ import companyuser.CompanyUserRepository;
 import companyuser.CompanyUserStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -74,6 +75,10 @@ public class CompaniesServiceImpl implements CompaniesService {
 
     @Override
     @Transactional
+    // Public hotel search and availability filter on the company's status, so cached
+    // results must not keep showing a just-suspended company's hotels.
+    @CacheEvict(cacheNames = {"hotelById", "hotelsByCity", "hotelsByCountry", "hotelsByCompany",
+            "hotelsByRating", "hotelsByType", "roomsAvailability"}, allEntries = true)
     public CompaniesResponse updateStatus(Long id, CompaniesStatus status) {
         Companies company = findById(id);
         company.setStatus(status);
