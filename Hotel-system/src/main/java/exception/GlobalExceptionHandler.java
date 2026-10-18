@@ -2,6 +2,7 @@ package exception;
 
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -26,6 +27,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> hasNotFound(ResourceNotFoundException ex) {
         return build(HttpStatus.NOT_FOUND , ex.getMessage() , null);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflict(ConflictException ex) {
+        return build(HttpStatus.CONFLICT , ex.getMessage() , null);
+    }
+
+    // Safety net for any other write that breaks a database constraint (foreign key,
+    // unique) — it's a conflict with existing data, not a server fault, so 409, not 500.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.CONFLICT , "The operation conflicts with existing data" , null);
     }
 
     @ExceptionHandler(IllegalStateException.class)

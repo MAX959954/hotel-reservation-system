@@ -1,5 +1,6 @@
 package booking;
 
+import exception.ConflictException;
 import exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import payment.PaymentRepository;
+import payment.PaymentService;
+import reviews.ReviewsRepository;
 import room.Room;
 import room.RoomRepository;
 import room.RoomStatus;
@@ -33,6 +37,9 @@ public class BookingServiceImpl implements BookingService{
     private final UserRepository userRepository;
     private final MailService mailService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PaymentService paymentService;
+    private final PaymentRepository paymentRepository;
+    private final ReviewsRepository reviewsRepository;
 
     @Override
     @Transactional
@@ -165,6 +172,10 @@ public class BookingServiceImpl implements BookingService{
         booking.setBookingStatus(BookingStatus.CANCELLED);
         booking.setCancelled_at(LocalDateTime.now());
         Booking saved = bookingRepository.save(booking);
+        // Refunds a paid booking / cancels a payment still in progress. Same transaction:
+        // if the refund fails, the cancellation rolls back too, so the guest never ends up
+        // with a cancelled stay and no money back.
+        paymentService.settleForCancelledBooking(saved.getId());
         publishStatusChange(saved);
         return toResponse(saved);
     }
@@ -218,7 +229,18 @@ public class BookingServiceImpl implements BookingService{
     @Override
     @Transactional
     public void delete(Long id) {
-        bookingRepository.delete(findById(id));
+        Booking booking = findById(id);
+        // payments and reviews reference bookings by foreign key, so deleting such a
+        // booking used to fail in the database and come back as a 500. Payment history is
+        // a financial record and must be kept anyway — such bookings are cancelled, not
+        // deleted.
+        if (paymentRepository.findByBookingId(id).isPresent()) {
+            throw new ConflictException("Booking " + id + " has a payment record and cannot be deleted; cancel it instead");
+        }
+        if (!reviewsRepository.findByBookingId(id).isEmpty()) {
+            throw new ConflictException("Booking " + id + " has a review and cannot be deleted; cancel it instead");
+        }
+        bookingRepository.delete(booking);
     }
 
     // Published now but only delivered after the transaction commits (see
