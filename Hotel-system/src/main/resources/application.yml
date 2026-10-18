@@ -111,6 +111,12 @@ app:
     # Grace period after check-in time before an unshown CONFIRMED booking is flagged
     # NO_SHOW — guards against flagging a guest who's simply arriving later the same day.
     no-show-grace-hours: ${BOOKING_NO_SHOW_GRACE_HOURS:6}
+    # Cancellation policy for guest-initiated cancellations (BookingServiceImpl.cancelByGuest):
+    # free until this many hours before check-in; after that the hotel keeps the price of
+    # this many nights and refunds the rest. Hotel staff/admin/system cancellations are
+    # always refunded in full.
+    free-cancellation-hours: ${BOOKING_FREE_CANCELLATION_HOURS:48}
+    late-cancellation-fee-nights: ${BOOKING_LATE_CANCELLATION_FEE_NIGHTS:1}
   payments:
     # How long a PENDING payment (a Stripe PaymentIntent the guest never finished, or
     # abandoned before 3DS/redirect completed) sits before it's marked EXPIRED.

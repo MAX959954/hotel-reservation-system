@@ -1,9 +1,12 @@
 package booking;
 
+import java.math.BigDecimal;
 import companies.Companies;
 import companies.CompaniesRepository;
+import companies.CompaniesStatus;
 import hotels.HotelsRepository;
 import hotels.Hotels;
+import hotels.Hotel_Status;
 import org.example.hotelsystem.HotelSystemApplication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,6 +75,8 @@ class BookingIntegrationTest {
                 .city("Paris")
                 .country("France")
                 .website("https://acme.com")
+                // Only an approved (ACTIVE) company takes bookings and keeps staff permissions.
+                .status(CompaniesStatus.ACTIVE)
                 .build());
 
         Hotels hotel = hotelsRepository.save(Hotels.builder()
@@ -90,7 +95,7 @@ class BookingIntegrationTest {
         room = roomRepository.save(Room.builder()
                 .number("101")
                 .type(RoomType.DOUBLE)
-                .price_per_night(100.0)
+                .price_per_night(new BigDecimal("100.0"))
                 .capacity(2)
                 .floor(1)
                 .status(RoomStatus.AVAILABLE)
@@ -118,6 +123,54 @@ class BookingIntegrationTest {
         return request;
     }
 
+    // ---------- hotel / company status filters (real JPQL against PostgreSQL) ----------
+
+    @Test
+    void closedHotel_isHiddenFromSearchAndAvailability_andCannotBeBooked() {
+        LocalDateTime checkIn = LocalDateTime.now().plusDays(1);
+        LocalDateTime checkOut = LocalDateTime.now().plusDays(3);
+        Hotels hotel = room.getHotel();
+        assertThat(hotelsRepository.findListedByCity("Paris")).contains(hotel);
+        assertThat(roomRepository.findAvailableRooms(hotel.getId(), checkIn, checkOut, 2)).contains(room);
+
+        hotel.setStatus(Hotel_Status.CLOSED);
+        hotelsRepository.save(hotel);
+
+        assertThat(hotelsRepository.findListedByCity("Paris")).doesNotContain(hotel);
+        assertThat(roomRepository.findAvailableRooms(hotel.getId(), checkIn, checkOut, 2)).isEmpty();
+        assertThatThrownBy(() -> bookingService.create(requestFor(checkIn, checkOut)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("This hotel is not accepting bookings");
+    }
+
+    @Test
+    void hotelUnderRenovation_staysListed_butHasNoAvailableRooms() {
+        Hotels hotel = room.getHotel();
+        hotel.setStatus(Hotel_Status.UNDER_RENOVATION);
+        hotelsRepository.save(hotel);
+
+        assertThat(hotelsRepository.findListedByCity("Paris")).contains(hotel);
+        assertThat(roomRepository.findAvailableRooms(hotel.getId(),
+                LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3), 2)).isEmpty();
+    }
+
+    @Test
+    void suspendedCompany_hotelsAreHiddenAndNotBookable() {
+        Hotels hotel = room.getHotel();
+        Companies company = hotel.getCompany();
+        company.setStatus(CompaniesStatus.SUSPENDED);
+        companiesRepository.save(company);
+
+        assertThat(hotelsRepository.findListedByCity("Paris")).doesNotContain(hotel);
+        assertThat(hotelsRepository.findListedByCountry("France")).doesNotContain(hotel);
+        assertThat(roomRepository.findAvailableRooms(hotel.getId(),
+                LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3), 2)).isEmpty();
+        assertThatThrownBy(() -> bookingService.create(
+                requestFor(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(3))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("This hotel is not accepting bookings");
+    }
+
     @Test
     void create_succeeds_forFirstBookingOnRoom() {
         BookingResponse response = bookingService.create(
@@ -125,7 +178,7 @@ class BookingIntegrationTest {
 
         assertThat(response.getRoomId()).isEqualTo(room.getId());
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.PENDING);
-        assertThat(response.getTotalPrice()).isEqualTo(200.0);
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("200.0");
     }
 
     @Test

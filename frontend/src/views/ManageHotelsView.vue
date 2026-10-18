@@ -491,7 +491,7 @@ onMounted(async () => {
                   </label>
                   <label class="flex flex-col gap-1">
                     <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('manageHotels.roomPrice') }}</span>
-                    <input v-model.number="roomForm.pricePerNight" type="number" min="0" step="0.01" required class="w-24 bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1.5 transition-colors" />
+                    <input v-model.number="roomForm.pricePerNight" type="number" min="0.01" step="0.01" required class="w-24 bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1.5 transition-colors" />
                   </label>
                   <label class="flex flex-col gap-1">
                     <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('manageHotels.roomCapacity') }}</span>

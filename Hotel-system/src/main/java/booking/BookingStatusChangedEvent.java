@@ -6,7 +6,8 @@ import java.time.LocalDateTime;
 // booking — the listener that sends it runs after commit (see BookingServiceImpl), by
 // which point the Booking/User/Room/Hotel entities may no longer be attached to an open
 // Hibernate session.
-record BookingStatusChangedEvent(
+// Public because PaymentServiceImpl publishes it too, when a full refund cancels a booking.
+public record BookingStatusChangedEvent(
         String email,
         String guestName,
         String hotelName,

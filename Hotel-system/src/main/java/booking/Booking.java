@@ -1,5 +1,6 @@
 package booking;
 
+import java.math.BigDecimal;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,8 +37,8 @@ public class Booking {
     @Builder.Default
     private BookingStatus bookingStatus = BookingStatus.PENDING;
 
-    @Column(name = "total_price", nullable = false)
-    private Double totalPrice;
+    @Column(name = "total_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal totalPrice;
 
     @Column(name = "special_request", columnDefinition = "TEXT")
     private String special_request;

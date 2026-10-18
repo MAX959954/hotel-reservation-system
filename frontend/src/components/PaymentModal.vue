@@ -23,7 +23,11 @@ const { t } = useI18n()
 
 // Loaded once for the page's lifetime, not per modal open — Stripe's own recommendation,
 // since it fetches and caches Stripe.js itself under the hood.
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? '')
+// Without a key (e.g. a local run with no Stripe account) loadStripe('') throws an
+// unhandled error on every page that imports this component; resolve to null instead,
+// so only an actual card payment attempt reports "Stripe failed to load".
+const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? ''
+const stripePromise = stripeKey ? loadStripe(stripeKey) : Promise.resolve(null)
 
 type Step = 'method' | 'card' | 'receipt'
 const step = ref<Step>('method')

@@ -1,5 +1,6 @@
 package user;
 
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,7 +33,7 @@ public class MailService {
             DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
     public void sendPaymentConfirmation(String toEmail, String guestName, String hotelName, String roomNumber,
-                                         LocalDateTime checkIn, LocalDateTime checkOut, double amount, String currency) {
+                                         LocalDateTime checkIn, LocalDateTime checkOut, BigDecimal amount, String currency) {
         String rows = detailRow("Room", roomNumber)
                 + detailRow("Check-in", STAY_DATE_FORMAT.format(checkIn))
                 + detailRow("Check-out", STAY_DATE_FORMAT.format(checkOut))

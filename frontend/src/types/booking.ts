@@ -45,5 +45,9 @@ export interface BookingResponse {
   specialRequest: string | null
   confirmedAt: string | null
   cancelledAt: string | null
+  /** Cancellation policy (BookingServiceImpl.cancelByGuest): a guest cancelling after this
+   *  moment forfeits lateCancellationFee; cancelling earlier is free. */
+  freeCancellationUntil: string
+  lateCancellationFee: number
   createdAt: string
 }

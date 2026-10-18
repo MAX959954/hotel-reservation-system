@@ -2,6 +2,7 @@ package companyuser;
 
 import booking.BookingRepository;
 import companies.CompaniesRepository;
+import companies.CompaniesStatus;
 import hotels.HotelsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -38,6 +39,10 @@ public class CompanyAuthorization {
                 // .getUser() can be null now — a row still pending on an unregistered
                 // invited_email has nothing to match against.
                 .anyMatch(member -> member.getUser() != null && member.getUser().getId().equals(userId) &&
+                        // A SUSPENDED/INACTIVE/CLOSED company's staff lose every company-scoped
+                        // permission (managing hotels, rooms, bookings, payments) until an admin
+                        // reinstates it. isMember() below stays read-only access to the roster.
+                        member.getCompany().getStatus() == CompaniesStatus.ACTIVE &&
                         member.getStatus().equals(CompanyUserStatus.ACTIVE) &&
                         Arrays.asList(roles).contains(member.getCompany_role().name()));
     }
@@ -123,6 +128,19 @@ public class CompanyAuthorization {
         return userId != null && reviewsRepository.findById(reviewId)
                 .map(review -> review.getUser().getId().equals(userId))
                 .orElse(false);
+    }
+
+    public boolean isAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+    }
+
+    // Granting, changing or revoking OWNER is reserved for an existing OWNER (or admin):
+    // the controller's OWNER/MANAGER check alone let a MANAGER promote themselves to
+    // OWNER, or demote/remove the real owner.
+    public boolean canManageOwners(Long companyId) {
+        return isAdmin() || hasRole(companyId, CompanyRole.OWNER.name());
     }
 
     public boolean isSelf(Long userId) {

@@ -1,5 +1,6 @@
 package booking;
 
+import companyuser.CompanyAuthorization;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ import java.util.List;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final CompanyAuthorization companyAuth;
 
     @PostMapping
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody BookingRequest request) {
@@ -75,7 +77,12 @@ public class BookingController {
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasRole('ADMIN') or @companyAuth.hasRoleForBooking(#id , 'OWNER' , 'MANAGER' , 'RECEPTIONIST') or @companyAuth.isBookingOwner(#id)")
     public ResponseEntity<BookingResponse> cancel(@PathVariable Long id) {
-        return ResponseEntity.ok(bookingService.cancel(id));
+        // Same endpoint for both sides, different money rules: the hotel (or an admin)
+        // cancelling refunds the guest in full; the guest cancelling is subject to the
+        // cancellation policy (BookingService.cancelByGuest).
+        boolean byHotel = companyAuth.isAdmin()
+                || companyAuth.hasRoleForBooking(id, "OWNER", "MANAGER", "RECEPTIONIST");
+        return ResponseEntity.ok(byHotel ? bookingService.cancel(id) : bookingService.cancelByGuest(id));
     }
 
     @PatchMapping("/{id}/checkIn")

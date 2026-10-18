@@ -11,7 +11,7 @@ import { apiErrorMessage } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useConfirmModalStore } from '@/stores/confirmModal'
 import { useCurrencyStore } from '@/stores/currency'
-import { formatDateRange } from '@/lib/dates'
+import { formatDateRange, formatDateTime } from '@/lib/dates'
 import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
 import { isAwaitingOfflinePayment, paymentMethodLabel, type PaymentResponse } from '@/types/payment'
 
@@ -93,7 +93,18 @@ function onPaid(receipt: PaymentResponse) {
 async function cancel(booking: BookingResponse) {
   const confirmed = await confirmModal.ask({
     title: t('bookings.cancelModalTitle'),
-    message: t('bookings.cancelModalMessage', { hotel: booking.hotelName }),
+    // Same rule as BookingServiceImpl.cancelByGuest: only a CONFIRMED booking past its
+    // free-cancellation deadline carries a fee.
+    message: booking.bookingStatus === 'CONFIRMED' && new Date() > new Date(booking.freeCancellationUntil)
+      ? t('bookings.cancelModalMessageLate', {
+          hotel: booking.hotelName,
+          deadline: formatDateTime(booking.freeCancellationUntil),
+          fee: currency.format(booking.lateCancellationFee),
+        })
+      : t('bookings.cancelModalMessageFree', {
+          hotel: booking.hotelName,
+          deadline: formatDateTime(booking.freeCancellationUntil),
+        }),
     confirmLabel: t('bookings.cancelModalConfirm'),
     cancelLabel: t('bookings.cancelModalKeep'),
     danger: true,

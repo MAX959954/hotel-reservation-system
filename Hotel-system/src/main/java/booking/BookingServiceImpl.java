@@ -1,9 +1,15 @@
 package booking;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import companies.CompaniesStatus;
 import exception.ConflictException;
+import hotels.Hotel_Status;
+import hotels.Hotels;
 import exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +47,14 @@ public class BookingServiceImpl implements BookingService{
     private final PaymentRepository paymentRepository;
     private final ReviewsRepository reviewsRepository;
 
+    // Cancellation policy — see app.bookings in application.yml. Plain field injection,
+    // same convention as PaymentServiceImpl.webhookSecret.
+    @Value("${app.bookings.free-cancellation-hours:48}")
+    private long freeCancellationHours;
+
+    @Value("${app.bookings.late-cancellation-fee-nights:1}")
+    private long lateCancellationFeeNights;
+
     @Override
     @Transactional
     @CacheEvict(cacheNames = "roomsAvailability" , allEntries = true)
@@ -71,6 +85,13 @@ public class BookingServiceImpl implements BookingService{
             throw new IllegalStateException("Room is not available for booking");
         }
 
+        // Only an ACTIVE hotel of an ACTIVE (approved, not suspended) company takes new
+        // bookings. UNDER_RENOVATION/COMINGS_SOON hotels stay visible but aren't bookable.
+        Hotels hotel = room.getHotel();
+        if (hotel.getStatus() != Hotel_Status.ACTIVE || hotel.getCompany().getStatus() != CompaniesStatus.ACTIVE) {
+            throw new IllegalStateException("This hotel is not accepting bookings");
+        }
+
         boolean hasOverlap = !bookingRepository.findOverlappingBookings(
                 room.getId() , request.getCheckIn() , request.getCheckOut()).isEmpty();
 
@@ -87,7 +108,10 @@ public class BookingServiceImpl implements BookingService{
         // 11am), so ChronoUnit.DAYS.between on the full timestamps would floor a 3-night
         // stay (Mon 3pm -> Thu 11am, 68 hours) down to 2.
         long nights = ChronoUnit.DAYS.between(request.getCheckIn().toLocalDate() , request.getCheckOut().toLocalDate());
-        double totalPrice = nights * room.getPrice_per_night();
+        // BigDecimal, not double: exact cents (price is stored as numeric(12,2)).
+        BigDecimal totalPrice = room.getPrice_per_night()
+                .multiply(BigDecimal.valueOf(nights))
+                .setScale(2, RoundingMode.HALF_UP);
 
         Booking booking = Booking.builder()
                 .user(user)
@@ -157,8 +181,40 @@ public class BookingServiceImpl implements BookingService{
     @Transactional
     @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
     public BookingResponse cancel(Long id) {
-        Booking booking = findById(id);
+        // Hotel/admin/system cancellation: the guest isn't at fault, so nothing is kept.
+        return cancelKeepingFee(findById(id), BigDecimal.ZERO);
+    }
 
+    @Override
+    @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
+    public BookingResponse cancelByGuest(Long id) {
+        Booking booking = findById(id);
+        // Only a CONFIRMED booking can have been paid (PaymentServiceImpl.assertPayable),
+        // so a fee is only ever relevant there.
+        boolean late = booking.getBookingStatus() == BookingStatus.CONFIRMED
+                && LocalDateTime.now().isAfter(freeCancellationUntil(booking));
+        return cancelKeepingFee(booking, late ? lateCancellationFee(booking) : BigDecimal.ZERO);
+    }
+
+    // Free cancellation ends this many hours before check-in.
+    private LocalDateTime freeCancellationUntil(Booking booking) {
+        return booking.getCheck_in().minusHours(freeCancellationHours);
+    }
+
+    // The price of the first N nights, at the nightly rate the guest actually booked
+    // (total / nights — unaffected by later price changes), never more than the total.
+    private BigDecimal lateCancellationFee(Booking booking) {
+        long nights = ChronoUnit.DAYS.between(booking.getCheck_in().toLocalDate(), booking.getCheck_out().toLocalDate());
+        if (nights <= 0) {
+            return booking.getTotalPrice();
+        }
+        BigDecimal perNight = booking.getTotalPrice().divide(BigDecimal.valueOf(nights), 2, RoundingMode.HALF_UP);
+        return perNight.multiply(BigDecimal.valueOf(Math.min(lateCancellationFeeNights, nights)))
+                .min(booking.getTotalPrice());
+    }
+
+    private BookingResponse cancelKeepingFee(Booking booking, BigDecimal retainedFee) {
         // Cancelling is only meaningful before the stay starts. It used to be allowed from
         // any non-terminal status, so a guest could cancel a stay they were already
         // checked in to (freeing the room's dates while they occupied it) or retro-cancel
@@ -175,7 +231,7 @@ public class BookingServiceImpl implements BookingService{
         // Refunds a paid booking / cancels a payment still in progress. Same transaction:
         // if the refund fails, the cancellation rolls back too, so the guest never ends up
         // with a cancelled stay and no money back.
-        paymentService.settleForCancelledBooking(saved.getId());
+        paymentService.settleForCancelledBooking(saved.getId(), retainedFee);
         publishStatusChange(saved);
         return toResponse(saved);
     }
@@ -316,6 +372,8 @@ public class BookingServiceImpl implements BookingService{
                 .specialRequest(booking.getSpecial_request())
                 .confirmedAt(booking.getConfirmed_at())
                 .cancelledAt(booking.getCancelled_at())
+                .freeCancellationUntil(freeCancellationUntil(booking))
+                .lateCancellationFee(lateCancellationFee(booking))
                 .createdAt(booking.getCreated_at())
                 .build();
     }

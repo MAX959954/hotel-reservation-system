@@ -130,7 +130,7 @@ public class HotelServiceImplTest {
 
     @Test
     void getByCity_returnsHotels(){
-        given(hotelsRepository.findByCity("Paris")).willReturn(List.of(hotel));
+        given(hotelsRepository.findListedByCity("Paris")).willReturn(List.of(hotel));
 
         List<HotelResponse> responses = hotelService.getByCity("Paris", "en");
 
@@ -140,7 +140,7 @@ public class HotelServiceImplTest {
 
     @Test
     void getByCountry_returnsHotels(){
-        given(hotelsRepository.findByCountry("France")).willReturn(List.of(hotel));
+        given(hotelsRepository.findListedByCountry("France")).willReturn(List.of(hotel));
 
         List<HotelResponse> responses = hotelService.getByCountry("France", "en");
 
@@ -159,7 +159,7 @@ public class HotelServiceImplTest {
 
     @Test
     void getByRating_returnsHotels() {
-        given(hotelsRepository.findByStar_rating(4)).willReturn(List.of(hotel));
+        given(hotelsRepository.findListedByStarRating(4)).willReturn(List.of(hotel));
 
         List<HotelResponse> responses = hotelService.getByRating(4, "en");
         assertThat(responses).hasSize(1);

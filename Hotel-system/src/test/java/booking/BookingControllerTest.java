@@ -1,8 +1,10 @@
 package booking;
 
+import java.math.BigDecimal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
+import companyuser.CompanyAuthorization;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -16,6 +18,7 @@ import java.time.LocalDateTime;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -34,6 +37,9 @@ class BookingControllerTest {
     @MockBean
     private BookingService bookingService;
 
+    @MockBean
+    private CompanyAuthorization companyAuth;
+
     private BookingResponse sampleResponse() {
         return BookingResponse.builder()
                 .id(1L)
@@ -47,7 +53,7 @@ class BookingControllerTest {
                 .checkOut(LocalDateTime.now().plusDays(3))
                 .guestCount(2)
                 .bookingStatus(BookingStatus.PENDING)
-                .totalPrice(200.0)
+                .totalPrice(new BigDecimal("200.0"))
                 .build();
     }
 
@@ -105,14 +111,30 @@ class BookingControllerTest {
     }
 
     @Test
-    void cancel_returns200() throws Exception {
+    void cancel_byHotelStaff_usesFullRefundCancellation() throws Exception {
         BookingResponse cancelled = sampleResponse();
         cancelled.setBookingStatus(BookingStatus.CANCELLED);
+        given(companyAuth.hasRoleForBooking(1L, "OWNER", "MANAGER", "RECEPTIONIST")).willReturn(true);
         given(bookingService.cancel(anyLong())).willReturn(cancelled);
 
         mockMvc.perform(patch("/api/bookings/{id}/cancel", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bookingStatus").value("CANCELLED"));
+
+        verify(bookingService, never()).cancelByGuest(anyLong());
+    }
+
+    @Test
+    void cancel_byGuest_appliesCancellationPolicy() throws Exception {
+        BookingResponse cancelled = sampleResponse();
+        cancelled.setBookingStatus(BookingStatus.CANCELLED);
+        given(bookingService.cancelByGuest(anyLong())).willReturn(cancelled);
+
+        mockMvc.perform(patch("/api/bookings/{id}/cancel", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bookingStatus").value("CANCELLED"));
+
+        verify(bookingService, never()).cancel(anyLong());
     }
 
     @Test

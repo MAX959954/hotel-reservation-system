@@ -1,5 +1,6 @@
 package room;
 
+import java.math.BigDecimal;
 import exception.ResourceNotFoundException;
 import hotels.Hotels;
 import hotels.HotelsRepository;
@@ -49,7 +50,7 @@ public class RoomServiceImplTest {
                 .id(1L)
                 .number("101")
                 .type(RoomType.DOUBLE)
-                .price_per_night(100.0)
+                .price_per_night(new BigDecimal("100.0"))
                 .capacity(2)
                 .floor(1)
                 .status(RoomStatus.AVAILABLE)
@@ -61,7 +62,7 @@ public class RoomServiceImplTest {
         request = new RoomRequest();
         request.setNumber("101");
         request.setType(RoomType.DOUBLE);
-        request.setPricePerNight(100.0);
+        request.setPricePerNight(new BigDecimal("100.0"));
         request.setCapacity(2);
         request.setFloor(1);
         request.setDescription("Nice room");
@@ -80,7 +81,7 @@ public class RoomServiceImplTest {
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getNumber()).isEqualTo("101");
         assertThat(response.getType()).isEqualTo(RoomType.DOUBLE);
-        assertThat(response.getPricePerNight()).isEqualTo(100.0);
+        assertThat(response.getPricePerNight()).isEqualByComparingTo("100.0");
         assertThat(response.getCapacity()).isEqualTo(2);
         assertThat(response.getFloor()).isEqualTo(1);
         assertThat(response.getHotelId()).isEqualTo(1L);
@@ -245,21 +246,20 @@ public class RoomServiceImplTest {
         RoomRequest updateRequest = new RoomRequest();
         updateRequest.setNumber("202");
         updateRequest.setType(RoomType.SUITE);
-        updateRequest.setPricePerNight(250.0);
+        updateRequest.setPricePerNight(new BigDecimal("250.0"));
         updateRequest.setCapacity(4);
         updateRequest.setFloor(2);
         updateRequest.setDescription("Updated room");
         updateRequest.setHotelId(1L);
 
         given(roomRepository.findById(1L)).willReturn(Optional.of(room));
-        given(hotelsRepository.findById(1L)).willReturn(Optional.of(hotel));
         given(roomRepository.save(any(Room.class))).willReturn(room);
 
         RoomResponse response = roomService.update(1L, updateRequest);
 
         assertThat(response.getNumber()).isEqualTo("202");
         assertThat(response.getType()).isEqualTo(RoomType.SUITE);
-        assertThat(response.getPricePerNight()).isEqualTo(250.0);
+        assertThat(response.getPricePerNight()).isEqualByComparingTo("250.0");
         assertThat(response.getCapacity()).isEqualTo(4);
         assertThat(response.getFloor()).isEqualTo(2);
 
@@ -280,14 +280,15 @@ public class RoomServiceImplTest {
     }
 
     @Test
-    void update_throws_whenHotelNotFound() {
+    void update_throws_whenMovingRoomToAnotherHotel() {
         given(roomRepository.findById(1L)).willReturn(Optional.of(room));
-        given(hotelsRepository.findById(1L)).willReturn(Optional.empty());
+        request.setHotelId(2L);
 
         assertThatThrownBy(() -> roomService.update(1L, request))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("Hotel not found by that id");
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot be moved to another hotel");
 
+        assertThat(room.getHotel().getId()).isEqualTo(1L);
         verify(roomRepository, never()).save(any());
     }
 

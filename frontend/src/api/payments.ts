@@ -40,7 +40,8 @@ export const paymentsApi = {
       const { data } = await http.get<PaymentResponse>(`/api/payments/booking/${bookingId}`)
       return data
     } catch (e) {
-      if (axios.isAxiosError(e) && e.response?.status === 400) return null
+      // No payment yet for this booking: the backend answers 404 (ResourceNotFoundException).
+      if (axios.isAxiosError(e) && e.response?.status === 404) return null
       throw e
     }
   },

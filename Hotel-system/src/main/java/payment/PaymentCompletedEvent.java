@@ -1,5 +1,6 @@
 package payment;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 // Carries everything the confirmation email needs out of the transaction that completed
@@ -13,7 +14,7 @@ record PaymentCompletedEvent(
         String roomNumber,
         LocalDateTime checkIn,
         LocalDateTime checkOut,
-        double amount,
+        BigDecimal amount,
         String currency
 ) {
 }

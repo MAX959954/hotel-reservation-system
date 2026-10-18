@@ -1,6 +1,7 @@
 package room;
 
 
+import java.math.BigDecimal;
 import hotels.Hotels;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -29,8 +30,8 @@ public class Room {
     @Column(name = "type", nullable = false)
     private RoomType type;
 
-    @Column(name = "price_per_night", nullable = false)
-    private Double price_per_night;
+    @Column(name = "price_per_night", nullable = false, precision = 12, scale = 2)
+    private BigDecimal price_per_night;
 
     @Column(name = "capacity", nullable = false)
     private Integer capacity;

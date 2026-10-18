@@ -35,6 +35,9 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
     @Query("SELECT r FROM Room r WHERE r.hotel.id = :hotelId " +
             "AND (:guestCount IS NULL OR r.capacity >= :guestCount) " +
             "AND r.status NOT IN (room.RoomStatus.MAINTENANCE, room.RoomStatus.OUT_OF_ORDER) " +
+            // Same rule as BookingServiceImpl.create: only ACTIVE hotels of ACTIVE companies.
+            "AND r.hotel.status = hotels.Hotel_Status.ACTIVE " +
+            "AND r.hotel.company.status = companies.CompaniesStatus.ACTIVE " +
             "AND r.id NOT IN " +
             "(SELECT b.room.id FROM Booking b WHERE b.check_in < :checkOut AND b.check_out > :checkIn " +
             "AND b.bookingStatus NOT IN (booking.BookingStatus.CANCELLED, booking.BookingStatus.PAYMENT_FAILED))")

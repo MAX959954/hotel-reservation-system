@@ -1,5 +1,6 @@
 package booking;
 
+import java.math.BigDecimal;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,9 +20,13 @@ public class BookingResponse {
     private LocalDateTime checkOut;
     private Integer guestCount;
     private BookingStatus bookingStatus;
-    private Double totalPrice;
+    private BigDecimal totalPrice;
     private String specialRequest;
     private LocalDateTime confirmedAt;
     private LocalDateTime cancelledAt;
+    // Cancellation policy as it applies to this booking (see BookingServiceImpl.cancelByGuest):
+    // a guest cancelling after freeCancellationUntil forfeits lateCancellationFee.
+    private LocalDateTime freeCancellationUntil;
+    private BigDecimal lateCancellationFee;
     private LocalDateTime createdAt;
 }
