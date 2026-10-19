@@ -59,8 +59,8 @@ export const useCurrencyStore = defineStore('currency', {
 
     /** The real, charged price. Always EUR, regardless of the display currency chosen. */
     format() {
-      const base = CURRENCIES.find((c) => c.code === BASE_CURRENCY)!
-      const formatter = new Intl.NumberFormat(base.locale, {
+      // Formatted for the interface language, so Slovak shows "340 €" rather than "€340".
+      const formatter = new Intl.NumberFormat(i18n.global.locale.value, {
         style: 'currency',
         currency: BASE_CURRENCY,
         maximumFractionDigits: 0,
