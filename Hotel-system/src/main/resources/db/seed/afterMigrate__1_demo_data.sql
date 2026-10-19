@@ -319,7 +319,7 @@ BEGIN
     INSERT INTO hotel_amenities (hotel_id, amenity) VALUES (25, 'ELEVATOR');
     INSERT INTO hotel_amenities (hotel_id, amenity) VALUES (27, 'LUGGAGE_STORAGE');
 
-    -- hotel_translations (220 rows)
+    -- hotel_translations (264 rows)
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (1, 1, 'ru', 'Пятизвёздочный отель у реки в самом сердце Парижа, в двух шагах от Сены.');
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (2, 1, 'es', 'Un alojamiento de cinco estrellas junto al río, en el corazón de París, a pasos del Sena.');
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (3, 1, 'fr', 'Un séjour cinq étoiles au bord de l''eau, en plein cœur de Paris, à deux pas de la Seine.');
@@ -540,6 +540,50 @@ BEGIN
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (218, 44, 'fr', 'Un loft à deux niveaux au-dessus d''un disquaire, dans le quartier des théâtres et du vintage de Tokyo.');
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (219, 44, 'it', 'Un loft su due livelli sopra un negozio di dischi, nel quartiere dei teatri e del vintage di Tokyo.');
     INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (220, 44, 'ja', 'レコード店の上にある2階建てロフト。劇場とヴィンテージ古着店が並ぶ下北沢エリア。');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (221, 1, 'sk', 'Päťhviezdičkové ubytovanie pri rieke v srdci Paríža, pár krokov od Seiny.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (222, 2, 'sk', 'Klasická rímska elegancia kúsok pešo od Fontány di Trevi.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (223, 3, 'sk', 'Moderný výškový hotel s výhľadom na panorámu Tokia.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (224, 4, 'sk', 'Moderné apartmá v Midtowne, pár minút od Central Parku.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (225, 5, 'sk', 'Zrekonštruovaný mestský dom z 18. storočia v Marais, pár ulíc od Picassovho múzea.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (226, 6, 'sk', 'Pokojný hotel s nádvorím v Trastevere, päť minút od rieky.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (227, 7, 'sk', 'Vlajková päťhviezdičková adresa v Ginze, pár krokov od luxusných butikov.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (228, 8, 'sk', 'Butikový penzión na tichej ulici s domami z hnedého kameňa a s výhľadom na panorámu Manhattanu.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (229, 9, 'sk', 'Hotel v georgiánskom mestskom dome na námestí so záhradou v literárnej štvrti Bloomsbury.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (230, 10, 'sk', 'Butikový hotel s kamennými múrmi vnútri starých hradieb Gotickej štvrte.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (231, 11, 'sk', 'Zrekonštruovaný mestský dom machiya v gejšovskej štvrti Gion so súkromnou čajovou miestnosťou.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (232, 12, 'sk', 'Veža na nábreží so súkromnými balkónmi s výhľadom na panorámu prístavu.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (233, 13, 'sk', 'Biele apartmá vytesané do útesu kaldery, každé so súkromným bazénom nad Egejským morom.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (234, 14, 'sk', 'Vily nad vodou v súkromnej lagúne, dostupné len hydroplánom.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (235, 15, 'sk', 'Apartmán s jednou spálňou a súkromnou strešnou terasou nad trhovými námestiami Gràcie.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (236, 16, 'sk', 'Loft s odhalenými trámami v prestavanom textilnom sklade, dve minúty od Picassovho múzea.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (237, 17, 'sk', 'Byt s dvoma spálňami na najvyššom poschodí s balkónom na more, pár krokov od plážovej promenády.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (238, 18, 'sk', 'Byt s jednou spálňou na vysokom poschodí s výhľadom na prístav a panorámu, päť minút pešo od električky.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (239, 19, 'sk', 'Apartmán s nádvorím v starej dubajskej štvrti veterných veží, oproti textilnému trhu.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (240, 20, 'sk', 'Byt s dvoma spálňami na prízemí so súkromnou záhradnou terasou, kúsok autom od pláže.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (241, 21, 'sk', 'Kompaktné štúdio nad krytou trhovou ulicou v Kjóte, pár minút na bicykli od hradu Nidžó.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (242, 22, 'sk', 'Dvojizbový dom na okraji bambusového hája so súkromnou verandou engawa s výhľadom do záhrady.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (243, 23, 'sk', 'Úzky byt v štýle machiya s výhľadom na rieku Kamo, jednu uličku od ulice osvetlenej lampiónmi.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (244, 24, 'sk', 'Byt s jednou spálňou na prvom poschodí s výhľadom na spoločné záhradné námestie, neďaleko trhu Portobello.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (245, 25, 'sk', 'Loft s odhalenými tehlami v sklade nad tlačiarňou, uprostred galerijnej ulice v Shoreditchi.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (246, 26, 'sk', 'Tichý byt v uličke za Queen Square, príjemná prechádzka k Britskému múzeu.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (247, 27, 'sk', 'Predvojnový byt s jednou spálňou v stromoradím lemovanom bloku West Village, nad nárožným kníhkupectvom.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (248, 28, 'sk', 'Loft v prestavanej továrni s výhľadom na panorámu pri East River, dva bloky od nábrežného parku.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (249, 29, 'sk', 'Klasický byt s dvoma spálňami do tichého nádvoria, tri bloky od Central Parku.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (250, 30, 'sk', 'Prízemný apartmán s priamym vstupom do plytčiny lagúny a so súkromným mólom.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (251, 31, 'sk', 'Záhradná vila s dvoma spálňami v tieni kokosových paliem, kúsok pešo od domáceho koralového útesu.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (252, 32, 'sk', 'Byt s jednou spálňou a súkromnou terasou nad plytčinou, dostupný krátkym transferom loďou.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (253, 33, 'sk', 'Apartmán s jednou spálňou na tichom nádvorí v Marais, päť minút od Place des Vosges.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (254, 34, 'sk', 'Podkrovný loft s ateliérom so strešným oknom na strmej uličke nad Moulin de la Galette.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (255, 35, 'sk', 'Byt s dvoma spálňami s výhľadom na súkromnú záhradu na nádvorí, za rohom od Café de Flore.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (256, 36, 'sk', 'Prízemný apartmán okolo spoločného nádvoria s brečtanom na jednej z dláždených uličiek Trastevere.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (257, 37, 'sk', 'Loft s klenbovým stropom v najstaršej rímskej štvrti, desať minút pešo od Kolosea.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (258, 38, 'sk', 'Byt s jednou spálňou nad krytým potravinovým trhom v Testacciu, v najmenej turistickej štvrti Ríma.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (259, 39, 'sk', 'Biely apartmán s jednou spálňou vytesaný do okraja kaldery s neobmedzeným výhľadom na západ slnka.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (260, 40, 'sk', 'Dvojúrovňový loft zabudovaný do útesu, kúsok pešo od lanovky vo Fire.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (261, 41, 'sk', 'Kamenný byt v horskej dedinke na Santorini, ďaleko od davov pri kaldere.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (262, 42, 'sk', 'Zrekonštruovaný drevený dom machiya v jednej z mála štvrtí Tokia, ktoré prežili vojnu neporušené.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (263, 43, 'sk', 'Apartmán s jednou spálňou pri kanáli rieky Meguro, pod čerešňami neďaleko stanice.');
+    INSERT INTO hotel_translations (id, hotel_id, locale, description) VALUES (264, 44, 'sk', 'Dvojúrovňový loft nad obchodom s platňami v tokijskej štvrti divadiel a vintage oblečenia.');
 
     -- rooms (81 rows)
     INSERT INTO rooms (id, number, type, price_per_night, capacity, floor, status, description, created_at, hotel_id) VALUES (1, '101', 'DOUBLE', 189, 2, 1, 'AVAILABLE', 'A quiet double room overlooking the courtyard.', '2026-09-25 16:45:10.377399', 1);
