@@ -127,7 +127,7 @@ Signing in asks for a 6-digit code after the password. Locally it arrives in **M
 ### 3.1 Browse as a visitor (no account)
 
 Open http://localhost:5173 and browse: pick a city, open a hotel, switch the language (EN
-menu, top right). Hotel descriptions are translated into EN, RU, ES, FR, IT and JA.
+menu, top right). Hotel descriptions are translated into EN, SK, RU, ES, FR, IT and JA.
 
 ### 3.2 Sign in and create an account
 

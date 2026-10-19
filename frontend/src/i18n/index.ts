@@ -1,5 +1,6 @@
 import { createI18n } from 'vue-i18n'
 import en from '@/locales/en'
+import sk from '@/locales/sk'
 import ru from '@/locales/ru'
 import es from '@/locales/es'
 import fr from '@/locales/fr'
@@ -8,6 +9,7 @@ import ja from '@/locales/ja'
 
 export const SUPPORTED_LOCALES = [
   { code: 'en', nativeName: 'English' },
+  { code: 'sk', nativeName: 'Slovenčina' },
   { code: 'ru', nativeName: 'Русский' },
   { code: 'es', nativeName: 'Español' },
   { code: 'fr', nativeName: 'Français' },
@@ -32,7 +34,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: loadLocale(),
   fallbackLocale: 'en',
-  messages: { en, ru, es, fr, it, ja },
+  messages: { en, sk, ru, es, fr, it, ja },
 })
 
 export function setLocale(code: LocaleCode) {
