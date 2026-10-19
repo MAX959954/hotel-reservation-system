@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(
   defineProps<{
@@ -17,12 +18,6 @@ const props = withDefaults(
   { min: undefined, max: undefined, placeholder: 'Select date', ariaLabel: 'Date', yearRange: undefined },
 )
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
 
 function parseISO(iso: string | undefined): Date | null {
   if (!iso) return null
@@ -158,9 +153,22 @@ function isToday(cell: DayCell) {
   return cell.iso === todayIsoValue
 }
 
+const { locale } = useI18n()
+// 4 Jan 2026 was a Sunday, matching the grid's Sunday-first weeks.
+const WEEKDAYS = computed(() => {
+  const fmt = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2026, 0, 4 + i)))
+})
+const MONTH_NAMES = computed(() => {
+  const fmt = new Intl.DateTimeFormat(locale.value, { month: 'long' })
+  return Array.from({ length: 12 }, (_, i) => fmt.format(new Date(2026, i, 1)))
+})
+const monthHeader = computed(() =>
+  new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(new Date(viewYear.value, viewMonth.value, 1)),
+)
 const displayLabel = computed(() => {
   if (!selected.value) return props.placeholder
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(selected.value)
+  return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short', year: 'numeric' }).format(selected.value)
 })
 
 function onDocumentClick(event: MouseEvent) {
@@ -234,7 +242,7 @@ onUnmounted(() => {
               <option v-for="y in years" :key="y" :value="y" class="bg-ink-2 text-bone">{{ y }}</option>
             </select>
           </div>
-          <span v-else class="text-sm text-bone font-medium">{{ MONTH_NAMES[viewMonth] }} {{ viewYear }}</span>
+          <span v-else class="text-sm text-bone font-medium">{{ monthHeader }}</span>
 
           <button
             type="button"

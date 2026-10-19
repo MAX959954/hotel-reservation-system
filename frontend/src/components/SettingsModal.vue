@@ -147,12 +147,12 @@ function pickLocale(code: LocaleCode) {
 
 function memberSince(iso: string | undefined): string {
   if (!iso) return ''
-  return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(new Date(iso))
 }
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Not on file'
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso))
 }
 </script>
 
