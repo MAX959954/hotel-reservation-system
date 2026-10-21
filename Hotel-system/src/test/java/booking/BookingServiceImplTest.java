@@ -6,6 +6,7 @@ import exception.ResourceNotFoundException;
 import payment.Payment;
 import payment.PaymentRepository;
 import payment.PaymentService;
+import payment.PaymentStatus;
 import reviews.Reviews;
 import reviews.ReviewsRepository;
 import hotels.Hotels;
@@ -605,16 +606,46 @@ public class BookingServiceImplTest {
 
     // ---------- checkIn ----------
 
+    private void givenPayment(PaymentStatus status) {
+        given(paymentRepository.findByBookingId(10L))
+                .willReturn(Optional.of(Payment.builder().id(20L).status(status).build()));
+    }
+
     @Test
     void checkIn_setsCheckedIn_whenConfirmed() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        givenPayment(PaymentStatus.COMPLETED);
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         BookingResponse response = bookingService.checkIn(10L);
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.CHECKED_IN);
         assertThat(room.getStatus()).isEqualTo(RoomStatus.AVAILABLE);
+    }
+
+    @Test
+    void checkIn_throws_whenBookingHasNoPayment() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(paymentRepository.findByBookingId(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> bookingService.checkIn(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("The booking must be paid before check-in");
+
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void checkIn_throws_whenCashPaymentNotYetReceived() {
+        Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        givenPayment(PaymentStatus.PENDING);
+
+        assertThatThrownBy(() -> bookingService.checkIn(10L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("The booking must be paid before check-in");
     }
 
     @Test
@@ -661,6 +692,41 @@ public class BookingServiceImplTest {
         BookingResponse response = bookingService.noShow(10L);
 
         assertThat(response.getBookingStatus()).isEqualTo(BookingStatus.NO_SHOW);
+        // The whole price is the fee: whatever was paid is kept, and a still-PENDING
+        // payment (cash never brought, unfinished card attempt) gets closed.
+        verify(paymentService).settleForCancelledBooking(10L, booking.getTotalPrice());
+    }
+
+    // ---------- cancelUpcomingForCompany / Hotel ----------
+
+    @Test
+    void cancelUpcomingForCompany_cancelsEachBookingWithFullRefund() {
+        Booking pending = bookingWithStatus(BookingStatus.PENDING);
+        Booking confirmed = bookingWithStatus(BookingStatus.CONFIRMED);
+        confirmed.setId(11L);
+        given(bookingRepository.findUpcomingByCompanyId(1L)).willReturn(List.of(pending, confirmed));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        int cancelled = bookingService.cancelUpcomingForCompany(1L);
+
+        assertThat(cancelled).isEqualTo(2);
+        assertThat(pending.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(confirmed.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
+        verify(paymentService).settleForCancelledBooking(11L, BigDecimal.ZERO);
+    }
+
+    @Test
+    void cancelUpcomingForHotel_cancelsEachBookingWithFullRefund() {
+        Booking confirmed = bookingWithStatus(BookingStatus.CONFIRMED);
+        given(bookingRepository.findUpcomingByHotelId(1L)).willReturn(List.of(confirmed));
+        given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        int cancelled = bookingService.cancelUpcomingForHotel(1L);
+
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(confirmed.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+        verify(paymentService).settleForCancelledBooking(10L, BigDecimal.ZERO);
     }
 
     @Test
@@ -712,6 +778,7 @@ public class BookingServiceImplTest {
     void checkIn_publishesStatusChangeEvent() {
         Booking booking = bookingWithStatus(BookingStatus.CONFIRMED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        givenPayment(PaymentStatus.COMPLETED);
         given(bookingRepository.save(any(Booking.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         bookingService.checkIn(10L);
@@ -807,7 +874,7 @@ public class BookingServiceImplTest {
     void delete_throwsConflict_whenBookingHasReview() {
         Booking booking = bookingWithStatus(BookingStatus.COMPLETED);
         given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
-        given(reviewsRepository.findByBookingId(10L)).willReturn(List.of(Mockito.mock(Reviews.class)));
+        given(reviewsRepository.findByBookingId(10L)).willReturn(Optional.of(Mockito.mock(Reviews.class)));
 
         assertThatThrownBy(() -> bookingService.delete(10L))
                 .isInstanceOf(ConflictException.class)

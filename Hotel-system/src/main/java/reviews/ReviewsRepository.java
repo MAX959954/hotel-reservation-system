@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ReviewsRepository extends JpaRepository<Reviews, Long> {
 
@@ -12,7 +13,8 @@ public interface ReviewsRepository extends JpaRepository<Reviews, Long> {
 
     List<Reviews> findByUserId(Long userId);
 
-    List<Reviews> findByBookingId(Long bookingId);
+    // At most one: reviews.booking_id is UNIQUE (V4 migration).
+    Optional<Reviews> findByBookingId(Long bookingId);
 
     List<Reviews> findByRoomIdAndApproved(Long roomId, boolean approved);
 

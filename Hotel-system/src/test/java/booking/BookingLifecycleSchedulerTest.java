@@ -34,6 +34,7 @@ class BookingLifecycleSchedulerTest {
         // directly like the framework would at runtime.
         ReflectionTestUtils.setField(scheduler, "pendingHoldHours", 48L);
         ReflectionTestUtils.setField(scheduler, "noShowGraceHours", 6L);
+        ReflectionTestUtils.setField(scheduler, "paymentDeadlineHours", 24L);
     }
 
     private Booking bookingWithId(Long id) {
@@ -88,5 +89,16 @@ class BookingLifecycleSchedulerTest {
         scheduler.markOverdueBookingsAsNoShow();
 
         verify(bookingService).noShow(4L);
+    }
+
+    @Test
+    void cancelUnpaidConfirmedBookings_cancelsEveryUnpaidBookingPastTheDeadline() {
+        given(bookingRepository.findConfirmedUnpaidSince(any())).willReturn(List.of(bookingWithId(5L), bookingWithId(6L)));
+        doThrow(new IllegalStateException("boom")).when(bookingService).cancel(5L);
+
+        scheduler.cancelUnpaidConfirmedBookings();
+
+        // One failure must not stop the rest of the batch.
+        verify(bookingService).cancel(6L);
     }
 }

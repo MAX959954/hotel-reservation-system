@@ -1,5 +1,6 @@
 package hotels;
 
+import booking.BookingService;
 import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
@@ -28,6 +29,9 @@ public class HotelServiceImplTest {
 
     @Mock
     private CompaniesRepository companiesRepository;
+
+    @Mock
+    private BookingService bookingService;
 
     @InjectMocks
     private HotelServiceImpl hotelService;
@@ -178,6 +182,18 @@ public class HotelServiceImplTest {
         ArgumentCaptor<Hotels> captor = ArgumentCaptor.forClass(Hotels.class);
         verify(hotelsRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(Hotel_Status.CLOSED);
+        // A closed hotel can't host anyone: its upcoming bookings are cancelled and refunded.
+        verify(bookingService).cancelUpcomingForHotel(1L);
+    }
+
+    @Test
+    void updateStatus_keepsBookings_whenHotelOnlyGoesUnderRenovation() {
+        given(hotelsRepository.findById(1L)).willReturn(Optional.of(hotel));
+        given(hotelsRepository.save(any(Hotels.class))).willReturn(hotel);
+
+        hotelService.updateStatus(1L , Hotel_Status.UNDER_RENOVATION);
+
+        verify(bookingService, never()).cancelUpcomingForHotel(any());
     }
 
 

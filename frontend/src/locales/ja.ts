@@ -163,7 +163,6 @@ export default {
     COMPLETED: '完了',
     CANCELLED: 'キャンセル済み',
     NO_SHOW: '無断キャンセル',
-    PAYMENT_FAILED: '支払い失敗',
   },
   notifications: {
     title: '通知',

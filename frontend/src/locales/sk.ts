@@ -162,7 +162,6 @@ export default {
     COMPLETED: 'Dokončená',
     CANCELLED: 'Zrušená',
     NO_SHOW: 'Nedostavil sa',
-    PAYMENT_FAILED: 'Platba zlyhala',
   },
   notifications: {
     title: 'Upozornenia',

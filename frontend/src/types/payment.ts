@@ -25,6 +25,11 @@ export function isAwaitingOfflinePayment(payment: { method: PaymentMethod; statu
   return !!payment && payment.status === 'PENDING' && OFFLINE_METHODS.includes(payment.method)
 }
 
+/** Money has actually been received — what the backend requires before check-in. */
+export function isPaid(payment: { status: PaymentStatus } | null | undefined): boolean {
+  return !!payment && (payment.status === 'COMPLETED' || payment.status === 'PARTIALLY_REFUNDED')
+}
+
 export type PaymentStatus =
   | 'PENDING'
   | 'PROCESSING'
@@ -45,7 +50,6 @@ export interface PaymentRequest {
   bookingId: number
   method: PaymentMethod
   currency: string
-  transactionId?: string
 }
 
 export interface PaymentResponse {

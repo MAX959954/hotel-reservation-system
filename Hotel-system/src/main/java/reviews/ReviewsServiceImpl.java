@@ -5,6 +5,7 @@ import booking.Booking;
 import booking.BookingRepository;
 import booking.BookingStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +27,10 @@ public class ReviewsServiceImpl implements ReviewsService {
             throw new IllegalStateException("Reviews can only be sumbitted for COMPLETED bookings");
         }
 
-        if (reviewsRepository.findByBookingId(booking.getId()).stream().findFirst().isPresent()){
+        // Fast path with a clear message; the UNIQUE constraint on reviews.booking_id is
+        // what actually guarantees one review per booking when two submissions race
+        // (e.g. a double click) and both pass this check.
+        if (reviewsRepository.findByBookingId(booking.getId()).isPresent()){
             throw new IllegalStateException("A review already exists for that booking");
         }
 
@@ -38,7 +42,13 @@ public class ReviewsServiceImpl implements ReviewsService {
                 .comment(request.getComment())
                 .build();
 
-        return toResponse(reviewsRepository.save(reviews));
+        try {
+            // Flushed here so a violation surfaces as this method's own error, not as a
+            // generic failure at commit time.
+            return toResponse(reviewsRepository.saveAndFlush(reviews));
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalStateException("A review already exists for that booking");
+        }
     }
 
     @Override
@@ -63,8 +73,7 @@ public class ReviewsServiceImpl implements ReviewsService {
 
     @Override
     public ReviewsResponse getByBooking(Long bookingId) {
-        return reviewsRepository.findByBookingId(bookingId).stream()
-                .findFirst()
+        return reviewsRepository.findByBookingId(bookingId)
                 .map(this::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found for booking id: " + bookingId));
     }

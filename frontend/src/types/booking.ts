@@ -8,7 +8,6 @@ export type BookingStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'NO_SHOW'
-  | 'PAYMENT_FAILED'
 
 export function bookingStatusLabel(status: string): string {
   const key = `bookingStatus.${status}`

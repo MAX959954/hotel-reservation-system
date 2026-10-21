@@ -2,7 +2,6 @@ package companyuser;
 
 import booking.BookingRepository;
 import companies.CompaniesRepository;
-import companies.CompaniesStatus;
 import hotels.HotelsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -14,6 +13,7 @@ import room.RoomRepository;
 import user.UserRepository;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Component("companyAuth")
 @RequiredArgsConstructor
@@ -35,16 +35,14 @@ public class CompanyAuthorization {
             return false;
         }
 
-        return companyUserRepository.findByCompanyId(companyId).stream()
-                // .getUser() can be null now — a row still pending on an unregistered
-                // invited_email has nothing to match against.
-                .anyMatch(member -> member.getUser() != null && member.getUser().getId().equals(userId) &&
-                        // A SUSPENDED/INACTIVE/CLOSED company's staff lose every company-scoped
-                        // permission (managing hotels, rooms, bookings, payments) until an admin
-                        // reinstates it. isMember() below stays read-only access to the roster.
-                        member.getCompany().getStatus() == CompaniesStatus.ACTIVE &&
-                        member.getStatus().equals(CompanyUserStatus.ACTIVE) &&
-                        Arrays.asList(roles).contains(member.getCompany_role().name()));
+        // One EXISTS-style query instead of loading the whole roster (plus each member's
+        // user and company) and filtering in Java on every check. The rule is unchanged:
+        // an ACTIVE member with one of the roles, of an ACTIVE company — a SUSPENDED/
+        // INACTIVE/CLOSED company's staff lose every company-scoped permission (managing
+        // hotels, rooms, bookings, payments) until an admin reinstates it. isMember()
+        // below stays read-only access to the roster.
+        List<CompanyRole> wanted = Arrays.stream(roles).map(CompanyRole::valueOf).toList();
+        return companyUserRepository.existsActiveMemberWithRole(companyId, userId, wanted);
     }
 
     public boolean isMember(Long companyId) {
@@ -54,9 +52,7 @@ public class CompanyAuthorization {
             return false;
         }
 
-        return companyUserRepository.findByCompanyId(companyId).stream()
-                .anyMatch(member -> member.getUser() != null && member.getUser().getId().equals(userId) &&
-                      member.getStatus().equals(CompanyUserStatus.ACTIVE));
+        return companyUserRepository.existsByUserIdAndCompanyIdAndStatus(userId, companyId, CompanyUserStatus.ACTIVE);
     }
 
     public boolean isCompanySubmitter(Long companyId) {
@@ -74,15 +70,14 @@ public class CompanyAuthorization {
     }
 
     public boolean hasRoleForBooking(Long bookingId , String... roles) {
-        return bookingRepository.findById(bookingId)
-                .map(booking ->
-                        hasRole(booking.getRoom().getHotel().getCompany().getId() , roles))
+        return bookingRepository.findCompanyIdById(bookingId)
+                .map(companyId -> hasRole(companyId , roles))
                 .orElse(false);
     }
 
     public boolean hasRoleForPayment (Long paymentId , String... roles ) {
-        return paymentRepository.findById(paymentId).map(payment ->
-                hasRole(payment.getBooking().getRoom().getHotel().getCompany().getId(), roles))
+        return paymentRepository.findCompanyIdById(paymentId)
+                .map(companyId -> hasRole(companyId, roles))
                 .orElse(false);
     }
 

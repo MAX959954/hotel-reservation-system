@@ -162,7 +162,6 @@ export default {
     COMPLETED: 'Terminée',
     CANCELLED: 'Annulée',
     NO_SHOW: 'Non présenté',
-    PAYMENT_FAILED: 'Échec du paiement',
   },
   notifications: {
     title: 'Notifications',

@@ -44,7 +44,9 @@ public class Reviews {
     }
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "booking_id", nullable = false)
+    // One review per booking — enforced by a UNIQUE constraint (V4 migration), not
+    // only by the check in ReviewsServiceImpl.create.
+    @JoinColumn(name = "booking_id", nullable = false, unique = true)
     private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

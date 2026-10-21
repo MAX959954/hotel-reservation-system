@@ -88,8 +88,8 @@ public class ReviewsServiceImplTest {
     @Test
     void create_savesReviewAndReturnsResponse_whenBookingCompletedAndNoExistingReview() {
         given(bookingRepository.findById(1L)).willReturn(Optional.of(booking));
-        given(reviewsRepository.findByBookingId(1L)).willReturn(List.of());
-        given(reviewsRepository.save(any(Reviews.class))).willReturn(review);
+        given(reviewsRepository.findByBookingId(1L)).willReturn(Optional.empty());
+        given(reviewsRepository.saveAndFlush(any(Reviews.class))).willReturn(review);
 
         ReviewsResponse response = reviewsService.create(request);
 
@@ -104,13 +104,27 @@ public class ReviewsServiceImplTest {
         assertThat(response.isApproved()).isFalse();
 
         ArgumentCaptor<Reviews> captor = ArgumentCaptor.forClass(Reviews.class);
-        verify(reviewsRepository).save(captor.capture());
+        verify(reviewsRepository).saveAndFlush(captor.capture());
         Reviews saved = captor.getValue();
 
         assertThat(saved.getBooking()).isEqualTo(booking);
         assertThat(saved.getUser()).isEqualTo(user);
         assertThat(saved.getRoom()).isEqualTo(room);
         assertThat(saved.getComment()).isEqualTo("Great stay");
+    }
+
+    @Test
+    void create_reportsDuplicate_whenAConcurrentSubmissionWonTheRace() {
+        // Both requests passed the findByBookingId check; the UNIQUE constraint on
+        // reviews.booking_id rejects the second insert.
+        given(bookingRepository.findById(1L)).willReturn(Optional.of(booking));
+        given(reviewsRepository.findByBookingId(1L)).willReturn(Optional.empty());
+        given(reviewsRepository.saveAndFlush(any(Reviews.class)))
+                .willThrow(new org.springframework.dao.DataIntegrityViolationException("reviews_booking_id_key"));
+
+        assertThatThrownBy(() -> reviewsService.create(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("A review already exists for that booking");
     }
 
     @Test
@@ -187,7 +201,7 @@ public class ReviewsServiceImplTest {
 
     @Test
     void getByBooking_returnsReview_whenFound() {
-        given(reviewsRepository.findByBookingId(1L)).willReturn(List.of(review));
+        given(reviewsRepository.findByBookingId(1L)).willReturn(Optional.of(review));
 
         ReviewsResponse response = reviewsService.getByBooking(1L);
 
@@ -196,7 +210,7 @@ public class ReviewsServiceImplTest {
 
     @Test
     void getByBooking_throws_whenNotFound() {
-        given(reviewsRepository.findByBookingId(1L)).willReturn(List.of());
+        given(reviewsRepository.findByBookingId(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> reviewsService.getByBooking(1L))
                 .isInstanceOf(ResourceNotFoundException.class)

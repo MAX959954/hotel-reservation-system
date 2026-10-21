@@ -114,7 +114,9 @@ class BookingControllerTest {
     void cancel_byHotelStaff_usesFullRefundCancellation() throws Exception {
         BookingResponse cancelled = sampleResponse();
         cancelled.setBookingStatus(BookingStatus.CANCELLED);
+        // Let in by @PreAuthorize as staff, and not the booking's own guest.
         given(companyAuth.hasRoleForBooking(1L, "OWNER", "MANAGER", "RECEPTIONIST")).willReturn(true);
+        given(companyAuth.isBookingOwner(1L)).willReturn(false);
         given(bookingService.cancel(anyLong())).willReturn(cancelled);
 
         mockMvc.perform(patch("/api/bookings/{id}/cancel", 1L))
@@ -128,6 +130,7 @@ class BookingControllerTest {
     void cancel_byGuest_appliesCancellationPolicy() throws Exception {
         BookingResponse cancelled = sampleResponse();
         cancelled.setBookingStatus(BookingStatus.CANCELLED);
+        given(companyAuth.isBookingOwner(1L)).willReturn(true);
         given(bookingService.cancelByGuest(anyLong())).willReturn(cancelled);
 
         mockMvc.perform(patch("/api/bookings/{id}/cancel", 1L))

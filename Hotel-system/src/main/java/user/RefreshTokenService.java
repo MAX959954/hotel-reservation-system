@@ -36,6 +36,9 @@ public class RefreshTokenService {
         Duration ttl = Duration.ofDays(refreshExpirationDays);
         redisTemplate.opsForValue().set(tokenKey(token), String.valueOf(userId), ttl);
         redisTemplate.opsForSet().add(userIndexKey(userId), token);
+        // The index must not outlive the newest token it lists: without a TTL it kept
+        // every token id this user was ever issued, long after the tokens themselves expired.
+        redisTemplate.expire(userIndexKey(userId), ttl);
         return token;
     }
 
@@ -48,13 +51,14 @@ public class RefreshTokenService {
      *  @return the owning user's id, or {@code null} if the token is unknown, already
      *  used, expired, or was revoked. */
     public Long validateAndConsume(String token) {
-        String key = tokenKey(token);
-        String userIdValue = redisTemplate.opsForValue().get(key);
+        // One atomic GETDEL, not GET then DELETE: with two separate commands, two
+        // concurrent refreshes with the same token could both read it before either
+        // deleted it, and both would get a fresh token pair.
+        String userIdValue = redisTemplate.opsForValue().getAndDelete(tokenKey(token));
         if (userIdValue == null) {
             return null;
         }
         Long userId = Long.valueOf(userIdValue);
-        redisTemplate.delete(key);
         redisTemplate.opsForSet().remove(userIndexKey(userId), token);
         return userId;
     }

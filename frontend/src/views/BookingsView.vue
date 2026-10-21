@@ -38,12 +38,11 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   COMPLETED: 'text-bone-dim bg-bone/5 border-hairline',
   CANCELLED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
   NO_SHOW: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
-  PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
 /** Mirrors BookingServiceImpl.cancel: only before the stay starts. Anything else would 400. */
 function canCancel(status: BookingStatus) {
-  return status === 'PENDING' || status === 'CONFIRMED' || status === 'PAYMENT_FAILED'
+  return status === 'PENDING' || status === 'CONFIRMED'
 }
 
 // Matches PaymentServiceImpl.pay(): it 400s for anything but a CONFIRMED booking, so a
