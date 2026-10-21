@@ -50,7 +50,6 @@ const BOOKING_STATUS_CLASSES: Record<BookingStatus, string> = {
   COMPLETED: 'text-bone-dim bg-bone/5 border-hairline',
   CANCELLED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
   NO_SHOW: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
-  PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
 async function load() {

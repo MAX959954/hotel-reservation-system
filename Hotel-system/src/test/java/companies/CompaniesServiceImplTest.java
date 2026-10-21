@@ -1,5 +1,6 @@
 package companies;
 
+import booking.BookingService;
 import companyuser.CompanyRole;
 import companyuser.CompanyUser;
 import companyuser.CompanyUserRepository;
@@ -41,6 +42,7 @@ class CompaniesServiceImplTest {
     @Mock private CompanyUserRepository companyUserRepository;
     @Mock private MailService mailService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private BookingService bookingService;
 
     @InjectMocks
     private CompaniesServiceImpl companiesService;
@@ -175,5 +177,31 @@ class CompaniesServiceImplTest {
         assertThatThrownBy(() -> companiesService.reject(1L, "reason"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("pending applications can be rejected");
+    }
+
+    // ---------- updateStatus ----------
+
+    @Test
+    void updateStatus_cancelsUpcomingBookings_whenCompanyIsSuspended() {
+        pendingCompany.setStatus(CompaniesStatus.ACTIVE);
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+        given(companiesRepository.save(any(Companies.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        CompaniesResponse response = companiesService.updateStatus(1L, CompaniesStatus.SUSPENDED);
+
+        assertThat(response.getStatus()).isEqualTo(CompaniesStatus.SUSPENDED);
+        // Its staff lose access now — nobody else would ever refund these guests.
+        verify(bookingService).cancelUpcomingForCompany(1L);
+    }
+
+    @Test
+    void updateStatus_keepsBookings_whenCompanyIsReactivated() {
+        pendingCompany.setStatus(CompaniesStatus.SUSPENDED);
+        given(companiesRepository.findById(1L)).willReturn(Optional.of(pendingCompany));
+        given(companiesRepository.save(any(Companies.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        companiesService.updateStatus(1L, CompaniesStatus.ACTIVE);
+
+        verify(bookingService, never()).cancelUpcomingForCompany(any());
     }
 }

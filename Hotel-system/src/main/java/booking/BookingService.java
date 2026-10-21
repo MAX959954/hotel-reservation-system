@@ -40,6 +40,15 @@ public interface BookingService {
      *  period has passed. */
     BookingResponse noShow(Long id);
 
+    /** Cancels, with a full refund, every PENDING/CONFIRMED booking of this company's
+     *  hotels. Called when the company stops operating (suspended, closed, ...) — its
+     *  staff lose access then, so nobody else would ever handle these bookings.
+     *  @return how many bookings were cancelled. */
+    int cancelUpcomingForCompany(Long companyId);
+
+    /** Same as {@link #cancelUpcomingForCompany} for a single hotel that closes. */
+    int cancelUpcomingForHotel(Long hotelId);
+
     void delete(Long id );
 
 }

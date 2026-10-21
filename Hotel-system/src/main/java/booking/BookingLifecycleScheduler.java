@@ -28,6 +28,9 @@ public class BookingLifecycleScheduler {
     @Value("${app.bookings.no-show-grace-hours:6}")
     private long noShowGraceHours;
 
+    @Value("${app.bookings.payment-deadline-hours:24}")
+    private long paymentDeadlineHours;
+
     @Scheduled(cron = "0 */15 * * * *")
     public void cancelAbandonedPendingBookings() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(pendingHoldHours);
@@ -40,6 +43,23 @@ public class BookingLifecycleScheduler {
                 // One row that changed underneath this job (or a genuinely unexpected
                 // error) must not stop the rest of the batch from running.
                 log.warn("Could not auto-cancel booking {}: {}", booking.getId(), e.getMessage());
+            }
+        }
+    }
+
+    // A confirmed booking blocks its room for those dates, so one the guest never pays
+    // for can't hold it indefinitely. Cancelled as a hotel-side cancellation: with no
+    // payment there is nothing to refund or keep.
+    @Scheduled(cron = "0 */15 * * * *")
+    public void cancelUnpaidConfirmedBookings() {
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(paymentDeadlineHours);
+        List<Booking> unpaid = bookingRepository.findConfirmedUnpaidSince(cutoff);
+        for (Booking booking : unpaid) {
+            try {
+                bookingService.cancel(booking.getId());
+                log.info("Auto-cancelled CONFIRMED booking {}: not paid within {}h", booking.getId(), paymentDeadlineHours);
+            } catch (Exception e) {
+                log.warn("Could not auto-cancel unpaid booking {}: {}", booking.getId(), e.getMessage());
             }
         }
     }

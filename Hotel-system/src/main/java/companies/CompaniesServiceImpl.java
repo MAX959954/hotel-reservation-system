@@ -1,5 +1,6 @@
 package companies;
 
+import booking.BookingService;
 import exception.ResourceNotFoundException;
 import companyuser.CompanyRole;
 import companyuser.CompanyUser;
@@ -33,6 +34,7 @@ public class CompaniesServiceImpl implements CompaniesService {
     private final CompanyUserRepository companyUserRepository;
     private final MailService mailService;
     private final ApplicationEventPublisher eventPublisher;
+    private final BookingService bookingService;
 
     @Override
     @Transactional
@@ -82,7 +84,19 @@ public class CompaniesServiceImpl implements CompaniesService {
     public CompaniesResponse updateStatus(Long id, CompaniesStatus status) {
         Companies company = findById(id);
         company.setStatus(status);
-        return toResponse(companiesRepository.save(company));
+        Companies saved = companiesRepository.save(company);
+        // Outside ACTIVE the company's staff lose every permission (CompanyAuthorization),
+        // so its upcoming bookings would be left with nobody to check guests in, cancel or
+        // refund them — and the scheduler would eventually mark them NO_SHOW, keeping the
+        // guests' money. They are cancelled with a full refund instead, in this same
+        // transaction: if a refund fails, the status change is rejected too.
+        if (status != CompaniesStatus.ACTIVE) {
+            int cancelled = bookingService.cancelUpcomingForCompany(id);
+            if (cancelled > 0) {
+                log.info("Company {} set to {}: cancelled {} upcoming booking(s)", id, status, cancelled);
+            }
+        }
+        return toResponse(saved);
     }
 
     @Override

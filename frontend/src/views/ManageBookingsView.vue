@@ -16,7 +16,7 @@ import { useCurrencyStore } from '@/stores/currency'
 import { formatDateRange } from '@/lib/dates'
 import { bookingStatusLabel, type BookingResponse, type BookingStatus } from '@/types/booking'
 import { companyRoleLabel, type CompanyRole, type CompanyUserResponse } from '@/types/companyUser'
-import { isAwaitingOfflinePayment, paymentMethodLabel, type PaymentResponse } from '@/types/payment'
+import { isAwaitingOfflinePayment, isPaid, paymentMethodLabel, type PaymentResponse } from '@/types/payment'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -39,7 +39,6 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   COMPLETED: 'text-bone-dim bg-bone/5 border-hairline',
   CANCELLED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
   NO_SHOW: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
-  PAYMENT_FAILED: 'text-rose-300/90 bg-rose-300/10 border-rose-300/20',
 }
 
 const FILTERS = computed<{ label: string; value: BookingStatus | null }[]>(() => [
@@ -155,7 +154,10 @@ function actionsFor(booking: BookingResponse): Action[] {
     case 'CONFIRMED':
       return [
         ...markPaidAction(booking),
-        { kind: 'checkIn', run: () => bookingsApi.checkIn(booking.id) },
+        // The server only checks in a paid booking (BookingServiceImpl.checkIn).
+        ...(isPaid(payments.value[booking.id])
+          ? [{ kind: 'checkIn' as const, run: () => bookingsApi.checkIn(booking.id) }]
+          : []),
         { kind: 'cancel', run: () => bookingsApi.cancel(booking.id), danger: true },
       ]
     case 'CHECKED_IN':

@@ -94,6 +94,44 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void issue_setsATtlOnTheUserIndex() {
+        ReflectionTestUtils.setField(refreshTokenService, "refreshExpirationDays", 30L);
+        refreshTokenService.issue(1L);
+
+        Long ttlSeconds = redisTemplate.getExpire("refresh-index:1");
+
+        assertThat(ttlSeconds).isNotNull().isPositive();
+    }
+
+    @Test
+    void validateAndConsume_concurrentUsesOfOneToken_onlyOneSucceeds() throws Exception {
+        String token = refreshTokenService.issue(42L);
+        int threads = 8;
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        try {
+            var results = new java.util.ArrayList<java.util.concurrent.Future<Long>>();
+            for (int i = 0; i < threads; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return refreshTokenService.validateAndConsume(token);
+                }));
+            }
+            start.countDown();
+
+            long successes = 0;
+            for (var result : results) {
+                if (result.get() != null) {
+                    successes++;
+                }
+            }
+            assertThat(successes).isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
     void issuedTokens_areUniquePerCall() {
         Set<String> tokens = Set.of(
                 refreshTokenService.issue(1L),

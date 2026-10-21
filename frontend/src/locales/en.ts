@@ -175,7 +175,6 @@ export default {
     COMPLETED: 'Completed',
     CANCELLED: 'Cancelled',
     NO_SHOW: 'No show',
-    PAYMENT_FAILED: 'Payment failed',
   },
   notifications: {
     title: 'Notifications',

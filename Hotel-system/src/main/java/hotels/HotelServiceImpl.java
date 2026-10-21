@@ -1,5 +1,6 @@
 package hotels;
 
+import booking.BookingService;
 import exception.ResourceNotFoundException;
 import companies.Companies;
 import companies.CompaniesRepository;
@@ -10,9 +11,11 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class HotelServiceImpl implements HotelService{
     private final HotelsRepository hotelsRepository;
     private final CompaniesRepository companiesRepository;
     private final HotelTranslationRepository hotelTranslationRepository;
+    private final BookingService bookingService;
 
     @Override
     @Transactional
@@ -99,8 +103,19 @@ public class HotelServiceImpl implements HotelService{
     public HotelResponse updateStatus(Long id , Hotel_Status status) {
         Hotels hotel =  findById(id);
         hotel.setStatus(status);
-        return toResponse(hotelsRepository.save(hotel), BASE_LOCALE);
+        Hotels saved = hotelsRepository.save(hotel);
+        // A hotel that shuts down can't host its upcoming guests: cancel those bookings
+        // with a full refund (same transaction — a failed refund rejects the change).
+        // UNDER_RENOVATION / COMINGS_SOON only stop new bookings; existing ones stay with
+        // the hotel's staff, who keep their access.
+        if (SHUT_DOWN_STATUSES.contains(status)) {
+            bookingService.cancelUpcomingForHotel(id);
+        }
+        return toResponse(saved, BASE_LOCALE);
     }
+
+    private static final Set<Hotel_Status> SHUT_DOWN_STATUSES =
+            EnumSet.of(Hotel_Status.CLOSED, Hotel_Status.SUSPENDED, Hotel_Status.INACTIVE);
 
     @Override
     @Transactional

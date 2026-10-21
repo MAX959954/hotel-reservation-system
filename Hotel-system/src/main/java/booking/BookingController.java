@@ -80,9 +80,12 @@ public class BookingController {
         // Same endpoint for both sides, different money rules: the hotel (or an admin)
         // cancelling refunds the guest in full; the guest cancelling is subject to the
         // cancellation policy (BookingService.cancelByGuest).
-        boolean byHotel = companyAuth.isAdmin()
-                || companyAuth.hasRoleForBooking(id, "OWNER", "MANAGER", "RECEPTIONIST");
-        return ResponseEntity.ok(byHotel ? bookingService.cancel(id) : bookingService.cancelByGuest(id));
+        // @PreAuthorize already established the caller is an admin, hotel staff or the
+        // guest, so only "is this the guest's own booking?" is left to decide — a cheap
+        // lookup by id, instead of re-running the company role check. A staff member
+        // cancelling their own stay is a guest here too, so they can't waive their own fee.
+        boolean byGuest = !companyAuth.isAdmin() && companyAuth.isBookingOwner(id);
+        return ResponseEntity.ok(byGuest ? bookingService.cancelByGuest(id) : bookingService.cancel(id));
     }
 
     @PatchMapping("/{id}/checkIn")

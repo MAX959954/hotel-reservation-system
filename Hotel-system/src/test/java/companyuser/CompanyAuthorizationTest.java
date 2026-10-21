@@ -15,7 +15,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import payment.Payment;
 import payment.PaymentRepository;
 import room.Room;
 import room.RoomRepository;
@@ -28,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class CompanyAuthorizationTest {
@@ -81,55 +81,28 @@ class CompanyAuthorizationTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 
-    private CompanyUser membership(CompanyRole role, CompanyUserStatus status) {
-        return CompanyUser.builder()
-                .id(5L)
-                .user(currentUser)
-                .company(company)
-                .company_role(role)
-                .status(status)
-                .build();
+    // ---------- hasRole ----------
+    // The membership rule itself (ACTIVE member, ACTIVE company, matching role) is now a
+    // single query — CompanyUserRepositoryIntegrationTest checks it against PostgreSQL.
+    // These tests cover what CompanyAuthorization still decides on its own.
+
+    private void givenMembership(Long companyId, boolean result, CompanyRole... roles) {
+        given(companyUserRepository.existsActiveMemberWithRole(companyId, currentUser.getId(), List.of(roles)))
+                .willReturn(result);
     }
 
-    // ---------- hasRole ----------
-
     @Test
-    void hasRole_true_whenActiveMemberWithMatchingRole() {
+    void hasRole_true_whenRepositoryFindsAnActiveMemberWithOneOfTheRoles() {
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.MANAGER, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.OWNER, CompanyRole.MANAGER);
 
         assertThat(companyAuthorization.hasRole(1L, "OWNER", "MANAGER")).isTrue();
     }
 
     @Test
-    void hasRole_false_whenCompanyIsSuspended() {
-        company.setStatus(CompaniesStatus.SUSPENDED);
+    void hasRole_false_whenRepositoryFindsNoMatchingMembership() {
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.OWNER, CompanyUserStatus.ACTIVE)));
-
-        assertThat(companyAuthorization.hasRole(1L, "OWNER", "MANAGER")).isFalse();
-    }
-
-    @Test
-    void hasRole_false_whenRoleDoesNotMatch() {
-        authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.STAFF, CompanyUserStatus.ACTIVE)));
-
-        assertThat(companyAuthorization.hasRole(1L, "OWNER", "MANAGER")).isFalse();
-    }
-
-    @Test
-    void hasRole_false_whenMemberNotActive() {
-        authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.MANAGER, CompanyUserStatus.INVITED)));
-
-        assertThat(companyAuthorization.hasRole(1L, "MANAGER")).isFalse();
-    }
-
-    @Test
-    void hasRole_false_whenUserNotAMember() {
-        authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of());
+        givenMembership(1L, false, CompanyRole.OWNER);
 
         assertThat(companyAuthorization.hasRole(1L, "OWNER")).isFalse();
     }
@@ -137,11 +110,13 @@ class CompanyAuthorizationTest {
     @Test
     void hasRole_false_whenCompanyIdIsNull() {
         assertThat(companyAuthorization.hasRole(null, "OWNER")).isFalse();
+        verifyNoInteractions(companyUserRepository);
     }
 
     @Test
     void hasRole_false_whenNotAuthenticated() {
         assertThat(companyAuthorization.hasRole(1L, "OWNER")).isFalse();
+        verifyNoInteractions(companyUserRepository);
     }
 
     // ---------- isMember ----------
@@ -149,15 +124,15 @@ class CompanyAuthorizationTest {
     @Test
     void isMember_true_whenActiveMember() {
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.STAFF, CompanyUserStatus.ACTIVE)));
+        given(companyUserRepository.existsByUserIdAndCompanyIdAndStatus(1L, 1L, CompanyUserStatus.ACTIVE)).willReturn(true);
 
         assertThat(companyAuthorization.isMember(1L)).isTrue();
     }
 
     @Test
-    void isMember_false_whenMemberNotActive() {
+    void isMember_false_whenNoActiveMembership() {
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.STAFF, CompanyUserStatus.SUSPENDED)));
+        given(companyUserRepository.existsByUserIdAndCompanyIdAndStatus(1L, 1L, CompanyUserStatus.ACTIVE)).willReturn(false);
 
         assertThat(companyAuthorization.isMember(1L)).isFalse();
     }
@@ -171,17 +146,16 @@ class CompanyAuthorizationTest {
 
     @Test
     void hasRoleForBooking_true_whenBookingBelongsToUsersCompany() {
-        Booking booking = Booking.builder().id(10L).room(room).build();
-        given(bookingRepository.findById(10L)).willReturn(Optional.of(booking));
+        given(bookingRepository.findCompanyIdById(10L)).willReturn(Optional.of(1L));
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.OWNER, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.OWNER);
 
         assertThat(companyAuthorization.hasRoleForBooking(10L, "OWNER")).isTrue();
     }
 
     @Test
     void hasRoleForBooking_false_whenBookingNotFound() {
-        given(bookingRepository.findById(10L)).willReturn(Optional.empty());
+        given(bookingRepository.findCompanyIdById(10L)).willReturn(Optional.empty());
 
         assertThat(companyAuthorization.hasRoleForBooking(10L, "OWNER")).isFalse();
     }
@@ -190,18 +164,16 @@ class CompanyAuthorizationTest {
 
     @Test
     void hasRoleForPayment_true_whenPaymentBelongsToUsersCompany() {
-        Booking booking = Booking.builder().id(10L).room(room).build();
-        Payment payment = Payment.builder().id(20L).booking(booking).build();
-        given(paymentRepository.findById(20L)).willReturn(Optional.of(payment));
+        given(paymentRepository.findCompanyIdById(20L)).willReturn(Optional.of(1L));
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.ACCOUNTANT, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.ACCOUNTANT);
 
         assertThat(companyAuthorization.hasRoleForPayment(20L, "ACCOUNTANT")).isTrue();
     }
 
     @Test
     void hasRoleForPayment_false_whenPaymentNotFound() {
-        given(paymentRepository.findById(20L)).willReturn(Optional.empty());
+        given(paymentRepository.findCompanyIdById(20L)).willReturn(Optional.empty());
 
         assertThat(companyAuthorization.hasRoleForPayment(20L, "ACCOUNTANT")).isFalse();
     }
@@ -213,7 +185,7 @@ class CompanyAuthorizationTest {
         CompanyUser targetMember = CompanyUser.builder().id(30L).company(company).build();
         given(companyUserRepository.findById(30L)).willReturn(Optional.of(targetMember));
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.OWNER, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.OWNER);
 
         assertThat(companyAuthorization.hasRoleForMember(30L, "OWNER")).isTrue();
     }
@@ -231,7 +203,7 @@ class CompanyAuthorizationTest {
     void hasRoleForHotel_true_whenHotelBelongsToUsersCompany() {
         given(hotelsRepository.findById(1L)).willReturn(Optional.of(hotel));
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.MANAGER, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.MANAGER);
 
         assertThat(companyAuthorization.hasRoleForHotel(1L, "MANAGER")).isTrue();
     }
@@ -249,7 +221,7 @@ class CompanyAuthorizationTest {
     void hasRoleForRoom_true_whenRoomBelongsToUsersCompany() {
         given(roomRepository.findById(1L)).willReturn(Optional.of(room));
         authenticateAs(currentUser);
-        given(companyUserRepository.findByCompanyId(1L)).willReturn(List.of(membership(CompanyRole.RECEPTIONIST, CompanyUserStatus.ACTIVE)));
+        givenMembership(1L, true, CompanyRole.RECEPTIONIST);
 
         assertThat(companyAuthorization.hasRoleForRoom(1L, "RECEPTIONIST")).isTrue();
     }

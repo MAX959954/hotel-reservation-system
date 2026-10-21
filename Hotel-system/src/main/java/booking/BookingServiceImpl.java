@@ -21,6 +21,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import payment.PaymentRepository;
 import payment.PaymentService;
+import payment.PaymentStatus;
 import reviews.ReviewsRepository;
 import room.Room;
 import room.RoomRepository;
@@ -31,12 +32,17 @@ import user.UserRepository;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService{
+
+    private static final Set<PaymentStatus> PAID_STATUSES =
+            EnumSet.of(PaymentStatus.COMPLETED, PaymentStatus.PARTIALLY_REFUNDED);
 
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
@@ -220,9 +226,7 @@ public class BookingServiceImpl implements BookingService{
         // checked in to (freeing the room's dates while they occupied it) or retro-cancel
         // a NO_SHOW. Once CHECKED_IN, the only way forward is complete().
         BookingStatus current = booking.getBookingStatus();
-        if (current != BookingStatus.PENDING &&
-                current != BookingStatus.CONFIRMED &&
-                current != BookingStatus.PAYMENT_FAILED) {
+        if (current != BookingStatus.PENDING && current != BookingStatus.CONFIRMED) {
             throw new IllegalStateException("Cannot cancel a " + current + " booking");
         }
         booking.setBookingStatus(BookingStatus.CANCELLED);
@@ -230,7 +234,9 @@ public class BookingServiceImpl implements BookingService{
         Booking saved = bookingRepository.save(booking);
         // Refunds a paid booking / cancels a payment still in progress. Same transaction:
         // if the refund fails, the cancellation rolls back too, so the guest never ends up
-        // with a cancelled stay and no money back.
+        // with a cancelled stay and no money back. The Stripe call itself is external and
+        // can't be rolled back, so it runs only after this cancellation is flushed (see
+        // PaymentServiceImpl.refundPayment); a retry after a failed commit is idempotent.
         paymentService.settleForCancelledBooking(saved.getId(), retainedFee);
         publishStatusChange(saved);
         return toResponse(saved);
@@ -244,6 +250,14 @@ public class BookingServiceImpl implements BookingService{
 
         if (booking.getBookingStatus() != BookingStatus.CONFIRMED) {
             throw new IllegalStateException("Only CONFIRMED bookings can be checked in");
+        }
+        // The stay is paid before it starts. A guest paying cash on arrival hands it over
+        // at the desk, and staff mark it received (PaymentService.markReceived) first.
+        boolean paid = paymentRepository.findByBookingId(id)
+                .map(payment -> PAID_STATUSES.contains(payment.getStatus()))
+                .orElse(false);
+        if (!paid) {
+            throw new IllegalStateException("The booking must be paid before check-in");
         }
         booking.setBookingStatus(BookingStatus.CHECKED_IN);
         Booking saved = bookingRepository.save(booking);
@@ -278,8 +292,34 @@ public class BookingServiceImpl implements BookingService{
 
         booking.setBookingStatus(BookingStatus.NO_SHOW);
         Booking saved = bookingRepository.save(booking);
+        // A no-show keeps whatever was paid (the fee is the whole price, so nothing is
+        // refunded), but a payment still PENDING — cash the guest never brought, a card
+        // attempt never finished — is closed instead of staying open forever.
+        paymentService.settleForCancelledBooking(saved.getId(), saved.getTotalPrice());
         publishStatusChange(saved);
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
+    public int cancelUpcomingForCompany(Long companyId) {
+        return cancelAll(bookingRepository.findUpcomingByCompanyId(companyId));
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(cacheNames =  "roomsAvailability" , allEntries = true)
+    public int cancelUpcomingForHotel(Long hotelId) {
+        return cancelAll(bookingRepository.findUpcomingByHotelId(hotelId));
+    }
+
+    // Hotel-side cancellation (full refund) of every booking in the list, in the caller's
+    // transaction: if one refund fails, nothing is cancelled and the status change that
+    // triggered this is rejected too, rather than leaving some guests without their money.
+    private int cancelAll(List<Booking> bookings) {
+        bookings.forEach(booking -> cancelKeepingFee(booking, BigDecimal.ZERO));
+        return bookings.size();
     }
 
     @Override

@@ -23,6 +23,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     List<Payment> findByStatusAndMethod(PaymentStatus status, PaymentMethod method);
 
+    // Same purpose as BookingRepository.findCompanyIdById.
+    @Query("SELECT p.booking.room.hotel.company.id FROM Payment p WHERE p.id = :id")
+    Optional<Long> findCompanyIdById(@Param("id") Long id);
+
     // Used by PaymentLifecycleScheduler to expire abandoned Stripe PaymentIntents that
     // never resolved — see app.payments.pending-expiry-hours. Gateway methods only:
     // offline payments (cash on arrival, bank transfer, crypto) legitimately stay PENDING

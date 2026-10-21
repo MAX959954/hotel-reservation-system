@@ -12,7 +12,9 @@ public class PaymentRequest {
     @NotNull(message = "method is required")
     private PaymentMethod method;
 
+    // Kept for API compatibility only: every booking is priced and charged in EUR, so
+    // the server always records "EUR" whatever is sent here. There is deliberately no
+    // transactionId field — only Stripe ever supplies one (see PaymentServiceImpl.pay).
     @NotBlank(message = "currency is required")
     private String currency;
-    private String transactionId;
 }

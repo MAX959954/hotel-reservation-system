@@ -80,12 +80,15 @@ public class PaymentServiceImpl implements PaymentService {
         // own booking as paid without any money moving. Staff confirm receipt through
         // markReceived(); PaymentLifecycleScheduler only expires Stripe intents, so this
         // row stays PENDING until then (cash is typically handed over at check-in).
+        // Currency and transaction id are never taken from the client: the amount is
+        // always the booking's EUR total, and transaction_id is reserved for Stripe
+        // PaymentIntent ids — a client-chosen one let a guest point an offline payment
+        // at an earlier succeeded intent and have confirm() accept it.
         Payment payment = Payment.builder()
                 .booking(booking)
                 .amount(booking.getTotalPrice())
                 .method(request.getMethod())
-                .currency(request.getCurrency())
-                .transaction_id(request.getTransactionId())
+                .currency("EUR")
                 .status(PaymentStatus.PENDING)
                 .build();
 
@@ -172,6 +175,12 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentResponse confirm(Long paymentId) {
         Payment payment = findById(paymentId);
 
+        // Only Stripe-backed payments are confirmed against Stripe. Offline ones are
+        // completed by staff through markReceived() — never by the guest, whatever
+        // intent id might be attached to the row.
+        if (!isGatewayPaymentWithIntent(payment)) {
+            throw new IllegalStateException("Only card and Google Pay payments are confirmed through Stripe");
+        }
         if (payment.getStatus() != PaymentStatus.PENDING) {
             throw new IllegalStateException("Payment is not awaiting confirmation");
         }
@@ -184,6 +193,14 @@ public class PaymentServiceImpl implements PaymentService {
             PaymentIntent intent = PaymentIntent.retrieve(payment.getTransaction_id());
             if (!"succeeded".equals(intent.getStatus())) {
                 throw new IllegalStateException("Stripe has not confirmed this payment yet (status: " + intent.getStatus() + ")");
+            }
+            // Defence in depth: the intent must be the one created for this booking and
+            // for this amount (see createIntent's metadata), not just any succeeded intent.
+            String intentBookingId = intent.getMetadata() != null ? intent.getMetadata().get("bookingId") : null;
+            if (!String.valueOf(payment.getBooking().getId()).equals(intentBookingId)
+                    || intent.getAmount() == null
+                    || intent.getAmount() != toCents(payment.getAmount())) {
+                throw new IllegalStateException("Stripe payment does not match this booking");
             }
         } catch (StripeException e) {
             throw new IllegalStateException("Could not verify payment with Stripe: " + e.getMessage(), e);
@@ -202,28 +219,48 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         paymentRepository.findByBookingId(booking.getId()).ifPresent(existing -> {
-            if (existing.getStatus() == PaymentStatus.COMPLETED) {
+            // Only an attempt that never took money may be replaced. COMPLETED, (partially)
+            // refunded and charged-back rows are financial records: deleting one used to
+            // erase the history and let the same booking be paid a second time.
+            if (!REPLACEABLE_STATUSES.contains(existing.getStatus())) {
                 throw new IllegalStateException("A payment already exists for that booking");
             }
 
             // PENDING (guest opened the card form, a Stripe PaymentIntent got created, then
-            // they closed the modal / the card was declined / whatever) or CANCELLED — either
-            // way payments.booking_id is UNIQUE, so this leftover row has to be cleared before
-            // a retry can be recorded, or every second attempt would 500 on the constraint.
+            // they closed the modal / the card was declined / whatever) or an attempt that
+            // already ended without money moving — either way payments.booking_id is
+            // UNIQUE, so this leftover row has to be cleared before a retry can be
+            // recorded, or every second attempt would 500 on the constraint.
+            if (isGatewayPaymentWithIntent(existing)
+                    && (existing.getStatus() == PaymentStatus.PENDING || existing.getStatus() == PaymentStatus.FAILED)) {
+                // Its intent may still charge (a declined card can be retried on the same
+                // intent), or may already have charged with confirm() and the webhook not
+                // recorded yet. Deleting the row in either case lost track of a real charge
+                // and let the guest pay twice — so it's only deleted once Stripe confirms
+                // the intent can no longer take money.
+                try {
+                    if (cancelIntentUnlessCharged(existing)) {
+                        throw new IllegalStateException(
+                                "This booking has already been paid; the payment is still being confirmed");
+                    }
+                } catch (InvalidRequestException e) {
+                    // The intent doesn't exist on Stripe's side, so it can never charge anyone.
+                    log.warn("Stripe PaymentIntent {} not found, replacing payment {}: {}",
+                            existing.getTransaction_id(), existing.getId(), e.getMessage());
+                } catch (StripeException e) {
+                    throw new IllegalStateException("Could not check the previous payment with Stripe: " + e.getMessage(), e);
+                }
+            }
             // Flushed immediately: Hibernate orders inserts before deletes within a flush by
             // default, and the caller's new row would otherwise momentarily collide with this
             // one on the same booking_id.
-            if (existing.getStatus() == PaymentStatus.PENDING && existing.getTransaction_id() != null) {
-                try {
-                    PaymentIntent.retrieve(existing.getTransaction_id()).cancel();
-                } catch (StripeException e) {
-                    log.warn("Could not cancel stale Stripe PaymentIntent {}: {}", existing.getTransaction_id(), e.getMessage());
-                }
-            }
             paymentRepository.delete(existing);
             paymentRepository.flush();
         });
     }
+
+    private static final Set<PaymentStatus> REPLACEABLE_STATUSES = EnumSet.of(
+            PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.CANCELLED, PaymentStatus.EXPIRED);
 
     // Published now but only delivered after the transaction commits (see
     // sendConfirmationEmail below) — same reasoning as OtpService's OTP email: the
@@ -321,6 +358,16 @@ public class PaymentServiceImpl implements PaymentService {
             // returned through Stripe too — marking the row REFUNDED without this would
             // show a completed refund on our side while the guest's card is never
             // actually credited (silent money loss / chargeback risk).
+            //
+            // A Stripe refund can't be rolled back with the database transaction, so every
+            // write made so far (e.g. the booking cancellation that led here) is flushed
+            // first: constraint violations and lock timeouts surface now, before any money
+            // moves, and roll everything back cleanly. What is left after Stripe is a single
+            // UPDATE of this row plus the commit. If even that fails, the state still
+            // converges: a retry of the same operation reuses the idempotency key below, so
+            // Stripe returns the existing refund instead of paying out twice, and the
+            // charge.refunded webhook (onChargeRefunded) records the refund on its own.
+            paymentRepository.flush();
             try {
                 RefundCreateParams params = RefundCreateParams.builder()
                         .setPaymentIntent(payment.getTransaction_id())
@@ -388,7 +435,8 @@ public class PaymentServiceImpl implements PaymentService {
     // paid lost the money while the room was freed for someone else, and a card payment
     // still in progress could complete on a booking that no longer existed. Any failure
     // here (e.g. Stripe refusing the refund) is thrown, so the booking cancellation rolls
-    // back with it instead of leaving the two out of sync.
+    // back with it. The opposite case — Stripe refunded but the commit then failed — can't
+    // be rolled back; see refundPayment for how the window is kept minimal and recovered.
     @Override
     @Transactional
     public void settleForCancelledBooking(Long bookingId, BigDecimal retainedFee) {

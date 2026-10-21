@@ -162,7 +162,6 @@ export default {
     COMPLETED: 'Завершено',
     CANCELLED: 'Отменено',
     NO_SHOW: 'Не явился',
-    PAYMENT_FAILED: 'Оплата не прошла',
   },
   notifications: {
     title: 'Уведомления',

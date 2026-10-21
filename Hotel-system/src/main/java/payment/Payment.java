@@ -32,7 +32,9 @@ public class Payment {
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    @Column(name = "transaction_id")
+    // Stripe PaymentIntent id; null for offline methods. UNIQUE (V3 migration) so
+    // webhook lookups by it always resolve to one payment.
+    @Column(name = "transaction_id", unique = true)
     private String transaction_id;
 
     // Set only when this payment went through the gateway and was actually refunded via
