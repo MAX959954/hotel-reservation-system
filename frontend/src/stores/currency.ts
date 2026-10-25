@@ -21,8 +21,8 @@ const BASE_CURRENCY: CurrencyCode = 'EUR'
 /**
  * Fixed, clearly-illustrative rates — not a live feed, and never used to change the
  * authoritative price. The API returns bare numbers with no currency field; every price
- * in this app *is* that number in EUR. PRODUCT.md is explicit that implying a real,
- * live conversion would be inventing data the backend doesn't provide.
+ * in this app *is* that number in EUR. Implying a real, live conversion would be
+ * inventing data the backend doesn't provide.
  *
  * What this table drives instead is a secondary, clearly-labelled estimate — the same
  * pattern Booking.com and similar sites use for "≈ $162" next to the real charged price.
