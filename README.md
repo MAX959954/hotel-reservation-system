@@ -8,8 +8,10 @@ bachelor's thesis.**
 
 | | |
 |---|---|
-| **Thesis** | *Hotel reservation system* |
+| **Thesis** | *Development of a Web Application for Hotel Reservation Management* |
 | **Author** | Maksym Veselov |
+| **Supervisor** | Mgr. Dominik Halvoník |
+| **Faculty** | Fakulta prírodných vied a informatiky |
 | **Year** | 2026 |
 
 Folio works like a small Booking.com: many independent hotel companies list their
