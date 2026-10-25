@@ -8,10 +8,10 @@ export default {
     signIn: 'Iniciar sesión',
   },
   hero: {
-    badge: '12 ciudades · 40 alojamientos independientes',
+    badge: '10 ciudades · 44 alojamientos independientes',
     headingLead: 'Habitaciones',
     headingEmphasis: 'que merecen el viaje',
-    subheading: 'Hoteles y apartamentos independientes en 12 ciudades. Un solo registro, sin ruido.',
+    subheading: 'Hoteles y apartamentos independientes en 10 ciudades. Un solo registro, sin ruido.',
   },
   search: {
     wherePlaceholder: '¿A dónde vas?',

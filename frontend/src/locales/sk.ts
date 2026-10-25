@@ -8,10 +8,10 @@ export default {
     signIn: 'Prihlásiť sa',
   },
   hero: {
-    badge: '12 miest · 40 nezávislých ubytovaní',
+    badge: '10 miest · 44 nezávislých ubytovaní',
     headingLead: 'Izby,',
     headingEmphasis: 'pre ktoré sa oplatí cestovať',
-    subheading: 'Nezávislé hotely a apartmány v 12 mestách. Jeden katalóg, žiadny hluk.',
+    subheading: 'Nezávislé hotely a apartmány v 10 mestách. Jeden katalóg, žiadny hluk.',
   },
   search: {
     wherePlaceholder: 'Kam?',

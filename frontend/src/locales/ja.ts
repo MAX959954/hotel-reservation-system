@@ -8,12 +8,12 @@ export default {
     signIn: 'ログイン',
   },
   hero: {
-    badge: '12都市 · 独立系宿泊施設40軒',
+    badge: '10都市 · 独立系宿泊施設44軒',
     // Word order is adapted rather than mirrored: Japanese puts the modifier before the
     // noun, so the "emphasis" half here is the noun itself, not literally "worth the journey".
     headingLead: '旅する価値のある',
     headingEmphasis: '部屋',
-    subheading: '12都市に広がる独立系ホテル＆アパートメント。ひとつの台帳に、余計な情報はありません。',
+    subheading: '10都市に広がる独立系ホテル＆アパートメント。ひとつの台帳に、余計な情報はありません。',
   },
   search: {
     wherePlaceholder: 'どちらへ？',

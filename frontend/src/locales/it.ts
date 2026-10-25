@@ -8,10 +8,10 @@ export default {
     signIn: 'Accedi',
   },
   hero: {
-    badge: '12 città · 40 strutture indipendenti',
+    badge: '10 città · 44 strutture indipendenti',
     headingLead: 'Camere',
     headingEmphasis: 'che meritano il viaggio',
-    subheading: 'Hotel e appartamenti indipendenti in 12 città. Un solo registro, senza rumore.',
+    subheading: 'Hotel e appartamenti indipendenti in 10 città. Un solo registro, senza rumore.',
   },
   search: {
     wherePlaceholder: 'Dove vuoi andare?',
