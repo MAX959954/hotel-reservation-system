@@ -7,10 +7,14 @@ and team through a separate extranet.
 **Stack:** Spring Boot 3 (Java 17) · PostgreSQL 16 · Redis 7 · Vue 3 + TypeScript + Vite ·
 Docker Compose
 
+![Folio home page](docs/screenshots/01-home.png)
+
 ---
 
 ## Contents
 
+- [Screenshots](#screenshots)
+- [How reservations and payments work](#how-reservations-and-payments-work)
 1. [Quick start](#1-quick-start)
 2. [What's running](#2-whats-running)
 3. [Testing the app](#3-testing-the-app)
@@ -22,6 +26,116 @@ Docker Compose
 9. [Project structure](#9-project-structure)
 10. [Sharing your local build (Cloudflare Tunnel)](#10-sharing-your-local-build-cloudflare-tunnel)
 11. [Production deployment](#11-production-deployment)
+
+---
+
+## Screenshots
+
+All screenshots come from the local Docker build with the seeded demo data
+(`docker compose up --build`, see [Quick start](#1-quick-start)).
+
+### Guest side
+
+| | |
+|---|---|
+| **Search by city and dates**<br>Pick a city, dates and number of guests. Only stays in that city are listed. | ![Search results](docs/screenshots/02-search-results.png) |
+| **Hotel page**<br>Description, amenities and the rooms with their nightly price. | ![Hotel rooms](docs/screenshots/05-hotel-rooms.png) |
+| **Reserve a room**<br>The total is calculated live: nights × nightly price. | ![Reserve dialog](docs/screenshots/06-reserve-dialog.png) |
+| **Sign in with a one-time code**<br>Password first, then a 6-digit code sent by e-mail. | ![Sign in](docs/screenshots/03-sign-in.png) ![Verification code](docs/screenshots/04-verification-code.png) |
+
+### Booking and payment, step by step
+
+| Step | Screen |
+|---|---|
+| **1. Booking created: Pending**<br>The guest has reserved. The room is held, but the hotel still has to accept it. | ![Pending booking](docs/screenshots/07-booking-pending.png) |
+| **2. Hotel confirms** (extranet, owner/staff)<br>Staff see new requests under **Pending** and click **Confirm**. | ![Extranet confirm](docs/screenshots/08-extranet-confirm.png) |
+| **3. Guest can pay**<br>A confirmed booking shows **Pay now**. | ![Confirmed, pay now](docs/screenshots/09-booking-confirmed-pay-now.png) |
+| **4. Choose a payment method**<br>Card / Google Pay go through Stripe. Bank transfer, cash and crypto are settled offline. | ![Payment methods](docs/screenshots/10-payment-methods.png) |
+| **5. Offline method saved**<br>Nothing is charged yet. The booking waits for the hotel to confirm the money arrived. | ![Payment awaiting](docs/screenshots/11-payment-awaiting.png) |
+| **6. Hotel marks it as paid**<br>The extranet shows *Awaiting payment · Bank transfer* and a **Mark as paid** button. | ![Mark as paid](docs/screenshots/12-extranet-mark-as-paid.png) |
+| **7. Paid, ready for check-in**<br>Only a paid booking can be checked in. | ![Paid, check in](docs/screenshots/13-extranet-paid-check-in.png) |
+| **E-mail notifications**<br>Every step sends an e-mail. Locally they all land in Mailpit (http://localhost:8025). | ![Mailpit](docs/screenshots/14-mailpit-emails.png) |
+
+---
+
+## How reservations and payments work
+
+### Booking lifecycle
+
+```
+             hotel confirms          guest pays          hotel checks in        hotel completes
+  PENDING ─────────────────▶ CONFIRMED ─────────▶ (paid) ─────────────▶ CHECKED_IN ─────────▶ COMPLETED
+     │                          │   │
+     │ cancelled by guest/hotel │   └── guest didn't arrive (6 h after check-in time) ──▶ NO_SHOW
+     │ or 48 h with no answer   │
+     ▼                          ▼
+ CANCELLED ◀────────────────────┘  cancelled by guest/hotel, or not paid within 24 h
+```
+
+**Creating a booking** (`POST /api/bookings`). The backend checks that:
+- check-out is after check-in and the stay is at least one night;
+- the hotel and its company are active and the room isn't in maintenance or out of order;
+- the room isn't already booked for any overlapping date;
+- the number of guests fits the room's capacity.
+
+The price is `nightly price × nights`, calculated with `BigDecimal` (exact cents) and
+stored on the booking. Later price changes don't affect existing bookings.
+
+**Who does what:**
+
+| Action | Who | Allowed when |
+|---|---|---|
+| Reserve | guest | room free for the dates |
+| Confirm | hotel staff | booking is `PENDING` |
+| Pay | guest | booking is `CONFIRMED` |
+| Check in | hotel staff | booking is `CONFIRMED` **and paid** |
+| Complete | hotel staff | booking is `CHECKED_IN` |
+| Cancel | guest or hotel staff | booking is `PENDING` or `CONFIRMED` (not after check-in) |
+
+**Automatic jobs** (`BookingLifecycleScheduler`, run every 15 minutes) keep stale
+bookings from blocking rooms:
+
+| Job | Default | Setting |
+|---|---|---|
+| Cancel a `PENDING` booking the hotel never answered | after 48 h | `BOOKING_PENDING_HOLD_HOURS` |
+| Cancel a `CONFIRMED` booking that was never paid | after 24 h | `BOOKING_PAYMENT_DEADLINE_HOURS` |
+| Mark a confirmed booking as `NO_SHOW` when the guest didn't check in | 6 h after check-in time | `BOOKING_NO_SHOW_GRACE_HOURS` |
+| Expire a card payment that was started but never finished | after 24 h | `PAYMENT_PENDING_EXPIRY_HOURS` |
+
+### Payments
+
+Payment opens only after the hotel has **confirmed** the booking, so a guest never
+pays for a stay the hotel hasn't accepted.
+
+| Method | How it is processed | Who marks it as paid |
+|---|---|---|
+| Credit / debit card, Google Pay | Stripe PaymentIntent. The browser confirms the card with Stripe.js (including 3-D Secure), then the backend asks Stripe whether the payment really succeeded and that it matches this booking | Stripe (confirm call or webhook), never a person |
+| Bank transfer, cash on arrival, crypto | Recorded as *Awaiting payment*. Nothing is charged online | Hotel staff with **Mark as paid** once the money has arrived |
+
+Some details worth knowing:
+- **One payment per booking.** A failed or abandoned card attempt can be retried.
+  Before a retry, the backend checks with Stripe that the earlier attempt wasn't actually
+  charged, so a guest can't be charged twice.
+- **Stripe webhooks** (`/api/payments/webhook`, signature verified) reconcile
+  everything that happens outside the app: a payment that succeeded after the browser
+  was closed, a failed payment, or a refund issued from the Stripe Dashboard.
+- **Amounts** are `numeric(12,2)` in the database and converted to cents for Stripe.
+
+### Cancellation and refunds
+
+| Who cancels | When | Refund |
+|---|---|---|
+| Guest | more than **48 h** before check-in (`BOOKING_FREE_CANCELLATION_HOURS`) | full refund |
+| Guest | later than that | refund minus a late-cancellation fee of **1 night** (`BOOKING_LATE_CANCELLATION_FEE_NIGHTS`) |
+| Hotel, admin, or an automatic job | any time before check-in | full refund |
+| Guest doesn't show up (`NO_SHOW`) | — | nothing is refunded |
+
+The cancellation and the refund happen in one database transaction: if Stripe refuses
+the refund, the booking stays as it was, so the guest never ends up with a cancelled
+stay and no money back. Card refunds are sent to Stripe with an idempotency key, so a
+retry can't refund twice. Hotel owners and managers can also issue a full or partial
+refund through the API (`PATCH /api/payments/{id}/refund`). A **full** refund of a
+confirmed booking cancels it and frees the room.
 
 ---
 
