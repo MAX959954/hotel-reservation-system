@@ -141,7 +141,7 @@ const progressKey = computed(() => `${index.value}-${props.open}`)
         </button>
 
         <p class="absolute bottom-6 md:bottom-10 inset-x-0 text-center text-sm font-light text-bone-dim px-6">
-          Independently run hotels and apartments across 12 cities.
+          Independently run hotels and apartments across 10 cities.
         </p>
       </div>
     </Transition>

@@ -1,0 +1,203 @@
+package com.folio.companyuser;
+
+import com.folio.exception.ConflictException;
+import com.folio.exception.ResourceNotFoundException;
+import com.folio.companies.Company;
+import com.folio.companies.CompanyRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+import com.folio.user.MailService;
+import com.folio.user.User;
+import com.folio.user.UserRepository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CompanyUserServiceImpl implements CompanyUserService {
+
+    private final CompanyUserRepository companyUserRepository;
+    private final UserRepository userRepository;
+    private final CompanyRepository companiesRepository;
+    private final MailService mailService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final CompanyAuthorization companyAuth;
+
+    @Override
+    @Transactional
+    public CompanyUserResponse invite (CompanyUserRequest request) {
+        if (request.getUserId() == null && (request.getEmail() == null || request.getEmail().isBlank())) {
+            throw new IllegalStateException("Either userId or email is required");
+        }
+        if (request.getCompanyRole() == CompanyRole.OWNER) {
+            assertCanManageOwners(request.getCompanyId());
+        }
+
+        Company company = companiesRepository.findById(request.getCompanyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found by that id " + request.getCompanyId()));
+
+        // A userId (or an email that resolves to an existing account) behaves exactly as
+        // before. An email with no matching account yet gets a row with no user attached —
+        // linkPendingInvites() fills that in the moment that address registers.
+        User existingUser = request.getUserId() != null
+                ? userRepository.findById(request.getUserId())
+                        .orElseThrow(() -> new ResourceNotFoundException("User not found by that id " + request.getUserId()))
+                : userRepository.findByEmail(request.getEmail()).orElse(null);
+
+        CompanyUser member;
+        if (existingUser != null) {
+            if (companyUserRepository.existsByUserIdAndCompanyId(existingUser.getId(), request.getCompanyId())) {
+                throw new IllegalStateException("User is already is member of that company");
+            }
+            member = CompanyUser.builder()
+                    .user(existingUser)
+                    .company(company)
+                    .companyRole(request.getCompanyRole())
+                    .build();
+        } else {
+            String email = request.getEmail().trim().toLowerCase();
+            if (companyUserRepository.existsByInvitedEmailAndCompanyId(email, request.getCompanyId())) {
+                throw new IllegalStateException("That email already has a pending invite to that company");
+            }
+            member = CompanyUser.builder()
+                    .invitedEmail(email)
+                    .company(company)
+                    .companyRole(request.getCompanyRole())
+                    .build();
+        }
+
+        CompanyUser saved = companyUserRepository.save(member);
+        String inviteeEmail = existingUser != null ? existingUser.getEmail() : member.getInvitedEmail();
+        eventPublisher.publishEvent(new CompanyInviteEvent(inviteeEmail, company.getName(), request.getCompanyRole().name()));
+
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public void linkPendingInvites(User newUser) {
+        List<CompanyUser> pending = companyUserRepository.findByInvitedEmailAndUserIsNull(newUser.getEmail());
+        for (CompanyUser member : pending) {
+            member.setUser(newUser);
+            member.setInvitedEmail(null);
+        }
+        companyUserRepository.saveAll(pending);
+    }
+
+    // Published now but delivered only after the transaction commits — same pattern as
+    // PaymentServiceImpl's confirmation email.
+    @Async("mailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendInviteEmail(CompanyInviteEvent event) {
+        try {
+            mailService.sendCompanyInvite(event.email(), event.companyName(), event.role());
+        } catch (Exception e) {
+            log.warn("Could not deliver company invite email to {}: {}", event.email(), e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public CompanyUserResponse acceptInvite(Long id) {
+        CompanyUser member = findById(id);
+
+        if(member.getStatus() != CompanyUserStatus.INVITED) {
+            throw new IllegalStateException("Only invited members can accept invite , current status: " + member.getStatus());
+        }
+
+        member.setStatus(CompanyUserStatus.ACTIVE);
+        member.setJoinedAt(LocalDateTime.now());
+        return toResponse(companyUserRepository.save(member));
+    }
+
+    @Override
+    @Transactional
+    public CompanyUserResponse changeRole(Long id , CompanyRole role) {
+        CompanyUser member = findById(id);
+        boolean isOwner = member.getCompanyRole() == CompanyRole.OWNER;
+        if (isOwner || role == CompanyRole.OWNER) {
+            assertCanManageOwners(member.getCompany().getId());
+        }
+        if (isOwner && role != CompanyRole.OWNER) {
+            assertNotLastActiveOwner(member);
+        }
+        member.setCompanyRole(role);
+        return toResponse(companyUserRepository.save(member));
+    }
+
+    @Override
+    @Transactional
+    public void  remove (Long id) {
+        CompanyUser member = findById(id);
+        if (member.getCompanyRole() == CompanyRole.OWNER) {
+            assertCanManageOwners(member.getCompany().getId());
+            assertNotLastActiveOwner(member);
+        }
+        companyUserRepository.delete(member);
+    }
+
+    private void assertCanManageOwners(Long companyId) {
+        if (!companyAuth.canManageOwners(companyId)) {
+            throw new AccessDeniedException("Only a company OWNER can grant, change or revoke the OWNER role");
+        }
+    }
+
+    // A company with no active OWNER can no longer delete its hotels or appoint a new
+    // owner by itself — only an admin could recover it.
+    private void assertNotLastActiveOwner(CompanyUser member) {
+        if (member.getStatus() != CompanyUserStatus.ACTIVE) {
+            return;
+        }
+        long activeOwners = companyUserRepository
+                .findByCompanyIdAndCompanyRole(member.getCompany().getId(), CompanyRole.OWNER).stream()
+                .filter(m -> m.getStatus() == CompanyUserStatus.ACTIVE)
+                .count();
+        if (activeOwners <= 1) {
+            throw new ConflictException("A company must keep at least one active OWNER");
+        }
+    }
+
+    @Override
+    public List<CompanyUserResponse> getByCompany(Long companyId) {
+        return companyUserRepository.findByCompanyId(companyId).stream().map(this :: toResponse).toList();
+    }
+
+    @Override
+    public List<CompanyUserResponse> getMine() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found by that email: " + email));
+        return companyUserRepository.findByUserId(user.getId()).stream().map(this :: toResponse).toList();
+    }
+
+    private CompanyUser findById(Long id) {
+        return companyUserRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Company member not found by that id " + id));
+    }
+
+    private CompanyUserResponse toResponse(CompanyUser member){
+        return CompanyUserResponse.builder()
+                .id(member.getId())
+                .userId(member.getUser() != null ? member.getUser().getId() : null)
+                .userEmail(member.getUser() != null ? member.getUser().getEmail() : null)
+                .invitedEmail(member.getInvitedEmail())
+                .companyId(member.getCompany().getId())
+                .companyName(member.getCompany().getName())
+                .companyRole(member.getCompanyRole())
+                .status(member.getStatus())
+                .invitedAt(member.getInvitedAt())
+                .joinedAt(member.getJoinedAt())
+                .build();
+    }
+
+
+}

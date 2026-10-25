@@ -154,6 +154,29 @@ On Windows, two scripts do steps 3 and the shutdown for you, from any folder:
 turns on Funnel; add `-NoBuild` to skip rebuilding) and `scripts\public-stop.ps1` (Funnel off,
 containers stopped, data kept; `-DeleteData` also wipes the database).
 
+**4. Accounts and a test run**
+
+The demo catalogue is loaded, but the local test accounts (`guest@folio.local` …) are
+not: their passwords are public, so `ProductionSafetyCheck` refuses to start if they are.
+Register on the site with a real e-mail address (every new account is a guest), then make
+an account the owner of a demo company, replacing the e-mail:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env exec postgres psql -U hotel_user -d hotel_db -c "INSERT INTO company_users (company_role, status, invited_at, joined_at, user_id, company_id) SELECT 'OWNER', 'ACTIVE', now(), now(), u.id, c.id FROM users u, companies c WHERE u.email = 'owner@example.com' AND c.name = 'Wayside Hospitality Group';"
+```
+
+An administrator is added the same way with
+`INSERT INTO user_roles (user_id, role) SELECT id, 'ADMIN' FROM users WHERE email = 'admin@example.com';`.
+Sign out and back in after a role change.
+
+| Step | As | What to do | Expected result |
+|---|---|---|---|
+| 1 | anyone | open `https://<your address>/actuator/health` | `{"status":"UP"}` |
+| 2 | guest | open *Ribeira Riverhouse* (Paris), choose dates, **Reserve** | booking in **My bookings** as *Pending* |
+| 3 | owner | account menu → **Manage bookings** → **Confirm** | *Confirmed*, the guest gets a "Booking confirmed" e-mail |
+| 4 | guest | **My bookings** → **Pay now** → **Bank transfer** | *Payment method saved*, nothing charged |
+| 5 | owner | **Mark as paid**, then **Check in** | *Paid · Bank transfer*, then *Checked in* and a check-in e-mail |
+
 **Keep it running**
 - Windows: *Settings → System → Power* → set sleep to **Never** while plugged in.
 - Docker Desktop: *Settings → General* → **Start Docker Desktop when you sign in**. The
@@ -196,7 +219,7 @@ server's IP. Caddy can only get a certificate once DNS points at the server.
 ```bash
 ssh root@<server-ip>            # Oracle: ssh ubuntu@<server-ip>
 
-git clone https://github.com/<owner>/<repo>.git ~/folio
+git clone https://github.com/MAX959954/hotel-reservation-system.git ~/folio
 cd ~/folio
 sudo bash deploy/setup-server.sh
 ```

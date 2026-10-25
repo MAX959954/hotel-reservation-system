@@ -18,10 +18,10 @@ export default {
     signIn: 'Sign in',
   },
   hero: {
-    badge: '12 cities · 40 independent stays',
+    badge: '10 cities · 44 independent stays',
     headingLead: 'Rooms',
     headingEmphasis: 'worth the journey',
-    subheading: 'Independently run hotels and apartments across 12 cities. One register, no noise.',
+    subheading: 'Independently run hotels and apartments across 10 cities. One register, no noise.',
   },
   search: {
     wherePlaceholder: 'Where to?',

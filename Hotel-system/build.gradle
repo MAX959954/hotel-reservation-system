@@ -5,7 +5,7 @@ plugins {
 	id 'jacoco'
 }
 
-group = 'org.example'
+group = 'com.folio'
 version = '0.0.1-SNAPSHOT'
 description = 'Hotel-system'
 
@@ -42,6 +42,8 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
 	implementation 'com.google.api-client:google-api-client:2.7.2'
 	implementation 'com.stripe:stripe-java:28.+'
+	// Interactive API docs at /swagger-ui.html (off in the prod profile) - see config.OpenApiConfig
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'

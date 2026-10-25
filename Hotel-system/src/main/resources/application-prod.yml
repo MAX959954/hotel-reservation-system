@@ -22,6 +22,14 @@ spring:
       mail.smtp.timeout: 10000
       mail.smtp.writetimeout: 10000
 
+# Swagger UI / OpenAPI spec (config.OpenApiConfig) is a development aid: a public site
+# doesn't publish a map of every endpoint.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 # An unreachable mail server must not mark the whole API unhealthy (that would make the
 # deploy script / Docker healthcheck treat a working site as down).
 management:

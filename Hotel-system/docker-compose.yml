@@ -2,7 +2,7 @@
 # with no .env at all (`docker compose up --build` from the repository root also brings
 # up the frontend - see ../docker-compose.yml). Values in Hotel-system/.env override the
 # defaults. The API runs with the "local" Spring profile (application-local.yml).
-# Production (Railway) does not use this file; it sets its own real secrets.
+# Production (deploy/) does not use this file; it sets its own real secrets.
 services:
   # Catches every e-mail the app sends (sign-in codes, booking/payment notifications)
   # and shows it in a web inbox: http://localhost:8025. Nothing is delivered for real.

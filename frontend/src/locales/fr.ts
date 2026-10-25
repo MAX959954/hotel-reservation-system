@@ -8,10 +8,10 @@ export default {
     signIn: 'Se connecter',
   },
   hero: {
-    badge: '12 villes · 40 adresses indépendantes',
+    badge: '10 villes · 44 adresses indépendantes',
     headingLead: 'Des chambres',
     headingEmphasis: 'qui valent le voyage',
-    subheading: 'Hôtels et appartements indépendants dans 12 villes. Un seul registre, sans bruit.',
+    subheading: 'Hôtels et appartements indépendants dans 10 villes. Un seul registre, sans bruit.',
   },
   search: {
     wherePlaceholder: 'Où allez-vous ?',
