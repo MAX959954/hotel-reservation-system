@@ -1,27 +1,88 @@
 # Folio
 
-A booking platform for independently run hotels and apartments. Guests search and book
-stays across a shared catalog, and each property's staff manage their bookings, rooms
-and team through a separate extranet.
+[![CI](https://github.com/MAX959954/hotel-reservation-system/actions/workflows/ci.yml/badge.svg)](https://github.com/MAX959954/hotel-reservation-system/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**Folio is a hotel and apartment booking platform, built as the practical part of a
+bachelor's thesis.**
+
+| | |
+|---|---|
+| **Thesis** | *Hotel reservation system* |
+| **Author** | Maksym Veselov |
+| **Year** | 2026 |
+
+Folio works like a small Booking.com: many independent hotel companies list their
+properties in one shared catalogue, guests search and book across all of them, and each
+company runs its own hotels, bookings and staff through a separate extranet.
+
+**Goal of the work:** a complete, realistic system rather than a prototype. That means
+real sign-in with e-mail verification, a booking lifecycle with rules and automatic
+clean-up, card payments through Stripe with refunds, permissions per company, about 425
+automated tests, and a production deployment.
 
 **Stack:** Spring Boot 3 (Java 17) · PostgreSQL 16 · Redis 7 · Vue 3 + TypeScript + Vite ·
-Docker Compose
+Docker Compose · Stripe
 
 ![Folio home page](docs/screenshots/01-home.png)
 
+**Names in this repository.** *Folio* is the product name (what users see in the UI, in
+e-mails and in the API docs). `hotel-reservation-system` is the name of the Git
+repository. `Hotel-system/` is the backend (a Gradle project, Java base package
+`com.folio`) and `frontend/` is the Vue app. To run the project, use the
+`docker-compose.yml` in the repository root: it includes `Hotel-system/docker-compose.yml`
+(database, Redis, mail catcher, API) and adds the frontend. `deploy/` holds the separate
+production compose files.
+
+## Contents
+
+1. [Features](#1-features)
+2. [Quick start](#2-quick-start)
+3. [Architecture](#3-architecture) (full version: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md))
+4. [How it works](#4-how-it-works): reservations, payments, refunds, sign-in and security
+5. [Screenshots](#5-screenshots)
+6. [API documentation](#6-api-documentation)
+7. [Development and tests](#7-development-and-tests)
+8. [Deployment](#8-deployment)
+9. [Troubleshooting and known limitations](#9-troubleshooting-and-known-limitations)
+10. [License](#10-license)
+
 ---
 
-## How to run it
+## 1. Features
 
-There are two ways. **To look at the project on your own computer, use option A.** It
-needs no accounts, keys or configuration. Option B is only needed to publish the site on
-the internet so other people can open it.
+**Guest**
+- search stays by city, dates and number of guests: 44 hotels and apartments in 10 cities
+- use the site in 7 languages (EN, SK, RU, ES, FR, IT, JA), with prices in EUR plus estimates in other currencies
+- book a room; availability and price are checked on the server
+- pay by card or Google Pay (Stripe), or choose bank transfer, cash on arrival or crypto
+- cancel: free until 48 h before check-in, then a one-night fee; refunds are automatic
+- get e-mails at every step; manage the profile and avatar; apply to become a host
 
-### Option A: run it on your computer (recommended for reviewing)
+**Hotel company (extranet)**, with the company roles owner, manager, receptionist, accountant and staff
+- confirm, check in, complete or cancel bookings; mark offline payments as paid
+- manage hotels and rooms (prices, capacity, room status such as maintenance)
+- invite staff by e-mail with a company role; every role only sees its own company
+- reviews: guests can review a completed stay and staff approve them (API only, no screen yet)
+
+**Administrator**
+- approve or reject host applications and view the uploaded documents
+- manage users: search, change account status, grant or revoke roles
+
+**Under the hood**
+- sign-in with password plus an e-mail code, or Google; JWT with rotating refresh tokens
+- scheduled jobs cancel unconfirmed or unpaid bookings and expire abandoned payments
+- about 425 automated backend tests, many against a real PostgreSQL (Testcontainers), run by CI on every push
+- interactive API documentation (Swagger UI)
+
+---
+
+## 2. Quick start
 
 **Needs:** [Git](https://git-scm.com/downloads) and
-[Docker Desktop](https://www.docker.com/products/docker-desktop/) (running). No `.env`
-file.
+[Docker Desktop](https://www.docker.com/products/docker-desktop/), running. No Java,
+Node.js, PostgreSQL or Redis on the machine, and no `.env` file: every setting has a
+working local default.
 
 ```bash
 git clone https://github.com/MAX959954/hotel-reservation-system.git
@@ -29,202 +90,127 @@ cd hotel-reservation-system
 docker compose up --build
 ```
 
-The first start takes 5–10 minutes. When the log shows `Started HotelSystemApplication`,
-open:
+The first start takes 5–10 minutes (Docker downloads images and builds the backend and
+frontend); later starts take seconds. When the log shows
+`Started HotelSystemApplication`, open:
 
 | What | URL |
 |---|---|
-| Website | http://localhost:5173 |
-| Mail inbox (sign-in codes arrive here) | http://localhost:8025 |
+| **Website** | **http://localhost:5173** |
+| **Mail inbox** (sign-in codes and all other e-mails arrive here) | **http://localhost:8025** |
+| API documentation (Swagger UI) | http://localhost:8081/swagger-ui.html |
+| API health check | http://localhost:8081/actuator/health (shows `{"status":"UP"}`) |
 
-**Test accounts** (password `Folio2026!` for all):
+### Test accounts
+
+The password is `Folio2026!` for all three.
 
 | E-mail | Role |
 |---|---|
 | `guest@folio.local` | guest: book and pay |
-| `owner@folio.local` | hotel owner: confirm bookings, manage hotels (extranet) |
-| `admin@folio.local` | administrator |
+| `owner@folio.local` | owner of *Wayside Hospitality Group*: its hotels, rooms, bookings and staff (extranet) |
+| `admin@folio.local` | administrator: host applications, users |
 
-After the password the site asks for a 6-digit code. Open http://localhost:8025, where
-the newest e-mail contains it.
+After the password the site asks for a **6-digit code**. Open http://localhost:8025: the
+newest e-mail, "Your Folio verification code", contains it (valid for 10 minutes). You can
+also register your own account with any e-mail address, even a made-up one, because
+nothing is actually sent.
 
-Stop with `Ctrl+C` or `docker compose down`. More detail and a guided tour of the
-features: [1. Quick start](#1-quick-start) and [3. Testing the app](#3-testing-the-app).
+### A five-minute tour
 
-### Option B: publish it on the internet from your PC (Tailscale Funnel)
-
-The site gets a public HTTPS address like `https://folio.tail1a2b3c.ts.net` and stays
-online **while the computer is on**. It runs the production build: real e-mail, no
-test accounts. Windows only (the scripts are PowerShell).
-
-**Needs:** Git, Docker Desktop, a Tailscale account (free, sign in with Google or
-GitHub) and a Gmail address for sending sign-in codes.
-
-**1. Clone the project**
-
-```powershell
-git clone https://github.com/MAX959954/hotel-reservation-system.git
-cd hotel-reservation-system
-```
-
-**2. Set up Tailscale** (once)
-
-1. Install it: `winget install tailscale.tailscale` (or https://tailscale.com/download), then sign in.
-2. In the admin console (https://login.tailscale.com/admin):
-   - **Machines** → your PC → **Edit machine name** → a short name, e.g. `folio`;
-   - **DNS** → check that **MagicDNS** is on, and enable **HTTPS Certificates**.
-3. Find your address: `tailscale status --json` shows it as `"DNSName"`, e.g.
-   `folio.tail1a2b3c.ts.net.`. Use it without the trailing dot.
-
-**3. Create a Gmail app password** (once)
-
-1. Turn on **2-Step Verification**: https://myaccount.google.com/security
-2. Create an **app password**: https://myaccount.google.com/apppasswords → name it
-   "Folio". Google shows a 16-character password. Your normal Gmail password does
-   **not** work here.
-
-**4. Create the settings file**
-
-```powershell
-Copy-Item deploy\.env.example deploy\.env
-notepad deploy\.env
-```
-
-| Setting | Value |
-|---|---|
-| `DOMAIN` | your Tailscale address from step 2, without `https://` |
-| `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET` | three **different** random values (command below) |
-| `SMTP_USERNAME` | your Gmail address |
-| `SMTP_PASSWORD` | the app password from step 3 |
-| `MAIL_FROM` | `Folio <your.address@gmail.com>`, the same address as `SMTP_USERNAME` |
-
-A random value (run it once per setting):
-
-```powershell
-docker run --rm alpine sh -c "head -c 32 /dev/urandom | base64"
-```
-
-`STRIPE_*` and `GOOGLE_CLIENT_ID` can stay empty. Card payments and Google sign-in are
-then unavailable, but booking, bank transfer / cash payments and the extranet all work.
-
-**5. Start**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\public-start.ps1
-```
-
-The script starts Docker Desktop if needed, builds the app, waits until it is healthy and
-turns on Tailscale Funnel. The first time, Tailscale may print a link to approve Funnel:
-open it, approve, and run the script again. Then open `https://<your address>` and
-register. The code arrives at your real mailbox (check spam).
-
-Add `-NoBuild` to skip rebuilding when the code hasn't changed.
-
-**6. Test data and a test run**
-
-The demo catalogue is loaded automatically: 4 hotel companies and 44 hotels and
-apartments in 10 cities (Paris, Rome, Kyoto, Barcelona, Dubai, London, New York, Tokyo,
-Santorini, Maldives), with rooms, prices and reviews.
-
-The fixed test accounts from option A (`guest@folio.local` …) are **not** available
-here. Their passwords are public, so the app refuses to start in production if they are
-loaded (`config.ProductionSafetyCheck`). Use your own accounts instead:
-
-1. **Guest:** register on the site with a real e-mail address. Every new account is a guest.
-2. **Hotel owner:** register a second account (or use the first one), then make it the
-   owner of a demo company. Run in the project folder, replacing the e-mail:
-
-   ```powershell
-   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env exec postgres psql -U hotel_user -d hotel_db -c "INSERT INTO company_users (company_role, status, invited_at, joined_at, user_id, company_id) SELECT 'OWNER', 'ACTIVE', now(), now(), u.id, c.id FROM users u, companies c WHERE u.email = 'owner@example.com' AND c.name = 'Wayside Hospitality Group';"
-   ```
-
-   *Wayside Hospitality Group* owns the hotels in Paris, Rome, Tokyo, New York and more.
-3. **Administrator** (optional):
-
-   ```powershell
-   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env exec postgres psql -U hotel_user -d hotel_db -c "INSERT INTO user_roles (user_id, role) SELECT id, 'ADMIN' FROM users WHERE email = 'admin@example.com';"
-   ```
-
-After a role change, sign out and back in.
-
-**Check that everything works:**
+Use two browsers (or a private window) to be signed in as guest and owner at the same time.
 
 | Step | As | What to do | Expected result |
 |---|---|---|---|
-| 1 | anyone | open `https://<your address>/actuator/health` | `{"status":"UP"}` |
-| 2 | visitor | open the home page, pick **Paris** | a list of Paris hotels |
-| 3 | guest | open *Ribeira Riverhouse*, choose dates, **Reserve** | booking in **My bookings** as *Pending* |
-| 4 | owner | account menu → **Manage bookings** → **Confirm** | booking becomes *Confirmed*, the guest gets a "Booking confirmed" e-mail |
-| 5 | guest | **My bookings** → **Pay now** → **Bank transfer** | *Payment method saved*, nothing charged |
-| 6 | owner | **Mark as paid**, then **Check in** | *Paid · Bank transfer*, then *Checked in* and a check-in e-mail |
+| 1 | visitor | on the home page pick **Paris**, switch the language (top right) | a list of Paris stays, translated |
+| 2 | guest | open *Ribeira Riverhouse*, choose dates, **Reserve** | the booking is in **My bookings** as *Pending* |
+| 3 | owner | account menu → **Manage bookings** → **Confirm** | *Confirmed*; the guest gets an e-mail in Mailpit |
+| 4 | guest | **My bookings** → **Pay now** → **Bank transfer** | *Payment method saved*, nothing charged |
+| 5 | owner | **Mark as paid**, then **Check in** | *Paid · Bank transfer*, then *Checked in* |
+| 6 | guest | **Become a host**, submit the form with any document | application sent |
+| 7 | admin | account menu → **Admin** → approve the application | the applicant now owns a new company and can add hotels |
 
-Use two browsers (or a private window) to be signed in as guest and owner at the same
-time. If Stripe test keys are set in `deploy/.env`, card payments work with the test
-card **4242 4242 4242 4242**, any future expiry date and any CVC.
+Card payments need Stripe test keys, see [Optional integrations](#optional-integrations).
 
-**7. Stop**
+**Stop** with `Ctrl+C` or `docker compose down`. The data is kept in a Docker volume;
+`docker compose down -v` resets it to the demo data.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\public-stop.ps1
+---
+
+## 3. Architecture
+
+### Components
+
+```mermaid
+flowchart LR
+    B["Browser"] -->|"loads the app"| N["nginx<br/>built Vue 3 SPA"]
+    B -->|"REST + JWT"| A["Spring Boot API<br/>Java 17"]
+    A --> P[("PostgreSQL<br/>all data")]
+    A --> R[("Redis<br/>tokens, caches")]
+    A <-->|"payments, webhooks"| S["Stripe"]
+    A -->|"codes, notifications"| M["SMTP<br/>Mailpit locally"]
 ```
 
-It ends with **Folio is offline**. Users, bookings and hotels are kept until the next
-start.
+`docker compose up` starts five containers: `hotel_frontend` (nginx with the Vue app,
+port 5173), `hotel_app` (the API, 8081), `hotel_db` (PostgreSQL, 5432), `hotel_redis`
+(6379) and `hotel_mailpit` (a fake SMTP server with a web inbox, 8025). In production a
+Caddy reverse proxy sits in front and serves everything over HTTPS on one domain.
 
-Full guide and troubleshooting:
-[deploy/README.md → Host it from your own PC](deploy/README.md#host-it-from-your-own-pc-tailscale-funnel).
+### Technology choices
 
----
-
-## Contents
-
-- [How to run it](#how-to-run-it)
-- [Screenshots](#screenshots)
-- [How reservations and payments work](#how-reservations-and-payments-work)
-1. [Quick start](#1-quick-start)
-2. [What's running](#2-whats-running)
-3. [Testing the app](#3-testing-the-app)
-4. [Optional: e-mail, card payments, Google sign-in](#4-optional-e-mail-card-payments-google-sign-in)
-5. [Everyday commands](#5-everyday-commands)
-6. [Development without rebuilding (hot reload)](#6-development-without-rebuilding-hot-reload)
-7. [Running the automated tests](#7-running-the-automated-tests)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Project structure](#9-project-structure)
-10. [Sharing your local build (Cloudflare Tunnel)](#10-sharing-your-local-build-cloudflare-tunnel)
-11. [Production deployment](#11-production-deployment)
-
----
-
-## Screenshots
-
-All screenshots come from the local Docker build with the seeded demo data
-(`docker compose up --build`, see [Quick start](#1-quick-start)).
-
-### Guest side
-
-| | |
+| Choice | Why |
 |---|---|
-| **Search by city and dates**<br>Pick a city, dates and number of guests. Only stays in that city are listed. | ![Search results](docs/screenshots/02-search-results.png) |
-| **Hotel page**<br>Description, amenities and the rooms with their nightly price. | ![Hotel rooms](docs/screenshots/05-hotel-rooms.png) |
-| **Reserve a room**<br>The total is calculated live: nights × nightly price. | ![Reserve dialog](docs/screenshots/06-reserve-dialog.png) |
-| **Sign in with a one-time code**<br>Password first, then a 6-digit code sent by e-mail. | ![Sign in](docs/screenshots/03-sign-in.png) ![Verification code](docs/screenshots/04-verification-code.png) |
+| **Spring Boot 3** | Spring Security, Spring Data JPA, declarative transactions, scheduling, caching and test support in one mature framework |
+| **PostgreSQL** | bookings and payments need real transactions and constraints; money is stored as exact `numeric(12,2)` |
+| **Redis** | data that must expire on its own (refresh tokens, revoked tokens) and shared caches; its TTLs replace clean-up jobs |
+| **JWT + refresh tokens** | a stateless API that can restart or scale without logging anyone out, with tokens that can still be revoked |
+| **E-mail code at sign-in** | a leaked password alone is not enough to get in; every sign-in proves the user still owns the address |
+| **Stripe** | card data never touches this server, 3-D Secure works out of the box, and test mode allows a full demo with no real money |
+| **Flyway** | the schema is versioned SQL, applied identically to local, test and production databases |
+| **Vue 3 + TypeScript** | a typed single-page app; Pinia for state, vue-i18n for the 7 languages, Tailwind for styling |
+| **Docker Compose** | one command starts the whole stack, with the same images in development and production |
 
-### Booking and payment, step by step
+### Backend structure
 
-| Step | Screen |
-|---|---|
-| **1. Booking created: Pending**<br>The guest has reserved. The room is held, but the hotel still has to accept it. | ![Pending booking](docs/screenshots/07-booking-pending.png) |
-| **2. Hotel confirms** (extranet, owner/staff)<br>Staff see new requests under **Pending** and click **Confirm**. | ![Extranet confirm](docs/screenshots/08-extranet-confirm.png) |
-| **3. Guest can pay**<br>A confirmed booking shows **Pay now**. | ![Confirmed, pay now](docs/screenshots/09-booking-confirmed-pay-now.png) |
-| **4. Choose a payment method**<br>Card / Google Pay go through Stripe. Bank transfer, cash and crypto are settled offline. | ![Payment methods](docs/screenshots/10-payment-methods.png) |
-| **5. Offline method saved**<br>Nothing is charged yet. The booking waits for the hotel to confirm the money arrived. | ![Payment awaiting](docs/screenshots/11-payment-awaiting.png) |
-| **6. Hotel marks it as paid**<br>The extranet shows *Awaiting payment · Bank transfer* and a **Mark as paid** button. | ![Mark as paid](docs/screenshots/12-extranet-mark-as-paid.png) |
-| **7. Paid, ready for check-in**<br>Only a paid booking can be checked in. | ![Paid, check in](docs/screenshots/13-extranet-paid-check-in.png) |
-| **E-mail notifications**<br>Every step sends an e-mail. Locally they all land in Mailpit (http://localhost:8025). | ![Mailpit](docs/screenshots/14-mailpit-emails.png) |
+Packages are organised **by feature** under `com.folio`: `booking`, `payment`, `hotels`,
+`room`, `reviews`, `companies`, `companyuser` (staff and per-company permissions),
+`user` (accounts, sign-in, JWT, e-mail), `admin`, plus `config` and `exception`. Every
+feature repeats the same layers:
+
+```mermaid
+flowchart LR
+    Req["HTTP"] --> C["Controller<br/>endpoint + @PreAuthorize"]
+    C --> S["Service<br/>business rules, @Transactional"]
+    S --> R["Repository<br/>Spring Data JPA"]
+    R --> DB[("PostgreSQL")]
+```
+
+Controllers accept validated `*Request` DTOs and return `*Response` DTOs, so entities
+never leave the service layer. Errors are exceptions that `GlobalExceptionHandler` turns
+into one JSON error format with the right HTTP status.
+
+### Data model
+
+```mermaid
+erDiagram
+    USER ||--o{ BOOKING : makes
+    USER ||--o{ COMPANY_USER : "works for"
+    COMPANY ||--o{ COMPANY_USER : employs
+    COMPANY ||--o{ HOTEL : owns
+    HOTEL ||--o{ ROOM : has
+    ROOM ||--o{ BOOKING : "booked as"
+    BOOKING ||--o| PAYMENT : "paid by"
+    BOOKING ||--o| REVIEW : "reviewed in"
+```
+
+A company owns hotels; people work for a company through `company_users`, each with a
+company role, and one person can belong to several companies. A booking is for one room
+and has at most one payment and one review. The full diagram with attributes, the
+sign-in sequence and the role model are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
-## How reservations and payments work
+## 4. How it works
 
 ### Booking lifecycle
 
@@ -258,8 +244,8 @@ stored on the booking. Later price changes don't affect existing bookings.
 | Complete | hotel staff | booking is `CHECKED_IN` |
 | Cancel | guest or hotel staff | booking is `PENDING` or `CONFIRMED` (not after check-in) |
 
-**Automatic jobs** (`BookingLifecycleScheduler`, run every 15 minutes) keep stale
-bookings from blocking rooms:
+**Automatic jobs** (`BookingLifecycleScheduler`, `PaymentLifecycleScheduler`, every 15
+minutes) keep stale bookings from blocking rooms:
 
 | Job | Default | Setting |
 |---|---|---|
@@ -278,7 +264,6 @@ pays for a stay the hotel hasn't accepted.
 | Credit / debit card, Google Pay | Stripe PaymentIntent. The browser confirms the card with Stripe.js (including 3-D Secure), then the backend asks Stripe whether the payment really succeeded and that it matches this booking | Stripe (confirm call or webhook), never a person |
 | Bank transfer, cash on arrival, crypto | Recorded as *Awaiting payment*. Nothing is charged online | Hotel staff with **Mark as paid** once the money has arrived |
 
-Some details worth knowing:
 - **One payment per booking.** A failed or abandoned card attempt can be retried.
   Before a retry, the backend checks with Stripe that the earlier attempt wasn't actually
   charged, so a guest can't be charged twice.
@@ -303,265 +288,180 @@ retry can't refund twice. Hotel owners and managers can also issue a full or par
 refund through the API (`PATCH /api/payments/{id}/refund`). A **full** refund of a
 confirmed booking cancels it and frees the room.
 
+### Sign-in and security
+
+**Two-step sign-in.** The user enters the password (checked against a BCrypt hash), then a
+6-digit code that the API e-mails to them. The code is stored only as a BCrypt hash and
+expires after 10 minutes. Registration uses the same code to prove the address. Google
+sign-in verifies Google's ID token on the server instead.
+
+**Tokens:**
+
+| Token | Lifetime | Where it lives | How it is revoked |
+|---|---|---|---|
+| Access token (signed JWT) | 15 min | nowhere, the API is stateless | logout puts its ID on a **blacklist in Redis** until it would have expired; a password change invalidates all older tokens |
+| Refresh token | 30 days | Redis | single use: replaced on every refresh, deleted on logout |
+
+**Permissions** have two levels. *Global* roles (`GUEST`, `HOTEL_MANAGER`, `ADMIN`,
+`SUPPORT`) apply to the whole platform. *Company* roles (`OWNER`, `MANAGER`,
+`RECEPTIONIST`, `ACCOUNTANT`, `STAFF`) apply only inside one company. Every endpoint
+declares its rule with `@PreAuthorize`, and `CompanyAuthorization` answers questions like
+"does this user have one of these roles in the company that owns this booking?". A
+receptionist of company A can confirm A's bookings but cannot see company B's at all.
+
+**Brute-force protection:** 5 wrong passwords lock the account for 15 minutes; 5 wrong
+codes invalidate the code; at most 5 codes per hour with 30 s between them. In production
+the app refuses to start with development settings (`ProductionSafetyCheck`, see
+[Deployment](#8-deployment)).
+
+Diagrams and details: [docs/ARCHITECTURE.md → Security](docs/ARCHITECTURE.md#5-security).
+
 ---
 
-## 1. Quick start
+## 5. Screenshots
 
-### Prerequisites
+All screenshots come from the local Docker build with the demo data.
 
-| Tool | Why | Get it |
-|---|---|---|
-| **Git** | clone the repository | https://git-scm.com/downloads |
-| **Docker Desktop** | runs the whole stack: database, cache, API and website | https://www.docker.com/products/docker-desktop/ |
+### Guest side
 
-That's all. You **don't** need Java, Node.js, PostgreSQL or Redis on your machine, and
-you **don't** need any `.env` file. Every setting has a working local default.
+| | |
+|---|---|
+| **Search by city and dates**<br>Pick a city, dates and number of guests. Only stays in that city are listed. | ![Search results](docs/screenshots/02-search-results.png) |
+| **Hotel page**<br>Description, amenities and the rooms with their nightly price. | ![Hotel rooms](docs/screenshots/05-hotel-rooms.png) |
+| **Reserve a room**<br>The total is calculated live: nights × nightly price. | ![Reserve dialog](docs/screenshots/06-reserve-dialog.png) |
+| **Sign in with a one-time code**<br>Password first, then a 6-digit code sent by e-mail. | ![Sign in](docs/screenshots/03-sign-in.png) ![Verification code](docs/screenshots/04-verification-code.png) |
 
-> **Windows:** Docker Desktop needs WSL 2. If the installer asks, let it enable WSL
-> and restart. If Docker later complains about WSL, run `wsl --update` in PowerShell.
-> Give Docker at least 4 GB of RAM (Settings → Resources).
+### Booking and payment, step by step
 
-### Run it
+| Step | Screen |
+|---|---|
+| **1. Booking created: Pending**<br>The guest has reserved. The room is held, but the hotel still has to accept it. | ![Pending booking](docs/screenshots/07-booking-pending.png) |
+| **2. Hotel confirms** (extranet, owner/staff)<br>Staff see new requests under **Pending** and click **Confirm**. | ![Extranet confirm](docs/screenshots/08-extranet-confirm.png) |
+| **3. Guest can pay**<br>A confirmed booking shows **Pay now**. | ![Confirmed, pay now](docs/screenshots/09-booking-confirmed-pay-now.png) |
+| **4. Choose a payment method**<br>Card / Google Pay go through Stripe. Bank transfer, cash and crypto are settled offline. | ![Payment methods](docs/screenshots/10-payment-methods.png) |
+| **5. Offline method saved**<br>Nothing is charged yet. The booking waits for the hotel to confirm the money arrived. | ![Payment awaiting](docs/screenshots/11-payment-awaiting.png) |
+| **6. Hotel marks it as paid**<br>The extranet shows *Awaiting payment · Bank transfer* and a **Mark as paid** button. | ![Mark as paid](docs/screenshots/12-extranet-mark-as-paid.png) |
+| **7. Paid, ready for check-in**<br>Only a paid booking can be checked in. | ![Paid, check in](docs/screenshots/13-extranet-paid-check-in.png) |
+| **E-mail notifications**<br>Every step sends an e-mail. Locally they all land in Mailpit (http://localhost:8025). | ![Mailpit](docs/screenshots/14-mailpit-emails.png) |
 
-```bash
-git clone https://github.com/<owner>/<repo>.git
-cd <repo>                      # the folder that contains docker-compose.yml
-docker compose up --build
-```
+---
 
-Make sure **Docker Desktop is running** first (the whale icon in the tray or menu bar is
-steady, not animating).
+## 6. API documentation
 
-The **first** start takes about 5–10 minutes: Docker downloads the base images, builds the
-backend with Gradle and the frontend with Vite. Later starts take seconds.
-
-The backend is ready when its log shows:
-
-```
-hotel_app  | ... Started HotelSystemApplication in 12.3 seconds
-```
-
-Then open:
+The backend documents its REST API with OpenAPI (springdoc). With the local stack
+running, open:
 
 | What | URL |
 |---|---|
-| **Website** | **http://localhost:5173** |
-| **Mail inbox** (all e-mails the app sends) | **http://localhost:8025** |
-| API | http://localhost:8081 |
-| API health check | http://localhost:8081/actuator/health (should show `{"status":"UP"}`) |
+| **Swagger UI**: every endpoint, try it from the browser | **http://localhost:8081/swagger-ui.html** |
+| OpenAPI spec (JSON) | http://localhost:8081/v3/api-docs |
 
-To stop, press `Ctrl+C` in that terminal (or run `docker compose down`, see
-[Everyday commands](#5-everyday-commands)).
+![Swagger UI](docs/screenshots/15-swagger-ui.png)
+
+Most endpoints need a signed-in user. Call `POST /api/auth/login` with a test account,
+then `POST /api/auth/otp/verify` with the code from Mailpit (http://localhost:8025),
+copy `auth.token` from the response, click **Authorize** and paste it.
+
+Swagger is switched off in the `prod` profile, so a public deployment doesn't publish a
+map of every endpoint.
 
 ---
 
-## 2. What's running
+## 7. Development and tests
 
-`docker compose up` starts five containers:
+### Repository layout
 
-| Container | What it is | Host port |
-|---|---|---|
-| `hotel_frontend` | Vue app, built and served by nginx | `5173` |
-| `hotel_app` | Spring Boot REST API (Spring profile `local`) | `8081` |
-| `hotel_db` | PostgreSQL 16 | `5432` |
-| `hotel_redis` | Redis 7 (caching, token blacklist) | `6379` |
-| `hotel_mailpit` | [Mailpit](https://mailpit.axllent.org/): fake SMTP server + web inbox | `8025` (web), `1025` (SMTP) |
+```
+.
+├── docker-compose.yml      Run this one: the whole local stack (includes Hotel-system/docker-compose.yml + frontend)
+├── Hotel-system/           Backend: Spring Boot API (Gradle)
+│   ├── src/main/java/com/folio/   Packages by feature: booking, payment, hotels, room, reviews, user, companies, ...
+│   ├── src/main/resources/        application*.yml, db/migration (schema), db/seed (demo data), db/seed-accounts
+│   ├── src/test/                  Unit, controller and integration tests
+│   └── docker-compose.yml         Postgres + Redis + Mailpit + API, with local defaults for every setting
+├── frontend/               Frontend: Vue 3 SPA (Vite, Pinia, vue-i18n, Tailwind), served by nginx in Docker
+├── docs/                   ARCHITECTURE.md and the README screenshots
+├── deploy/                 Production: VPS or own PC via Tailscale, see deploy/README.md
+├── scripts/                PowerShell helpers: Cloudflare Tunnel, Tailscale Funnel
+└── .github/workflows/      CI (tests on every push) and automatic deploy
+```
 
-**Configuration profiles.** The same code and Docker image run everywhere; only the
-Spring profile and environment variables differ:
+### Configuration profiles and data
+
+The same code and Docker image run everywhere; only the Spring profile and environment
+variables differ.
 
 | Profile | Used by | What it sets |
 |---|---|---|
-| `local` (`application-local.yml`) | `docker compose`, IDE runs | e-mail via SMTP to Mailpit, a public dev JWT key, sign-in codes also printed to the log |
-| `prod` (`application-prod.yml`) | production server (`deploy/`) | real secrets from environment variables, real e-mail over SMTP (e.g. Gmail); **refuses to start** if a dev setting (dev JWT key, codes in the log) is present |
-| `test` (`src/test/resources/application-test.yml`) | `./gradlew test` | throwaway PostgreSQL container (Testcontainers) |
+| `local` | `docker compose`, IDE runs | e-mail to Mailpit, a public dev JWT key, sign-in codes also printed to the log |
+| `prod` | production (`deploy/`) | real secrets from environment variables, real SMTP; refuses to start with any dev setting |
+| `test` | `./gradlew test` | a throwaway PostgreSQL container (Testcontainers) |
 
-**Database: schema and demo data are separate.** On start the backend runs Flyway
-(`Hotel-system/src/main/resources/db/`):
+On start the backend runs Flyway migrations from `Hotel-system/src/main/resources/db/`:
+`db/migration` holds the schema (everywhere), `db/seed` the demo catalogue (4 companies,
+44 hotels and apartments in Paris, Rome, Kyoto, Barcelona, Dubai, London, New York, Tokyo,
+Santorini and the Maldives, with rooms, translations and reviews), and `db/seed-accounts`
+the three test accounts (`local` profile only). The seeds only fill an empty database,
+so they never overwrite your own data.
 
-| Folder | Contents | Loaded in |
-|---|---|---|
-| `db/migration` | the schema only (`V1__baseline_schema.sql`, future `V2__...`) | everywhere: local, tests, production |
-| `db/seed` | demo catalogue: 4 hotel companies, 44 hotels and apartments in 10 cities (Paris, Rome, Kyoto, Barcelona, Dubai, London, New York, Tokyo, Santorini, Maldives), rooms, amenities, translations, reviews | `local` profile (and optionally a demo deployment) |
-| `db/seed-accounts` | the three test accounts below | `local` profile **only** |
-
-The seed files are Flyway `afterMigrate` callbacks that only insert into an empty database,
-so they never overwrite anything you create while using the app. The data lives in a
-Docker volume and survives restarts; `docker compose down -v` resets it to the seed state.
-
-### Test accounts
-
-| E-mail | Password | Role |
-|---|---|---|
-| `guest@folio.local` | `Folio2026!` | guest: book and pay |
-| `owner@folio.local` | `Folio2026!` | owner of *Wayside Hospitality Group*: manage its hotels, rooms, bookings, staff |
-| `admin@folio.local` | `Folio2026!` | administrator: host applications, users |
-
-Signing in asks for a 6-digit code after the password. Locally it arrives in **Mailpit**
-(http://localhost:8025); see [3.2](#32-sign-in-and-create-an-account).
-
----
-
-## 3. Testing the app
-
-### 3.1 Browse as a visitor (no account)
-
-Open http://localhost:5173 and browse: pick a city, open a hotel, switch the language (EN
-menu, top right). Hotel descriptions are translated into EN, SK, RU, ES, FR, IT and JA.
-
-### 3.2 Sign in and create an account
-
-Sign-in and sign-up are confirmed with a **6-digit code sent by e-mail**. Locally every
-e-mail lands in **Mailpit** instead of a real mailbox.
-
-**Sign in with a test account:** click **Sign in**, enter e.g. `guest@folio.local` /
-`Folio2026!`, then open **http://localhost:8025**. The newest message, "Your Folio
-verification code", contains the code (valid for 10 minutes). Enter it and you're in.
-
-**Create your own account:** click **Create account**, fill in the form (you must be 18+,
-password at least 8 characters), take the code from Mailpit the same way.
-
-> Any e-mail address works locally, even a made-up one, because nothing is actually sent.
-> Booking and payment notifications show up in Mailpit too.
->
-> Fallback: the code is also printed to the backend log:
-> `docker logs hotel_app 2>&1 | Select-String "Verification code"` (Windows) or
-> `docker logs hotel_app 2>&1 | grep "Verification code"` (macOS/Linux).
-
-### 3.3 Book a stay (as a guest)
-
-1. Open a hotel, choose dates (at least one night) and guests, then **Reserve**.
-2. The booking appears under **My bookings** with status **Pending**. Hotel staff must
-   confirm it first (next step).
-
-### 3.4 Act as hotel staff
-
-Sign in as **`owner@folio.local`** (owner of *Wayside Hospitality Group*). The account
-menu has **Manage bookings** and **Manage hotels**, where you can:
-
-- **Confirm**, **Check in**, **Complete** or **Cancel** bookings (confirm the one you
-  made in 3.3). Wayside Hospitality Group owns the hotels in Paris, Rome, Tokyo, New
-  York and more.
-- edit hotels, add rooms, change room status;
-- invite staff by e-mail (they get a role in this company only).
-
-Other seeded companies (no owner account): `Atoll & Tide Resorts`, `Meridian Collection`,
-`Casa & Co Hospitality`. To attach your own account to one of them:
-
-```bash
-docker exec hotel_db psql -U hotel_user -d hotel_db -c "INSERT INTO company_users (company_role, status, invited_at, joined_at, user_id, company_id) SELECT 'OWNER', 'ACTIVE', now(), now(), u.id, c.id FROM users u, companies c WHERE u.email = 'you@example.com' AND c.name = 'Meridian Collection';"
-```
-then sign out and back in.
-
-### 3.5 Pay for a booking
-
-Once a booking is **Confirmed**, the guest sees **Pay now** in **My bookings**.
-
-- **Cash on arrival / Bank transfer / Crypto** work without any setup. The payment is
-  recorded as **Awaiting payment**. Staff then click **Mark as paid** in **Manage
-  bookings** once the money has actually arrived.
-- **Credit / debit card and Google Pay** need Stripe test keys, see
-  [section 4](#4-optional-e-mail-card-payments-google-sign-in).
-
-### 3.6 Act as an administrator
-
-Sign in as **`admin@folio.local`**. The account menu includes the admin pages:
-
-- **Admin** (`/admin/applications`): approve or reject host applications and open the
-  uploaded documents;
-- **Users** (`/admin/users`): search users, change account status, grant or revoke roles.
-
-**Full host onboarding flow:** as `guest@folio.local` (or your own account) open
-**Become a host** and submit the application with a document. Then approve it as
-`admin@folio.local`. The applicant
-becomes the **owner** of the new company and can add hotels in **Manage hotels**.
-
-> Tip: use two different browsers (or a private window) to be signed in as guest and
-> staff/admin at the same time.
-
----
-
-## 4. Optional: e-mail, card payments, Google sign-in
-
-Everything above works without any keys. To enable the external integrations, create
-**`Hotel-system/.env`** from the example and fill in only what you need:
-
-```bash
-cp Hotel-system/.env.example Hotel-system/.env          # macOS / Linux
-Copy-Item Hotel-system\.env.example Hotel-system\.env   # Windows
-```
-
-| Feature | Variables in `Hotel-system/.env` | Where to get them |
-|---|---|---|
-| Real e-mails instead of Mailpit | `MAIL_PROVIDER=sendgrid`, `SENDGRID_API_KEY` (starts with `SG.`), `MAIL_FROM` (a sender verified in SendGrid) | https://app.sendgrid.com/settings/api_keys |
-| Card / Google Pay payments | `STRIPE_SECRET_KEY` (`sk_test_...`) | https://dashboard.stripe.com → Test mode → Developers → API keys |
-| Stripe webhooks (optional) | `STRIPE_WEBHOOK_SECRET` (`whsec_...`) | `stripe listen --forward-to localhost:8081/api/payments/webhook` |
-| Google sign-in | `GOOGLE_CLIENT_ID` | Google Cloud Console → Credentials → OAuth client ID |
-
-The frontend needs the **public** keys at build time. Put them in a **`.env` file in the
-repository root** (next to `docker-compose.yml`):
-
-```
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
-VITE_GOOGLE_CLIENT_ID=....apps.googleusercontent.com
-```
-
-Apply the changes with `docker compose up --build`. With Stripe in test mode, pay with
-card **4242 4242 4242 4242**, any future expiry date and any CVC.
-
-> `.env` files are git-ignored. Never commit real keys.
-
----
-
-## 5. Everyday commands
+### Everyday commands
 
 Run these from the repository root.
 
 | Task | Command |
 |---|---|
-| Start everything (foreground, logs in the terminal) | `docker compose up --build` |
 | Start in the background | `docker compose up --build -d` |
 | Stop (keeps the database) | `docker compose down` |
-| **Reset the database** to fresh seed data | `docker compose down -v` then `docker compose up --build` |
+| Reset the database to the demo data | `docker compose down -v` then `docker compose up --build` |
 | Follow backend logs | `docker logs -f hotel_app` |
-| Status of all containers | `docker compose ps` |
-| Rebuild after pulling new code | `docker compose up --build` |
 | Open a SQL shell | `docker exec -it hotel_db psql -U hotel_user -d hotel_db` |
 
----
+### Hot reload
 
-## 6. Development without rebuilding (hot reload)
-
-For frontend work it's faster to run only the backend in Docker and the Vite dev server
-directly. This needs **Node.js 20+**.
+For frontend work, run the backend in Docker and the Vite dev server directly (needs
+**Node.js 20+**):
 
 ```bash
-docker compose up --build -d postgres redis app
-docker compose stop frontend          # frees port 5173 if the Docker frontend was running
-
+docker compose up --build -d postgres redis mailpit app
 cd frontend
 cp .env.example .env                  # VITE_API_BASE_URL=http://localhost:8081
 npm install
 npm run dev                           # http://localhost:5173, reloads on save
 ```
 
-For backend changes, rebuild the API container: `docker compose up --build -d app`.
+For backend work, run `com.folio.HotelSystemApplication` from IntelliJ IDEA (JDK 17) with
+`SPRING_PROFILES_ACTIVE=local` and `PORT=8081`, after `docker compose stop app` and
+`docker compose up -d postgres redis mailpit`. Or rebuild the container:
+`docker compose up --build -d app`.
 
-To run the backend from **IntelliJ IDEA** instead (JDK 17): stop the API container
-(`docker compose stop app`) and start the dependencies with
-`docker compose up -d postgres redis mailpit`. Then run `HotelSystemApplication` with the
-environment variables `SPRING_PROFILES_ACTIVE=local` and `PORT=8081`. The `local`
-profile supplies everything else (database password, dev JWT key, Mailpit).
+### Optional integrations
 
----
+Everything above works without keys. To enable the external services, copy
+`Hotel-system/.env.example` to `Hotel-system/.env` and fill in what you need:
 
-## 7. Running the automated tests
+| Feature | Variables | Where to get them |
+|---|---|---|
+| Card / Google Pay payments | `STRIPE_SECRET_KEY` (`sk_test_...`), optionally `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Test mode → Developers → API keys; `stripe listen --forward-to localhost:8081/api/payments/webhook` |
+| Real e-mails instead of Mailpit | `MAIL_PROVIDER=sendgrid`, `SENDGRID_API_KEY`, `MAIL_FROM` | https://app.sendgrid.com/settings/api_keys |
+| Google sign-in | `GOOGLE_CLIENT_ID` | Google Cloud Console → Credentials → OAuth client ID |
 
-**Backend** (JUnit 5, about 350 tests). Needs **JDK 17** and **Docker running**:
-- integration tests start their own throwaway **PostgreSQL 16** container
-  (Testcontainers) and run the real Flyway migrations, so they test the same database
-  engine as production;
-- a few tests need Redis on `localhost:6379`.
+The frontend needs the **public** keys at build time, in a `.env` file in the repository
+root: `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...` and `VITE_GOOGLE_CLIENT_ID=...`. Apply with
+`docker compose up --build`. In Stripe test mode, pay with card **4242 4242 4242 4242**,
+any future expiry date and any CVC. `.env` files are git-ignored.
+
+### Tests
+
+The backend has **425 automated tests** (JUnit 5, Mockito, Spring Boot Test):
+
+| Kind | Tests | What they check |
+|---|---|---|
+| Service unit tests | 272 | every business rule with mocked dependencies: booking validation and state transitions, prices, cancellation fees, payments, refunds and Stripe retries, sign-in codes, JWT, scheduled jobs |
+| Controller tests (`@WebMvcTest`) | 85 | each endpoint's HTTP contract: status codes, request validation, JSON responses and error format |
+| Integration tests, real **PostgreSQL 16** | 55 | the full application against a throwaway database started by **Testcontainers** with the real Flyway migrations: JPQL queries, overlap checks, per-company permissions (`CompanyAuthorization`), endpoint security for every role |
+| Integration tests, real **Redis** | 13 | refresh-token rotation and the token blacklist |
+
+Run them (needs JDK 17 and Docker running; Redis must be on `localhost:6379`):
 
 ```bash
 docker compose up -d redis
@@ -569,161 +469,76 @@ cd Hotel-system
 ./gradlew test          # Windows: .\gradlew test
 ```
 
-The HTML report is in `Hotel-system/build/reports/tests/test/index.html`.
+The report is in `Hotel-system/build/reports/tests/test/index.html`, the JaCoCo coverage
+report in `Hotel-system/build/reports/jacoco/`. The frontend is type-checked and built
+with `cd frontend && npm ci && npm run build`.
 
-**Frontend** (type-check + production build):
+**CI** (`.github/workflows/ci.yml`) runs the backend tests and the frontend build on every
+push and pull request to `main`; the badge at the top shows the latest result.
 
-```bash
-cd frontend
-npm ci
-npm run build
-```
+### Sharing a local build
 
-CI runs both on every push and pull request to `main` (`.github/workflows/ci.yml`).
-
----
-
-## 8. Troubleshooting
-
-**"Cannot reach the server. Is the backend running?" on the website**
-- Check http://localhost:8081/actuator/health. If it doesn't load, the backend is still
-  starting or crashed: `docker logs hotel_app --tail 80`.
-- If it shows `UP`, it's usually CORS. `Hotel-system/.env` contains a stale
-  `CORS_ALLOWED_ORIGINS` (e.g. an old `trycloudflare.com` URL). Make that line
-  `CORS_ALLOWED_ORIGINS=`, then run `docker compose up -d app` and hard-refresh the
-  page (`Ctrl+F5`).
-
-**`Validate failed: Migrations have failed validation` / `checksum mismatch` / `Detected applied migration not resolved locally`**
-Your local database was created with the old migrations (before schema and demo data
-were split into `db/migration` + `db/seed`). Reset it once: `docker compose down -v`,
-then `docker compose up --build`.
-
-**`password authentication failed for user "hotel_user"` in the logs**
-The database volume was created earlier with a different password. Reset it:
-`docker compose down -v`, then `docker compose up --build`. This deletes local data;
-the seed data is recreated.
-
-**`Bind for 0.0.0.0:5432 failed: port is already allocated`** (or 5173 / 8081 / 6379)
-Something else uses that port, often a locally installed PostgreSQL or Redis, or a
-running `npm run dev`. Stop it, or change the left-hand side of the port mapping in
-`docker-compose.yml` / `Hotel-system/docker-compose.yml` (e.g. `"5433:5432"`).
-
-**`error during connect ... docker daemon is not running`**
-Start Docker Desktop and wait until it's fully up, then retry.
-
-**No verification code arrives**
-Look in Mailpit (http://localhost:8025, newest message first) or in the backend log (see
-3.2). If `MAIL_PROVIDER=sendgrid` is set in `Hotel-system/.env`, codes go to the real
-mailbox instead. Too many requests in a row are rate-limited (30 s between codes, 5 per
-hour).
-
-**Tests fail with `Could not find a valid Docker environment`**
-Testcontainers needs Docker. Start Docker Desktop and run the tests again.
-
-**Account locked after wrong passwords**
-5 failed attempts lock the account for 15 minutes (brute-force protection). Wait, or
-reset the database.
-
-**Changes in the code don't show up**
-Always start with `--build`. Without it Docker reuses the previously built image.
+`scripts\start-tunnels.ps1` (Windows) exposes the locally running app through a free
+[Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+and prints two public links, handy for testing from a phone. `scripts\stop-tunnels.ps1`
+stops it and restores the local settings. Needs `cloudflared`
+(`winget install Cloudflare.cloudflared`).
 
 ---
 
-## 9. Project structure
+## 8. Deployment
 
-```
-.
-├── docker-compose.yml      One-command local stack (includes Hotel-system/docker-compose.yml + frontend)
-├── Hotel-system/           Backend: Spring Boot API
-│   ├── src/main/java/      Packages by feature: booking, payment, hotels, room, reviews, user, companies, ...
-│   ├── src/main/resources/ application*.yml (base / local / prod), db/migration (schema),
-│   │                       db/seed (demo catalogue), db/seed-accounts (local test accounts)
-│   ├── src/test/           Unit, controller and integration tests
-│   ├── docker-compose.yml  Postgres + Redis + Mailpit + API (local defaults for every setting)
-│   ├── Dockerfile
-│   └── .env.example        Optional overrides / API keys
-├── frontend/               Frontend: Vue 3 SPA (Vite, Pinia, vue-i18n, Tailwind)
-│   ├── src/                api/, components/, views/, stores/, locales/, router/
-│   ├── Dockerfile          Builds the app and serves it with nginx
-│   └── .env.example
-├── scripts/                Cloudflare Tunnel helpers (see below)
-└── .github/workflows/      CI
-```
+Production runs the same Docker images with the `prod` profile behind **Caddy**
+(automatic HTTPS) on one domain, either on a **Linux server (VPS)**, with automatic deploys
+from GitHub Actions, or on **your own PC** published through **Tailscale Funnel**
+(`scripts\public-start.ps1`). Step-by-step guide for both:
+**[deploy/README.md](deploy/README.md)**.
+
+In production there are no test accounts, e-mail goes through real SMTP (e.g. Gmail), and
+`ProductionSafetyCheck` stops the app at startup if it finds a development setting (dev
+JWT key, codes in the log, test accounts).
 
 ---
 
-## 10. Sharing your local build (Cloudflare Tunnel)
+## 9. Troubleshooting and known limitations
 
-To show a locally running build to someone else, or test it from a phone, `scripts/`
-exposes both the frontend and backend over a free
-[Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
-No account or domain is needed. Windows only (PowerShell). Requires
-[`cloudflared`](https://github.com/cloudflare/cloudflared):
-`winget install Cloudflare.cloudflared`, then open a new terminal.
+### Troubleshooting
 
-```powershell
-# from the repository root
-powershell -ExecutionPolicy Bypass -File scripts\start-tunnels.ps1
-```
+**"Cannot reach the server" on the website.** Open http://localhost:8081/actuator/health.
+If it doesn't load, the backend is still starting or crashed: `docker logs hotel_app --tail 80`.
+If it shows `UP`, `Hotel-system/.env` probably has a stale `CORS_ALLOWED_ORIGINS` (e.g. an
+old tunnel URL): empty it, run `docker compose up -d app` and hard-refresh (`Ctrl+F5`).
 
-The script:
-1. starts Docker Desktop if needed;
-2. builds and starts Postgres, Redis and the API, and waits until the API is healthy;
-3. starts the Vite dev server and opens a tunnel for each side;
-4. writes the generated URLs into both `.env` files;
-5. prints the two public links.
+**`Migrations have failed validation` / `checksum mismatch`, or `password authentication
+failed for user "hotel_user"`.** The database volume was created by an older version.
+Reset it: `docker compose down -v`, then `docker compose up --build`.
 
-When you're done:
+**`port is already allocated`** (5432, 5173, 8081 or 6379). A local PostgreSQL, Redis or
+`npm run dev` uses that port. Stop it, or change the left-hand side of the port mapping
+in `docker-compose.yml` / `Hotel-system/docker-compose.yml` (e.g. `"5433:5432"`).
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\stop-tunnels.ps1
-```
+**`docker daemon is not running`** or tests fail with `Could not find a valid Docker
+environment`. Start Docker Desktop and wait until it's fully up. On Windows it needs WSL 2
+(`wsl --update`) and at least 4 GB of RAM.
 
-This stops the tunnels and the dev server and **resets both `.env` files to local URLs**,
-so `docker compose up` works normally again. Quick-tunnel URLs are random and change on
-every start, with no uptime guarantee. Fine for a demo, not for a permanent link.
+**No verification code.** Look in Mailpit (http://localhost:8025) or in the log:
+`docker logs hotel_app 2>&1 | grep "Verification code"`. Codes are rate-limited (30 s
+apart, 5 per hour). 5 wrong passwords lock the account for 15 minutes.
 
----
-
-## 11. Production deployment
-
-Production runs on a single Linux server (VPS) with Docker: Caddy (automatic HTTPS),
-the frontend, the API with the `prod` Spring profile, PostgreSQL and Redis, all on one
-domain. **Step-by-step guide: [`deploy/README.md`](deploy/README.md)**: server, domain,
-Gmail SMTP / Stripe / Google setup, deploy, backups, automatic deploys from GitHub Actions.
-
-**No server yet?** The production stack also runs on your own PC with `DOMAIN=localhost`
-(HTTPS, `prod` profile, real e-mail), see
-[Try the production build on your own PC first](deploy/README.md#try-the-production-build-on-your-own-pc-first).
-
-In short, on the server:
-
-```bash
-git clone https://github.com/<owner>/<repo>.git ~/folio && cd ~/folio
-sudo bash deploy/setup-server.sh          # once: Docker, firewall, auto-updates
-cp deploy/.env.example deploy/.env        # fill in domain + secrets
-bash deploy/deploy.sh                     # build, start, wait until healthy
-```
-
-**How production differs from local:**
-
-| | Local (`docker compose up`) | Production (`deploy/`) |
-|---|---|---|
-| Spring profile | `local` | `prod` |
-| E-mail | Mailpit (fake inbox) | real SMTP, e.g. Gmail (or SendGrid) |
-| Secrets | public dev defaults | `deploy/.env` on the server only |
-| Data | schema + demo catalogue + test accounts | schema + demo catalogue (configurable), **no** test accounts |
-| HTTPS | no | Caddy + Let's Encrypt |
-| Exposed ports | all services, for debugging | only 80/443 |
-
-With `prod` active, `config.ProductionSafetyCheck` stops the application at startup if
-`JWT_SECRET` is missing, too short or equal to the public dev key, if `MAIL_DEV_LOG_OTP`
-is on, or if the local test accounts (`db/seed-accounts`) are enabled. Missing e-mail
-or Stripe credentials only log a warning.
+**Code changes don't show up.** Start with `--build`, otherwise Docker reuses the old image.
 
 ### Known limitations
 
-- **No general-purpose API rate limiting.** Login and OTP requests are throttled
-  (`app.login.*` in `application.yml`, `OtpService.MAX_REQUESTS_PER_HOUR`), but the rest
-  of the API has no per-IP/per-user limit. A production system with real traffic would
-  add this at the reverse proxy or in-app (e.g. Bucket4j).
+- **Reviews have no screen yet.** Submitting and moderating reviews works through the API
+  (Swagger) only.
+- **No general-purpose rate limiting.** Login and sign-in codes are throttled, but the
+  rest of the API has no per-IP or per-user limit. A system with real traffic would add
+  this at the reverse proxy or in the app (e.g. Bucket4j).
+- **Payments run in Stripe test mode.** Offline methods (bank transfer, cash, crypto) are
+  only recorded; the hotel confirms the money by hand.
+
+---
+
+## 10. License
+
+[MIT](LICENSE)
