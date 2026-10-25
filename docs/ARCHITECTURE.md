@@ -67,7 +67,7 @@ Locally (`docker compose up`) there is no Caddy: the browser calls the frontend 
 | **PostgreSQL** | Bookings and payments need real transactions and constraints. Money is stored as `numeric(12,2)`, never floating point |
 | **Flyway** | The schema is versioned SQL (`db/migration`), applied identically to local, test and production databases. Demo data lives separately (`db/seed`) |
 | **Redis** | Data that must expire on its own (refresh tokens, revoked tokens) and caches shared by all API instances. Redis TTLs do the expiry, no clean-up jobs needed |
-| **JWT + refresh tokens** | The API is stateless (no server sessions), so it can be restarted or scaled without logging anyone out. Access tokens live 15 minutes; refresh tokens keep the session for 30 days and can be revoked |
+| **JWT + refresh tokens** | The API is stateless (no server sessions), so a restart or redeploy logs nobody out. Access tokens live 15 minutes; refresh tokens keep the session for 30 days and can be revoked |
 | **E-mail code (OTP) as a second step** | Every sign-in proves the user still owns the e-mail address, so a leaked password alone is not enough to get in |
 | **Stripe** | Card data never touches this server (PCI scope stays with Stripe), 3-D Secure works out of the box, and test mode allows a full demo with no real money |
 | **Vue 3 + TypeScript + Vite** | Typed single-page app; Pinia for state, vue-i18n for 7 languages, Tailwind for styling |

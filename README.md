@@ -75,6 +75,12 @@ production compose files.
 - about 425 automated backend tests, many against a real PostgreSQL (Testcontainers), run by CI on every push
 - interactive API documentation (Swagger UI)
 
+**A quick look** (more in [Screenshots](#5-screenshots)):
+
+| Search | Booking and payment | Hotel extranet |
+|---|---|---|
+| ![Search results](docs/screenshots/02-search-results.png) | ![Payment methods](docs/screenshots/10-payment-methods.png) | ![Extranet confirm](docs/screenshots/08-extranet-confirm.png) |
+
 ---
 
 ## 2. Quick start
@@ -163,12 +169,22 @@ Caddy reverse proxy sits in front and serves everything over HTTPS on one domain
 | **Spring Boot 3** | Spring Security, Spring Data JPA, declarative transactions, scheduling, caching and test support in one mature framework |
 | **PostgreSQL** | bookings and payments need real transactions and constraints; money is stored as exact `numeric(12,2)` |
 | **Redis** | data that must expire on its own (refresh tokens, revoked tokens) and shared caches; its TTLs replace clean-up jobs |
-| **JWT + refresh tokens** | a stateless API that can restart or scale without logging anyone out, with tokens that can still be revoked |
+| **JWT + refresh tokens** | a stateless API: a restart or redeploy logs nobody out, and tokens can still be revoked |
 | **E-mail code at sign-in** | a leaked password alone is not enough to get in; every sign-in proves the user still owns the address |
 | **Stripe** | card data never touches this server, 3-D Secure works out of the box, and test mode allows a full demo with no real money |
 | **Flyway** | the schema is versioned SQL, applied identically to local, test and production databases |
 | **Vue 3 + TypeScript** | a typed single-page app; Pinia for state, vue-i18n for the 7 languages, Tailwind for styling |
 | **Docker Compose** | one command starts the whole stack, with the same images in development and production |
+
+### Considered alternatives
+
+| Instead of | Why not |
+|---|---|
+| **Microservices** | one team and one database; a modular monolith (packages by feature) keeps transactions simple, for example cancelling a booking and refunding it in one transaction, and could still be split along the package boundaries later |
+| **Server-side sessions** | they would need sticky sessions or a shared session store, and every restart would log users out; JWT keeps the API stateless, and Redis covers the one thing JWT can't do alone (revocation) |
+| **Keycloak or Auth0** | an extra service to run, or an external dependency, for one application; Spring Security covers password, e-mail code and Google sign-in, and keeps the sign-in flow part of the thesis code |
+| **Password only** | the e-mail code adds one step on every sign-in, a deliberate trade of convenience for security: a leaked password alone is not enough. The code is valid for 10 minutes, and the refresh token keeps users signed in for 30 days, so it is needed only on a new sign-in |
+| **Own card handling** | storing or even receiving card numbers would bring the server into PCI DSS scope; with Stripe Elements the card data goes from the browser straight to Stripe |
 
 ### Backend structure
 
@@ -469,9 +485,12 @@ cd Hotel-system
 ./gradlew test          # Windows: .\gradlew test
 ```
 
-The report is in `Hotel-system/build/reports/tests/test/index.html`, the JaCoCo coverage
-report in `Hotel-system/build/reports/jacoco/`. The frontend is type-checked and built
-with `cd frontend && npm ci && npm run build`.
+**Coverage** (JaCoCo): **73 % of lines** and **60 % of branches** of the backend. The
+test report is in `Hotel-system/build/reports/tests/test/index.html`, the coverage report
+in `Hotel-system/build/reports/jacoco/test/html/index.html`.
+
+The frontend has **no automated tests** yet (see [Known limitations](#known-limitations));
+CI only type-checks and builds it (`cd frontend && npm ci && npm run build`).
 
 **CI** (`.github/workflows/ci.yml`) runs the backend tests and the frontend build on every
 push and pull request to `main`; the badge at the top shows the latest result.
@@ -529,6 +548,15 @@ apart, 5 per hour). 5 wrong passwords lock the account for 15 minutes.
 
 ### Known limitations
 
+- **No frontend tests.** The Vue app is type-checked (`vue-tsc`) and built in CI, but has
+  no unit or end-to-end tests. The next step would be Vitest for the Pinia stores and a few
+  Playwright tests for the booking flow.
+- **Built for a single API instance.** The scheduled jobs (booking clean-up, payment
+  expiry) have no distributed lock, so with two or more API instances each job would run
+  on every instance. A later run skips bookings that are already cancelled, and Stripe
+  refunds carry an idempotency key, but two runs at the same moment are not guarded
+  (bookings have no optimistic locking). Scaling out would call for a lock such as
+  ShedLock and a `@Version` column on bookings.
 - **Reviews have no screen yet.** Submitting and moderating reviews works through the API
   (Swagger) only.
 - **No general-purpose rate limiting.** Login and sign-in codes are throttled, but the
