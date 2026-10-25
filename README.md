@@ -11,8 +11,174 @@ Docker Compose
 
 ---
 
+## How to run it
+
+There are two ways. **To look at the project on your own computer, use option A.** It
+needs no accounts, keys or configuration. Option B is only needed to publish the site on
+the internet so other people can open it.
+
+### Option A: run it on your computer (recommended for reviewing)
+
+**Needs:** [Git](https://git-scm.com/downloads) and
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) (running). No `.env`
+file.
+
+```bash
+git clone https://github.com/MAX959954/hotel-reservation-system.git
+cd hotel-reservation-system
+docker compose up --build
+```
+
+The first start takes 5–10 minutes. When the log shows `Started HotelSystemApplication`,
+open:
+
+| What | URL |
+|---|---|
+| Website | http://localhost:5173 |
+| Mail inbox (sign-in codes arrive here) | http://localhost:8025 |
+
+**Test accounts** (password `Folio2026!` for all):
+
+| E-mail | Role |
+|---|---|
+| `guest@folio.local` | guest: book and pay |
+| `owner@folio.local` | hotel owner: confirm bookings, manage hotels (extranet) |
+| `admin@folio.local` | administrator |
+
+After the password the site asks for a 6-digit code. Open http://localhost:8025, where
+the newest e-mail contains it.
+
+Stop with `Ctrl+C` or `docker compose down`. More detail and a guided tour of the
+features: [1. Quick start](#1-quick-start) and [3. Testing the app](#3-testing-the-app).
+
+### Option B: publish it on the internet from your PC (Tailscale Funnel)
+
+The site gets a public HTTPS address like `https://folio.tail1a2b3c.ts.net` and stays
+online **while the computer is on**. It runs the production build: real e-mail, no
+test accounts. Windows only (the scripts are PowerShell).
+
+**Needs:** Git, Docker Desktop, a Tailscale account (free, sign in with Google or
+GitHub) and a Gmail address for sending sign-in codes.
+
+**1. Clone the project**
+
+```powershell
+git clone https://github.com/MAX959954/hotel-reservation-system.git
+cd hotel-reservation-system
+```
+
+**2. Set up Tailscale** (once)
+
+1. Install it: `winget install tailscale.tailscale` (or https://tailscale.com/download), then sign in.
+2. In the admin console (https://login.tailscale.com/admin):
+   - **Machines** → your PC → **Edit machine name** → a short name, e.g. `folio`;
+   - **DNS** → check that **MagicDNS** is on, and enable **HTTPS Certificates**.
+3. Find your address: `tailscale status --json` shows it as `"DNSName"`, e.g.
+   `folio.tail1a2b3c.ts.net.`. Use it without the trailing dot.
+
+**3. Create a Gmail app password** (once)
+
+1. Turn on **2-Step Verification**: https://myaccount.google.com/security
+2. Create an **app password**: https://myaccount.google.com/apppasswords → name it
+   "Folio". Google shows a 16-character password. Your normal Gmail password does
+   **not** work here.
+
+**4. Create the settings file**
+
+```powershell
+Copy-Item deploy\.env.example deploy\.env
+notepad deploy\.env
+```
+
+| Setting | Value |
+|---|---|
+| `DOMAIN` | your Tailscale address from step 2, without `https://` |
+| `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET` | three **different** random values (command below) |
+| `SMTP_USERNAME` | your Gmail address |
+| `SMTP_PASSWORD` | the app password from step 3 |
+| `MAIL_FROM` | `Folio <your.address@gmail.com>`, the same address as `SMTP_USERNAME` |
+
+A random value (run it once per setting):
+
+```powershell
+docker run --rm alpine sh -c "head -c 32 /dev/urandom | base64"
+```
+
+`STRIPE_*` and `GOOGLE_CLIENT_ID` can stay empty. Card payments and Google sign-in are
+then unavailable, but booking, bank transfer / cash payments and the extranet all work.
+
+**5. Start**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\public-start.ps1
+```
+
+The script starts Docker Desktop if needed, builds the app, waits until it is healthy and
+turns on Tailscale Funnel. The first time, Tailscale may print a link to approve Funnel:
+open it, approve, and run the script again. Then open `https://<your address>` and
+register. The code arrives at your real mailbox (check spam).
+
+Add `-NoBuild` to skip rebuilding when the code hasn't changed.
+
+**6. Test data and a test run**
+
+The demo catalogue is loaded automatically: 4 hotel companies and 44 hotels and
+apartments in 10 cities (Paris, Rome, Kyoto, Barcelona, Dubai, London, New York, Tokyo,
+Santorini, Maldives), with rooms, prices and reviews.
+
+The fixed test accounts from option A (`guest@folio.local` …) are **not** available
+here. Their passwords are public, so the app refuses to start in production if they are
+loaded (`config.ProductionSafetyCheck`). Use your own accounts instead:
+
+1. **Guest:** register on the site with a real e-mail address. Every new account is a guest.
+2. **Hotel owner:** register a second account (or use the first one), then make it the
+   owner of a demo company. Run in the project folder, replacing the e-mail:
+
+   ```powershell
+   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env exec postgres psql -U hotel_user -d hotel_db -c "INSERT INTO company_users (company_role, status, invited_at, joined_at, user_id, company_id) SELECT 'OWNER', 'ACTIVE', now(), now(), u.id, c.id FROM users u, companies c WHERE u.email = 'owner@example.com' AND c.name = 'Wayside Hospitality Group';"
+   ```
+
+   *Wayside Hospitality Group* owns the hotels in Paris, Rome, Tokyo, New York and more.
+3. **Administrator** (optional):
+
+   ```powershell
+   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.home.yml --env-file deploy/.env exec postgres psql -U hotel_user -d hotel_db -c "INSERT INTO user_roles (user_id, role) SELECT id, 'ADMIN' FROM users WHERE email = 'admin@example.com';"
+   ```
+
+After a role change, sign out and back in.
+
+**Check that everything works:**
+
+| Step | As | What to do | Expected result |
+|---|---|---|---|
+| 1 | anyone | open `https://<your address>/actuator/health` | `{"status":"UP"}` |
+| 2 | visitor | open the home page, pick **Paris** | a list of Paris hotels |
+| 3 | guest | open *Ribeira Riverhouse*, choose dates, **Reserve** | booking in **My bookings** as *Pending* |
+| 4 | owner | account menu → **Manage bookings** → **Confirm** | booking becomes *Confirmed*, the guest gets a "Booking confirmed" e-mail |
+| 5 | guest | **My bookings** → **Pay now** → **Bank transfer** | *Payment method saved*, nothing charged |
+| 6 | owner | **Mark as paid**, then **Check in** | *Paid · Bank transfer*, then *Checked in* and a check-in e-mail |
+
+Use two browsers (or a private window) to be signed in as guest and owner at the same
+time. If Stripe test keys are set in `deploy/.env`, card payments work with the test
+card **4242 4242 4242 4242**, any future expiry date and any CVC.
+
+**7. Stop**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\public-stop.ps1
+```
+
+It ends with **Folio is offline**. Users, bookings and hotels are kept until the next
+start.
+
+Full guide and troubleshooting:
+[deploy/README.md → Host it from your own PC](deploy/README.md#host-it-from-your-own-pc-tailscale-funnel).
+
+---
+
 ## Contents
 
+- [How to run it](#how-to-run-it)
 - [Screenshots](#screenshots)
 - [How reservations and payments work](#how-reservations-and-payments-work)
 1. [Quick start](#1-quick-start)

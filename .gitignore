@@ -1,2 +1,26 @@
 # Local secrets / overrides - never commit
 .env
+
+# Build output and caches
+.gradle/
+build/
+
+# IDE settings
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# AI tool settings
+.claude/
+.impeccable/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AI design / prompt notes (kept locally, not part of the project)
+PROMPT_FRONTEND.md
+PRODUCT.md
+DESIGN.md
