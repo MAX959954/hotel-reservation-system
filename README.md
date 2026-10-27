@@ -74,7 +74,7 @@ production compose files.
 **Under the hood**
 - sign-in with password plus an e-mail code, or Google; JWT with rotating refresh tokens
 - scheduled jobs cancel unconfirmed or unpaid bookings and expire abandoned payments
-- about 425 automated backend tests, many against a real PostgreSQL (Testcontainers), run by CI on every push
+- 425 automated backend tests (296 unit, 85 web-layer component and 44 integration tests against a real PostgreSQL and Redis), run by CI on every push
 - interactive API documentation (Swagger UI)
 
 **A quick look** (more in [Screenshots](#5-screenshots)):
@@ -149,20 +149,42 @@ Card payments need Stripe test keys, see [Optional integrations](#optional-integ
 
 ### Components
 
+The production deployment (the same diagram as Figure 2 of the thesis):
+
 ```mermaid
 flowchart LR
-    B["Browser"] -->|"loads the app"| N["nginx<br/>built Vue 3 SPA"]
-    B -->|"REST + JWT"| A["Spring Boot API<br/>Java 17"]
-    A --> P[("PostgreSQL<br/>all data")]
-    A --> R[("Redis<br/>tokens, caches")]
-    A <-->|"payments, webhooks"| S["Stripe"]
-    A -->|"codes, notifications"| M["SMTP<br/>Mailpit locally"]
+    B["User's browser<br/>Vue 3 SPA"]
+    subgraph Server["Server (Docker Compose, internal Docker network)"]
+        C["caddy<br/>Caddy 2: reverse proxy,<br/>HTTPS (Let's Encrypt)"]
+        F["frontend<br/>nginx: static files<br/>of the client"]
+        A["app<br/>Spring Boot (Java 17)<br/>REST API, port 8080"]
+        P[("postgres<br/>PostgreSQL 16, port 5432")]
+        R[("redis<br/>Redis 7, port 6379")]
+        VU[["volume uploads"]]
+        VD[["volume db_data"]]
+        VR[["volume redis_data"]]
+    end
+    S["Stripe<br/>payment gateway"]
+    G["Google<br/>sign-in (OAuth)"]
+    M["SMTP server<br/>e-mails"]
+
+    B -->|"HTTPS (443)"| C
+    C -->|"other requests"| F
+    C -->|"/api/*"| A
+    A -->|"JPA / JDBC"| P
+    A -->|cache| R
+    A -.- VU
+    P -.- VD
+    R -.- VR
+    A <--> S
+    A --> G
+    A --> M
 ```
 
-`docker compose up` starts five containers: `hotel_frontend` (nginx with the Vue app,
-port 5173), `hotel_app` (the API, 8081), `hotel_db` (PostgreSQL, 5432), `hotel_redis`
-(6379) and `hotel_mailpit` (a fake SMTP server with a web inbox, 8025). In production a
-Caddy reverse proxy sits in front and serves everything over HTTPS on one domain.
+Locally, `docker compose up` starts five containers without Caddy: `hotel_frontend`
+(nginx with the Vue app, port 5173), `hotel_app` (the API, 8081), `hotel_db` (PostgreSQL,
+5432), `hotel_redis` (6379) and `hotel_mailpit` (a fake SMTP server with a web inbox,
+8025). The browser calls the frontend and the API directly.
 
 ### Technology choices
 
@@ -209,22 +231,112 @@ into one JSON error format with the right HTTP status.
 
 ### Data model
 
+All 13 tables of the PostgreSQL schema (the same diagram as Figure 3 of the thesis):
+
 ```mermaid
 erDiagram
-    USER ||--o{ BOOKING : makes
-    USER ||--o{ COMPANY_USER : "works for"
-    COMPANY ||--o{ COMPANY_USER : employs
-    COMPANY ||--o{ HOTEL : owns
-    HOTEL ||--o{ ROOM : has
-    ROOM ||--o{ BOOKING : "booked as"
-    BOOKING ||--o| PAYMENT : "paid by"
-    BOOKING ||--o| REVIEW : "reviewed in"
+    users ||--o{ user_roles : has
+    users ||--o{ company_users : "works for"
+    companies ||--o{ company_users : employs
+    users |o--o{ companies : "submitted by"
+    companies ||--o{ company_documents : "application documents"
+    companies ||--o{ hotels : owns
+    hotels ||--o{ rooms : has
+    hotels ||--o{ hotel_amenities : has
+    hotels ||--o{ hotel_translations : "described in"
+    users ||--o{ bookings : makes
+    rooms ||--o{ bookings : "booked as"
+    bookings ||--o| payments : "paid by"
+    bookings ||--o| reviews : "reviewed in"
+    users ||--o{ reviews : writes
+    rooms ||--o{ reviews : "reviewed"
+
+    user_roles {
+        bigint user_id FK
+        string role
+    }
+    users {
+        bigint id PK
+        string email UK
+        string first_name
+        string last_name
+    }
+    company_users {
+        bigint id PK
+        bigint user_id FK
+        bigint company_id FK
+        string company_role
+    }
+    companies {
+        bigint id PK
+        bigint submitted_by_user_id FK
+        string name
+        string status
+    }
+    payments {
+        bigint id PK
+        bigint booking_id FK,UK
+        numeric amount
+        string status
+    }
+    bookings {
+        bigint id PK
+        bigint user_id FK
+        bigint room_id FK
+        datetime check_in
+        datetime check_out
+        string booking_status
+    }
+    hotels {
+        bigint id PK
+        bigint company_id FK
+        string name
+        string city
+        string property_type
+    }
+    company_documents {
+        bigint id PK
+        bigint company_id FK
+        string file_url
+    }
+    otp_codes {
+        bigint id PK
+        string identifier
+        string code_hash
+        datetime expires_at
+    }
+    reviews {
+        bigint id PK
+        bigint booking_id FK
+        bigint user_id FK
+        bigint room_id FK
+        int rating
+    }
+    rooms {
+        bigint id PK
+        bigint hotel_id FK
+        string number
+        string type
+        numeric price_per_night
+    }
+    hotel_amenities {
+        bigint hotel_id FK
+        string amenity
+    }
+    hotel_translations {
+        bigint id PK
+        bigint hotel_id FK
+        string locale
+        string description
+    }
 ```
 
 A company owns hotels; people work for a company through `company_users`, each with a
 company role, and one person can belong to several companies. A booking is for one room
-and has at most one payment and one review. The full diagram with attributes, the
-sign-in sequence and the role model are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+and has at most one payment and one review. `otp_codes` (sign-in codes) is keyed by the
+e-mail address, not by a foreign key. The schema is created by the Flyway migrations
+`V1`–`V4` in `Hotel-system/src/main/resources/db/migration/`. The sign-in sequence and the
+role model are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
@@ -232,14 +344,21 @@ sign-in sequence and the role model are in **[docs/ARCHITECTURE.md](docs/ARCHITE
 
 ### Booking lifecycle
 
-```
-             hotel confirms          guest pays          hotel checks in        hotel completes
-  PENDING ─────────────────▶ CONFIRMED ─────────▶ (paid) ─────────────▶ CHECKED_IN ─────────▶ COMPLETED
-     │                          │   │
-     │ cancelled by guest/hotel │   └── guest didn't arrive (6 h after check-in time) ──▶ NO_SHOW
-     │ or 48 h with no answer   │
-     ▼                          ▼
- CANCELLED ◀────────────────────┘  cancelled by guest/hotel, or not paid within 24 h
+The same states and transitions as Figure 4 of the thesis:
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING : guest creates the booking
+    PENDING --> CONFIRMED : hotel confirms
+    PENDING --> CANCELLED : cancelled, or 48 h without confirmation
+    CONFIRMED --> CHECKED_IN : guest arrives, only when paid (receptionist)
+    CONFIRMED --> CANCELLED : cancelled, full refund, or 24 h without payment
+    CONFIRMED --> NO_SHOW : receptionist, or 6 h after check-in time
+    CHECKED_IN --> COMPLETED : guest leaves (receptionist)
+    CANCELLED --> [*]
+    NO_SHOW --> [*]
+    COMPLETED --> [*]
+    note right of CONFIRMED : paid by the guest (card) or marked as paid by staff
 ```
 
 **Creating a booking** (`POST /api/bookings`). The backend checks that:
@@ -320,8 +439,8 @@ sign-in verifies Google's ID token on the server instead.
 | Access token (signed JWT) | 15 min | nowhere, the API is stateless | logout puts its ID on a **blacklist in Redis** until it would have expired; a password change invalidates all older tokens |
 | Refresh token | 30 days | Redis | single use: replaced on every refresh, deleted on logout |
 
-**Permissions** have two levels. *Global* roles (`GUEST`, `HOTEL_MANAGER`, `ADMIN`,
-`SUPPORT`) apply to the whole platform. *Company* roles (`OWNER`, `MANAGER`,
+**Permissions** have two levels. *Global* roles (`GUEST`, `COMPANY_CLIENT`, `RECEPTIONIST`,
+`HOTEL_MANAGER`, `ADMIN`, `SUPPORT`) apply to the whole platform. *Company* roles (`OWNER`, `MANAGER`,
 `RECEPTIONIST`, `ACCOUNTANT`, `STAFF`) apply only inside one company. Every endpoint
 declares its rule with `@PreAuthorize`, and `CompanyAuthorization` answers questions like
 "does this user have one of these roles in the company that owns this booking?". A
@@ -470,14 +589,18 @@ any future expiry date and any CVC. `.env` files are git-ignored.
 
 ### Tests
 
-The backend has **425 automated tests** (JUnit 5, Mockito, Spring Boot Test):
+The backend has **425 automated tests** in 30 test classes (JUnit 5, Mockito, Spring Boot
+Test, Testcontainers), split by test level as in Table 5 of the thesis:
 
-| Kind | Tests | What they check |
-|---|---|---|
-| Service unit tests | 272 | every business rule with mocked dependencies: booking validation and state transitions, prices, cancellation fees, payments, refunds and Stripe retries, sign-in codes, JWT, scheduled jobs |
-| Controller tests (`@WebMvcTest`) | 85 | each endpoint's HTTP contract: status codes, request validation, JSON responses and error format |
-| Integration tests, real **PostgreSQL 16** | 55 | the full application against a throwaway database started by **Testcontainers** with the real Flyway migrations: JPQL queries, overlap checks, per-company permissions (`CompanyAuthorization`), endpoint security for every role |
-| Integration tests, real **Redis** | 13 | refresh-token rotation and the token blacklist |
+| Level | Classes | Tests | What they check |
+|---|---|---|---|
+| Unit tests (Mockito, no Spring context) | 15 | 296 | one class with mocked dependencies: services, scheduled jobs, JWT service and filter, per-company permissions (`CompanyAuthorization`), error handler; e.g. prices, state transitions, refunds, sign-in limits |
+| Component tests of the web layer (`@WebMvcTest`) | 8 | 85 | one controller with mocked services: status codes, request validation, JSON responses and error format |
+| Integration tests, real **PostgreSQL 16** | 5 | 31 | the full application against a throwaway database started by **Testcontainers** with the real Flyway migrations: overlap checks, reviews, company memberships, endpoint security for every role |
+| Integration tests, real **Redis** | 2 | 13 | refresh-token rotation and the token blacklist |
+
+There are no automated acceptance or end-to-end tests; the main booking flow was tested
+by hand in the browser.
 
 Run them (needs JDK 17 and Docker running; Redis must be on `localhost:6379`):
 

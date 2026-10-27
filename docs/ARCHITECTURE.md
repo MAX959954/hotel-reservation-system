@@ -20,30 +20,36 @@ in the main README.
 
 ## 1. Components
 
+The production deployment, the same diagram as in the README and in Figure 2 of the thesis:
+
 ```mermaid
 flowchart LR
-    B["Browser<br/>Vue 3 SPA"]
-    subgraph Server["Docker host"]
-        C["Caddy<br/>HTTPS, routing<br/>(production only)"]
-        F["nginx<br/>serves the built Vue app"]
-        A["Spring Boot API<br/>Java 17"]
-        P[("PostgreSQL 16")]
-        R[("Redis 7")]
+    B["User's browser<br/>Vue 3 SPA"]
+    subgraph Server["Server (Docker Compose, internal Docker network)"]
+        C["caddy<br/>Caddy 2: reverse proxy,<br/>HTTPS (Let's Encrypt)"]
+        F["frontend<br/>nginx: static files<br/>of the client"]
+        A["app<br/>Spring Boot (Java 17)<br/>REST API, port 8080"]
+        P[("postgres<br/>PostgreSQL 16, port 5432")]
+        R[("redis<br/>Redis 7, port 6379")]
+        VU[["volume uploads"]]
+        VD[["volume db_data"]]
+        VR[["volume redis_data"]]
     end
-    S["Stripe<br/>card payments"]
-    M["SMTP<br/>Gmail / Mailpit"]
-    G["Google<br/>sign-in"]
+    S["Stripe<br/>payment gateway"]
+    G["Google<br/>sign-in (OAuth)"]
+    M["SMTP server<br/>e-mails"]
 
-    B -->|HTTPS| C
+    B -->|"HTTPS (443)"| C
+    C -->|"other requests"| F
     C -->|"/api/*"| A
-    C -->|everything else| F
-    A --> P
-    A --> R
-    A -->|PaymentIntents, refunds| S
-    S -->|webhooks| A
-    A -->|codes, notifications| M
-    B -->|ID token| G
-    A -->|verify ID token| G
+    A -->|"JPA / JDBC"| P
+    A -->|cache| R
+    A -.- VU
+    P -.- VD
+    R -.- VR
+    A <--> S
+    A --> G
+    A --> M
 ```
 
 | Component | Role |
@@ -117,84 +123,103 @@ flowchart LR
 
 ## 4. Data model
 
+All 13 tables of the PostgreSQL schema, the same diagram as in the README and in Figure 3 of the thesis:
+
 ```mermaid
 erDiagram
-    USER ||--o{ BOOKING : makes
-    USER ||--o{ REVIEW : writes
-    USER ||--o{ COMPANY_USER : "works for"
-    COMPANY ||--o{ COMPANY_USER : employs
-    COMPANY ||--o{ COMPANY_DOCUMENT : "application documents"
-    COMPANY ||--o{ HOTEL : owns
-    HOTEL ||--o{ HOTEL_TRANSLATION : "described in"
-    HOTEL ||--o{ ROOM : has
-    ROOM ||--o{ BOOKING : "booked as"
-    BOOKING ||--o| PAYMENT : "paid by"
-    BOOKING ||--o| REVIEW : "reviewed in"
+    users ||--o{ user_roles : has
+    users ||--o{ company_users : "works for"
+    companies ||--o{ company_users : employs
+    users |o--o{ companies : "submitted by"
+    companies ||--o{ company_documents : "application documents"
+    companies ||--o{ hotels : owns
+    hotels ||--o{ rooms : has
+    hotels ||--o{ hotel_amenities : has
+    hotels ||--o{ hotel_translations : "described in"
+    users ||--o{ bookings : makes
+    rooms ||--o{ bookings : "booked as"
+    bookings ||--o| payments : "paid by"
+    bookings ||--o| reviews : "reviewed in"
+    users ||--o{ reviews : writes
+    rooms ||--o{ reviews : "reviewed"
 
-    USER {
+    user_roles {
+        bigint user_id FK
+        string role
+    }
+    users {
         bigint id PK
         string email UK
-        string password_hash
-        string roles "GUEST, HOTEL_MANAGER, ADMIN, SUPPORT"
-        datetime locked_until
-        datetime token_valid_after
+        string first_name
+        string last_name
     }
-    COMPANY {
-        bigint id PK
-        string name
-        string status "PENDING_VERIFICATION, ACTIVE, REJECTED, ..."
-        string bank_iban
-    }
-    COMPANY_USER {
+    company_users {
         bigint id PK
         bigint user_id FK
         bigint company_id FK
-        string company_role "OWNER, MANAGER, RECEPTIONIST, ACCOUNTANT, STAFF"
-        string status "INVITED, ACTIVE, ..."
+        string company_role
     }
-    HOTEL {
+    companies {
         bigint id PK
-        bigint company_id FK
+        bigint submitted_by_user_id FK
         string name
-        string city
-        int star_rating
-        string property_type "HOTEL, APARTMENT"
-        string status "ACTIVE, INACTIVE, CLOSED, ..."
+        string status
     }
-    ROOM {
+    payments {
         bigint id PK
-        bigint hotel_id FK
-        string number
-        string type "SINGLE, DOUBLE, SUITE, ..."
-        numeric price_per_night
-        int capacity
-        string status "AVAILABLE, MAINTENANCE, OUT_OF_ORDER, ..."
+        bigint booking_id FK,UK
+        numeric amount
+        string status
     }
-    BOOKING {
+    bookings {
         bigint id PK
         bigint user_id FK
         bigint room_id FK
         datetime check_in
         datetime check_out
-        int guest_count
-        numeric total_price
-        string status "PENDING, CONFIRMED, CHECKED_IN, COMPLETED, CANCELLED, NO_SHOW"
+        string booking_status
     }
-    PAYMENT {
+    hotels {
         bigint id PK
-        bigint booking_id FK "unique"
-        numeric amount
-        numeric refunded_amount
-        string method "CREDIT_CARD, BANK_TRANSFER, CASH, ..."
-        string status "PENDING, COMPLETED, REFUNDED, ..."
-        string transaction_id "Stripe PaymentIntent"
+        bigint company_id FK
+        string name
+        string city
+        string property_type
     }
-    REVIEW {
+    company_documents {
         bigint id PK
-        bigint booking_id FK "unique"
+        bigint company_id FK
+        string file_url
+    }
+    otp_codes {
+        bigint id PK
+        string identifier
+        string code_hash
+        datetime expires_at
+    }
+    reviews {
+        bigint id PK
+        bigint booking_id FK
+        bigint user_id FK
+        bigint room_id FK
         int rating
-        string comment
-        boolean approved
+    }
+    rooms {
+        bigint id PK
+        bigint hotel_id FK
+        string number
+        string type
+        numeric price_per_night
+    }
+    hotel_amenities {
+        bigint hotel_id FK
+        string amenity
+    }
+    hotel_translations {
+        bigint id PK
+        bigint hotel_id FK
+        string locale
+        string description
     }
 ```
 
@@ -209,8 +234,9 @@ Key rules the model enforces:
   changes don't affect existing bookings.
 
 The full schema is the Flyway migrations in `Hotel-system/src/main/resources/db/migration/`:
-`V1__baseline_schema.sql` plus the later changes (`V2__money_as_numeric.sql` moved all
-money columns from floating point to exact `numeric(12,2)`).
+`V1__baseline_schema.sql` plus three later changes: `V2__money_as_numeric.sql` moved all
+money columns from floating point to exact `numeric(12,2)`, `V3` made the Stripe transaction id
+unique and `V4` removed an unused booking state and allowed one review per booking.
 
 ## 5. Security
 
@@ -270,7 +296,7 @@ There are two levels of roles:
 
 | Level | Roles | Where it applies |
 |---|---|---|
-| **Global** (`user_roles`) | `GUEST` (everyone), `HOTEL_MANAGER` (has an approved company), `ADMIN`, `SUPPORT` | the whole platform |
+| **Global** (`user_roles`) | `GUEST` (everyone), `COMPANY_CLIENT`, `RECEPTIONIST`, `HOTEL_MANAGER` (has an approved company), `ADMIN`, `SUPPORT` | the whole platform |
 | **Company** (`company_users`) | `OWNER`, `MANAGER`, `RECEPTIONIST`, `ACCOUNTANT`, `STAFF` | only inside that one company |
 
 Every endpoint declares its rule with `@PreAuthorize`, for example:
