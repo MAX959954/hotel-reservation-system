@@ -20,8 +20,9 @@ company runs its own hotels, bookings and staff through a separate extranet.
 
 **Goal of the work:** a complete, realistic system rather than a prototype. That means
 real sign-in with e-mail verification, a booking lifecycle with rules and automatic
-clean-up, card payments through Stripe with refunds, permissions per company, about 425
-automated tests, and a production deployment.
+clean-up, card payments through Stripe with refunds, permissions per company, 425
+automated backend tests (296 unit, 85 web-layer component and 44 integration tests),
+and a production deployment.
 
 **Stack:** Spring Boot 3 (Java 17) · PostgreSQL 16 · Redis 7 · Vue 3 + TypeScript + Vite ·
 Docker Compose · Stripe
