@@ -188,6 +188,24 @@ itself stops with the `down` command from the section above, adding
 
 ---
 
+## Frontend on Vercel (optional)
+
+Vercel can serve the built Vue app; the API, PostgreSQL and Redis keep running on the VPS
+or your PC as described above, reachable over HTTPS at `https://<DOMAIN>`.
+
+1. Import the repository in Vercel and set **Root Directory** to `frontend`. Vercel
+   detects Vite (`npm run build`, output `dist`). `frontend/vercel.json` sends every path
+   to `index.html`, so deep links such as `/hotels/5` survive a page reload.
+2. Under *Settings → Environment Variables* add `VITE_API_BASE_URL=https://<DOMAIN>`,
+   `VITE_STRIPE_PUBLISHABLE_KEY` and `VITE_GOOGLE_CLIENT_ID`. They are baked in at build
+   time, so redeploy after changing them.
+3. In `deploy/.env` set `EXTRA_CORS_ORIGINS=https://<project>.vercel.app` and restart the
+   stack with the same `up -d` command, so the API accepts requests from that site.
+4. For Google sign-in, add the Vercel address under **Authorized JavaScript origins** of
+   the OAuth client as well.
+
+---
+
 ## 1. Get a server
 
 Any VPS with **Ubuntu 22.04 or 24.04**, **≥ 2 vCPU, ≥ 4 GB RAM** (the backend and
