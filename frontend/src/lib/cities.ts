@@ -1,3 +1,5 @@
+import { useI18n } from 'vue-i18n'
+
 export interface City {
   name: string
   country: string
@@ -26,3 +28,16 @@ export const ACTIVE_CITIES: City[] = [
 
 /** A short, visually varied subset for quick-pick chips — not every city needs a chip. */
 export const QUICK_CITIES = ['Paris', 'Kyoto', 'Rome', 'Barcelona']
+
+/**
+ * Display name of a city in the current UI language. The English name is still the value
+ * the API filters on and the one in the URL; a city with no translation (e.g. one a host
+ * just added) shows as-is.
+ */
+export function useCityName() {
+  const { t, te } = useI18n()
+  return (name: string) => {
+    const key = `city.${name.replace(/\s+/g, '_')}`
+    return te(key) ? t(key) : name
+  }
+}

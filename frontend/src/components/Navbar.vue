@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowUpRight, ChevronDown, MapPin } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useAuthModalStore } from '@/stores/authModal'
-import { ACTIVE_CITIES } from '@/lib/cities'
+import { ACTIVE_CITIES, useCityName } from '@/lib/cities'
 import AccountMenu from './AccountMenu.vue'
 import LanguageSwitcher from './LanguageSwitcher.vue'
 
@@ -12,6 +12,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const authModal = useAuthModalStore()
+const cityName = useCityName()
 
 const navLinks = [
   { label: 'nav.stays', to: { name: 'hotels' } },
@@ -114,7 +115,7 @@ onUnmounted(() => {
               @click="closeCities"
             >
               <MapPin class="w-3.5 h-3.5 text-champagne shrink-0" aria-hidden="true" />
-              <span class="text-bone">{{ c.name }}</span>
+              <span class="text-bone">{{ cityName(c.name) }}</span>
               <span class="text-xs text-bone-dim/70">{{ c.country }}</span>
             </RouterLink>
           </div>

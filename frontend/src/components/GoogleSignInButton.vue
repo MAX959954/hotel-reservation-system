@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 /**
  * "Sign in with Google" via Google Identity Services. Renders Google's own button and
@@ -8,6 +9,7 @@ import { onMounted, ref } from 'vue'
  * setups without a Google OAuth client simply don't show the option.
  */
 const emit = defineEmits<{ credential: [idToken: string] }>()
+const { locale } = useI18n()
 
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 const container = ref<HTMLDivElement | null>(null)
@@ -53,6 +55,8 @@ onMounted(async () => {
       shape: 'pill',
       text: 'continue_with',
       width: 320,
+      // Google's button text follows this, not the page language.
+      locale: locale.value,
     })
   } catch {
     failed.value = true
@@ -64,9 +68,19 @@ onMounted(async () => {
   <div v-if="clientId && !failed" class="flex flex-col items-center gap-3">
     <div class="flex items-center gap-3 w-full">
       <span class="h-px flex-1 bg-hairline" />
-      <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">or</span>
+      <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.or') }}</span>
       <span class="h-px flex-1 bg-hairline" />
     </div>
-    <div ref="container" class="min-h-[44px]" />
+    <div ref="container" class="gsi-container min-h-[44px]" />
   </div>
 </template>
+
+<style scoped>
+/* The page sets `color-scheme: dark` (style.css). Google's button is a cross-origin
+   iframe whose document is light, and a color-scheme mismatch makes the browser paint
+   the iframe with an opaque white backdrop — the white rectangle around the pill.
+   Matching the iframe's scheme keeps its background transparent. */
+.gsi-container :deep(iframe) {
+  color-scheme: light;
+}
+</style>

@@ -3,11 +3,12 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { MapPin, Search, Users } from 'lucide-vue-next'
 import { addDaysIso, todayIso } from '@/lib/dates'
-import { QUICK_CITIES } from '@/lib/cities'
+import { QUICK_CITIES, useCityName } from '@/lib/cities'
 import NumberStepper from './NumberStepper.vue'
 import DatePicker from './DatePicker.vue'
 
 const router = useRouter()
+const cityName = useCityName()
 
 const city = ref('')
 const checkIn = ref(addDaysIso(todayIso(), 1))
@@ -88,7 +89,7 @@ function pickCity(name: string) {
         class="px-3 py-1.5 rounded-full text-xs font-light text-bone-dim bg-bone/5 border border-hairline hover:border-champagne-dim hover:text-bone transition-colors"
         @click="pickCity(name)"
       >
-        {{ name }}
+        {{ cityName(name) }}
       </button>
     </div>
   </div>

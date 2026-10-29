@@ -9,12 +9,13 @@ import { hotelsApi } from '@/api/hotels'
 import { apiErrorMessage } from '@/api/http'
 import { hotelImage, onImageError } from '@/lib/images'
 import { gsap, ScrollTrigger, prefersReducedMotion } from '@/lib/motion'
-import { ACTIVE_CITIES, QUICK_CITIES } from '@/lib/cities'
+import { ACTIVE_CITIES, QUICK_CITIES, useCityName } from '@/lib/cities'
 import type { HotelResponse, PropertyType } from '@/types/hotel'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const cityName = useCityName()
 
 const hotels = ref<HotelResponse[]>([])
 const loading = ref(false)
@@ -127,7 +128,7 @@ onUnmounted(() => {
 
     <main class="flex-1 px-6 md:px-10 py-10 max-w-[1600px] mx-auto w-full">
       <h1 class="font-display text-4xl md:text-5xl text-bone mb-8">
-        <template v-if="city">{{ $t('hotels.inCity', { catalog: catalogLabel, city }) }}</template>
+        <template v-if="city">{{ $t('hotels.inCity', { catalog: catalogLabel, city: cityName(city) }) }}</template>
         <template v-else>{{ catalogLabel }}</template>
       </h1>
 
@@ -166,7 +167,7 @@ onUnmounted(() => {
         class="rounded-[1.25rem] border border-hairline bg-ink-2 p-8 flex flex-col items-start gap-4"
       >
         <p class="text-sm font-light text-bone-dim">
-          <template v-if="city">{{ $t('hotels.noResultsInCity', { catalog: catalogLabel.toLowerCase(), city }) }}</template>
+          <template v-if="city">{{ $t('hotels.noResultsInCity', { catalog: catalogLabel.toLowerCase(), city: cityName(city) }) }}</template>
           <template v-else>{{ $t('hotels.nothingOnRegister') }}</template>
         </p>
         <div class="flex flex-wrap gap-2">
@@ -177,7 +178,7 @@ onUnmounted(() => {
             class="px-3 py-1.5 rounded-full text-xs font-light text-bone-dim bg-bone/5 border border-hairline hover:border-champagne-dim hover:text-bone transition-colors"
             @click="search(name)"
           >
-            {{ name }}
+            {{ cityName(name) }}
           </button>
         </div>
       </div>

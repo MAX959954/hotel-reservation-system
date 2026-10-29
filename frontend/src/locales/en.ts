@@ -4,9 +4,10 @@
  * catalog, stay detail, footer): the rest of the app still falls back to English
  * strings baked directly into those components' templates.
  *
- * City/country names are deliberately NOT translated — they're data from
- * lib/cities.ts, not UI chrome, and "Paris" doesn't become a different word in most
- * of these languages anyway.
+ * City names in headings, menus and quick-pick chips are translated (see `city` below
+ * and useCityName in lib/cities.ts); the English name remains what the API filters on
+ * and what goes in the URL. Country names and the city shown on each hotel card are
+ * database content and stay as stored.
  */
 export default {
   nav: {
@@ -364,5 +365,53 @@ export default {
     submitRoom: 'Create room',
     roomSubmitError: 'Could not create that room.',
     cancel: 'Cancel',
+  },
+  auth: {
+    titleSignin: 'Sign in to Folio',
+    titleRegister: 'Create your account',
+    titleCode: 'Check your inbox',
+    back: 'Back',
+    close: 'Close',
+    emailAddress: 'Email address',
+    email: 'Email',
+    password: 'Password',
+    continue: 'Continue',
+    or: 'or',
+    newToFolio: 'New to Folio?',
+    createAccount: 'Create an account',
+    firstName: 'First name',
+    lastName: 'Last name',
+    dateOfBirth: 'Date of birth',
+    ageError: 'You must be at least 18 years old to book with us.',
+    confirmPassword: 'Confirm password',
+    passwordsMismatch: "Passwords don't match.",
+    signInInstead: 'Sign in instead',
+    haveAccount: 'Already have an account?',
+    signIn: 'Sign in',
+    codeSent: 'Sent to {email}. It expires in 10 minutes.',
+    digit: 'Digit {n}',
+    spamHint: "Didn't get it? Check your spam folder — delivery can occasionally take a minute.",
+    resendIn: 'Resend in {seconds}s',
+    resendCode: 'Resend code',
+    strengthTooShort: 'Too short',
+    strengthWeak: 'Weak',
+    strengthFair: 'Fair',
+    strengthGood: 'Good',
+    strengthStrong: 'Strong',
+    signinError: 'Could not sign in. Try again.',
+    sendCodeError: 'Could not send the code. Try again.',
+  },
+  // Display names only — the English name stays the value sent to the API and put in URLs.
+  city: {
+    Barcelona: 'Barcelona',
+    Dubai: 'Dubai',
+    Kyoto: 'Kyoto',
+    London: 'London',
+    New_York: 'New York',
+    North_Male_Atoll: 'North Male Atoll',
+    Paris: 'Paris',
+    Rome: 'Rome',
+    Santorini: 'Santorini',
+    Tokyo: 'Tokyo',
   },
 }

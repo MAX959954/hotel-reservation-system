@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Coins } from 'lucide-vue-next'
-import { ACTIVE_CITIES } from '@/lib/cities'
+import { ACTIVE_CITIES, useCityName } from '@/lib/cities'
 import { useCurrencyStore } from '@/stores/currency'
 import { useSettingsModalStore } from '@/stores/settingsModal'
 
 const year = new Date().getFullYear()
 const currency = useCurrencyStore()
 const settingsModal = useSettingsModalStore()
+const cityName = useCityName()
 
 // A handful of the register's real cities, not all ten — a footer column is a shortcut,
 // not a second copy of the Cities menu.
@@ -37,7 +38,7 @@ const footerCities = ACTIVE_CITIES.slice(0, 5)
         <ul class="flex flex-col gap-3 text-sm font-light text-bone-dim">
           <li v-for="c in footerCities" :key="c.name">
             <RouterLink :to="{ name: 'hotels', query: { city: c.name } }" class="hover:text-bone transition-colors">
-              {{ c.name }}
+              {{ cityName(c.name) }}
             </RouterLink>
           </li>
         </ul>

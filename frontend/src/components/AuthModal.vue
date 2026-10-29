@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Loader2, Lock, Mail, X } from 'lucide-vue-next'
 import DatePicker from './DatePicker.vue'
 import GoogleSignInButton from './GoogleSignInButton.vue'
@@ -11,6 +12,7 @@ import { useAuthModalStore } from '@/stores/authModal'
 import { todayIso } from '@/lib/dates'
 
 const router = useRouter()
+const { t } = useI18n()
 const auth = useAuthStore()
 const modal = useAuthModalStore()
 
@@ -64,7 +66,8 @@ const passwordStrength = computed(() => {
   if (/[^A-Za-z0-9]/.test(v)) score++
   return Math.min(score, 4)
 })
-const strengthLabel = computed(() => ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][passwordStrength.value])
+const STRENGTH_KEYS = ['strengthTooShort', 'strengthWeak', 'strengthFair', 'strengthGood', 'strengthStrong']
+const strengthLabel = computed(() => t(`auth.${STRENGTH_KEYS[passwordStrength.value]}`))
 
 const passwordsMatch = computed(() => confirmPassword.value.length > 0 && confirmPassword.value === password.value)
 
@@ -127,7 +130,7 @@ async function submitSignin() {
     await authApi.login(email.value.trim(), password.value)
     await advanceToCode()
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not sign in. Try again.')
+    error.value = apiErrorMessage(e, t('auth.signinError'))
   } finally {
     busy.value = false
   }
@@ -144,7 +147,7 @@ async function submitRegister() {
     await authApi.requestOtp(email.value.trim())
     await advanceToCode()
   } catch (e) {
-    const message = apiErrorMessage(e, 'Could not send the code. Try again.')
+    const message = apiErrorMessage(e, t('auth.sendCodeError'))
     error.value = message
     suggestSignIn.value = /sign in with your password instead/i.test(message)
   } finally {
@@ -323,19 +326,19 @@ function backToForm() {
                 v-if="modal.step === 'code'"
                 type="button"
                 class="text-bone-dim hover:text-bone transition-colors"
-                aria-label="Back"
+                :aria-label="$t('auth.back')"
                 @click="backToForm"
               >
                 <ArrowLeft class="w-4 h-4" />
               </button>
               <h2 id="auth-modal-title" class="font-display text-2xl text-bone">
                 <template v-if="modal.step === 'form'">{{
-                  modal.intent === 'register' ? 'Create your account' : 'Sign in to Folio'
+                  modal.intent === 'register' ? $t('auth.titleRegister') : $t('auth.titleSignin')
                 }}</template>
-                <template v-else>Check your inbox</template>
+                <template v-else>{{ $t('auth.titleCode') }}</template>
               </h2>
             </div>
-            <button type="button" class="text-bone-dim hover:text-bone transition-colors" aria-label="Close" @click="close">
+            <button type="button" class="text-bone-dim hover:text-bone transition-colors" :aria-label="$t('auth.close')" @click="close">
               <X class="w-5 h-5" />
             </button>
           </div>
@@ -348,7 +351,7 @@ function backToForm() {
           >
             <label class="flex items-center gap-3 border-b border-hairline pb-2 focus-within:border-champagne transition-colors">
               <Mail class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-              <span class="sr-only">Email address</span>
+              <span class="sr-only">{{ $t('auth.emailAddress') }}</span>
               <input
                 v-model="email"
                 type="email"
@@ -360,13 +363,13 @@ function backToForm() {
             </label>
             <label class="flex items-center gap-3 border-b border-hairline pb-2 focus-within:border-champagne transition-colors">
               <Lock class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-              <span class="sr-only">Password</span>
+              <span class="sr-only">{{ $t('auth.password') }}</span>
               <input
                 v-model="password"
                 type="password"
                 required
                 autocomplete="current-password"
-                placeholder="Password"
+                :placeholder="$t('auth.password')"
                 class="bg-transparent outline-none text-sm text-bone placeholder:text-bone-dim/60 w-full font-light py-1"
               />
             </label>
@@ -379,15 +382,15 @@ function backToForm() {
               class="mt-2 flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
-              Continue
+              {{ $t('auth.continue') }}
             </button>
 
             <GoogleSignInButton @credential="signInWithGoogle" />
 
             <p class="text-xs font-light text-bone-dim text-center">
-              New to Folio?
+              {{ $t('auth.newToFolio') }}
               <button type="button" class="text-champagne hover:text-champagne-bright transition-colors" @click="modal.intent = 'register'">
-                Create an account
+                {{ $t('auth.createAccount') }}
               </button>
             </p>
           </form>
@@ -400,7 +403,7 @@ function backToForm() {
           >
             <div class="grid grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">First name</span>
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.firstName') }}</span>
                 <input
                   v-model="firstName"
                   type="text"
@@ -410,7 +413,7 @@ function backToForm() {
                 />
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Last name</span>
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.lastName') }}</span>
                 <input
                   v-model="lastName"
                   type="text"
@@ -422,7 +425,7 @@ function backToForm() {
             </div>
 
             <label class="flex flex-col gap-1">
-              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Email</span>
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.email') }}</span>
               <input
                 v-model="email"
                 type="email"
@@ -433,21 +436,21 @@ function backToForm() {
             </label>
 
             <label class="flex flex-col gap-1">
-              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Date of birth</span>
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.dateOfBirth') }}</span>
               <DatePicker
                 v-model="dateOfBirth"
                 :max="todayIso()"
                 :year-range="dobYearRange"
-                aria-label="Date of birth"
+                :aria-label="$t('auth.dateOfBirth')"
                 class="border-b border-hairline focus-within:border-champagne pb-1 transition-colors"
               />
               <span v-if="dateOfBirth && !ageValid" class="text-xs text-rose-300">
-                You must be at least 18 years old to book with us.
+                {{ $t('auth.ageError') }}
               </span>
             </label>
 
             <label class="flex flex-col gap-1">
-              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Password</span>
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.password') }}</span>
               <input
                 v-model="password"
                 type="password"
@@ -468,7 +471,7 @@ function backToForm() {
             </label>
 
             <label class="flex flex-col gap-1">
-              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Confirm password</span>
+              <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.confirmPassword') }}</span>
               <input
                 v-model="confirmPassword"
                 type="password"
@@ -477,7 +480,7 @@ function backToForm() {
                 class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
               />
               <span v-if="confirmPassword && !passwordsMatch" class="text-xs text-rose-300">
-                Passwords don't match.
+                {{ $t('auth.passwordsMismatch') }}
               </span>
             </label>
 
@@ -489,7 +492,7 @@ function backToForm() {
                 class="text-champagne hover:text-champagne-bright transition-colors underline underline-offset-2"
                 @click="switchToSignIn"
               >
-                Sign in instead
+                {{ $t('auth.signInInstead') }}
               </button>
             </p>
 
@@ -499,24 +502,24 @@ function backToForm() {
               class="mt-2 flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
-              Continue
+              {{ $t('auth.continue') }}
             </button>
 
             <GoogleSignInButton @credential="signInWithGoogle" />
 
             <p class="text-xs font-light text-bone-dim text-center">
-              Already have an account?
+              {{ $t('auth.haveAccount') }}
               <button type="button" class="text-champagne hover:text-champagne-bright transition-colors" @click="switchToSignIn">
-                Sign in
+                {{ $t('auth.signIn') }}
               </button>
             </p>
           </form>
 
           <!-- Code — common to both flows. -->
           <form v-else class="flex flex-col gap-4" @submit.prevent="submitCode">
-            <p class="text-sm font-light text-bone-dim">
-              Sent to <span class="text-bone">{{ modal.identifier }}</span>. It expires in 10 minutes.
-            </p>
+            <i18n-t keypath="auth.codeSent" tag="p" class="text-sm font-light text-bone-dim">
+              <template #email><span class="text-bone">{{ modal.identifier }}</span></template>
+            </i18n-t>
             <div class="flex gap-2 justify-between">
               <input
                 v-for="(_, i) in codeDigits"
@@ -526,7 +529,7 @@ function backToForm() {
                 type="text"
                 inputmode="numeric"
                 maxlength="6"
-                :aria-label="`Digit ${i + 1}`"
+                :aria-label="$t('auth.digit', { n: i + 1 })"
                 class="w-12 h-14 text-center rounded-xl bg-bone/5 border border-hairline text-xl text-bone font-display outline-none focus:border-champagne transition-colors"
                 @input="onDigit(i, $event)"
                 @keydown="onDigitKeydown(i, $event)"
@@ -534,7 +537,7 @@ function backToForm() {
             </div>
             <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
             <p class="text-xs font-light text-bone-dim/70">
-              Didn't get it? Check your spam folder — delivery can occasionally take a minute.
+              {{ $t('auth.spamHint') }}
             </p>
             <div class="flex items-center justify-between text-xs font-light text-bone-dim">
               <button
@@ -543,7 +546,7 @@ function backToForm() {
                 class="hover:text-bone transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 @click="resend"
               >
-                {{ resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code' }}
+                {{ resendIn > 0 ? $t('auth.resendIn', { seconds: resendIn }) : $t('auth.resendCode') }}
               </button>
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin text-champagne" aria-hidden="true" />
             </div>
