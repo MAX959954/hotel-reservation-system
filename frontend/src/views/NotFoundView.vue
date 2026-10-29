@@ -7,12 +7,12 @@ import Navbar from '@/components/Navbar.vue'
     <Navbar />
     <div class="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4">
       <p class="font-display text-7xl text-champagne">404</p>
-      <h1 class="font-display text-3xl text-bone">No such page in the register</h1>
+      <h1 class="font-display text-3xl text-bone">{{ $t('notFound.title') }}</h1>
       <RouterLink
         to="/"
         class="mt-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors"
       >
-        Back to the start
+        {{ $t('notFound.back') }}
       </RouterLink>
     </div>
   </div>

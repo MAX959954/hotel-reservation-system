@@ -10,9 +10,9 @@ import { gsap, ScrollTrigger, prefersReducedMotion } from '@/lib/motion'
  * and bookings. These entries are illustrative editorial copy in the site's own voice,
  * not real published articles: no invented named journalists, no specific factual claims
  * (dates, review counts, quotes) that could be mistaken for something real. The byline is
- * the publication itself, the way a house style guide would be credited.
+ * the publication itself, the way a house style guide would be credited. Every text field
+ * is an i18n key (locales/*.ts, section `journal`).
  */
-const BYLINE = 'The Folio Editors'
 
 interface Entry {
   category: string
@@ -23,42 +23,39 @@ interface Entry {
 
 const entries: Entry[] = [
   {
-    category: 'City Guide',
-    title: 'Five days in Kyoto, without a plan',
-    excerpt:
-      'The temples are worth the queue. The mornings before the queue forms are worth more.',
+    category: 'journal.cityGuide',
+    title: 'journal.kyotoTitle',
+    excerpt: 'journal.kyotoExcerpt',
     image: FALLBACK_IMAGES[7],
   },
   {
-    category: 'Field Notes',
-    title: 'What a good front desk actually does',
-    excerpt:
-      'Not much, most of the time — which is exactly the point. A short case for the front desk.',
+    category: 'journal.fieldNotes',
+    title: 'journal.frontDeskTitle',
+    excerpt: 'journal.frontDeskExcerpt',
     image: FALLBACK_IMAGES[1],
   },
   {
-    category: 'Field Notes',
-    title: 'The case for staying longer',
-    excerpt:
-      'A week in one apartment beats three nights in three hotels. On slowing a trip down.',
+    category: 'journal.fieldNotes',
+    title: 'journal.stayLongerTitle',
+    excerpt: 'journal.stayLongerExcerpt',
     image: FALLBACK_IMAGES[10],
   },
   {
-    category: 'City Guide',
-    title: 'Santorini after the ferry crowds leave',
-    excerpt: 'The caldera at six in the evening, once the day-trip boats have gone.',
+    category: 'journal.cityGuide',
+    title: 'journal.santoriniTitle',
+    excerpt: 'journal.santoriniExcerpt',
     image: FALLBACK_IMAGES[8],
   },
   {
-    category: 'Field Notes',
-    title: 'Packing for a city you have never seen',
-    excerpt: 'Fewer decisions on arrival, more room for the ones that actually matter.',
+    category: 'journal.fieldNotes',
+    title: 'journal.packingTitle',
+    excerpt: 'journal.packingExcerpt',
     image: FALLBACK_IMAGES[3],
   },
   {
-    category: 'City Guide',
-    title: 'New York in the shoulder season',
-    excerpt: 'Between the summer crowds and the holiday lights, the city keeps its own pace.',
+    category: 'journal.cityGuide',
+    title: 'journal.newYorkTitle',
+    excerpt: 'journal.newYorkExcerpt',
     image: FALLBACK_IMAGES[4],
   },
 ]
@@ -89,9 +86,9 @@ onUnmounted(() => {
     <Navbar />
 
     <main ref="root" class="flex-1 px-6 md:px-10 py-10 max-w-[1600px] mx-auto w-full">
-      <h1 class="font-display text-4xl md:text-5xl text-bone mb-3">Journal</h1>
+      <h1 class="font-display text-4xl md:text-5xl text-bone mb-3">{{ $t('journal.title') }}</h1>
       <p class="text-sm font-light text-bone-dim max-w-xl mb-10">
-        Notes on cities, stays and the pace of travel, from the desk at Folio.
+        {{ $t('journal.subtitle') }}
       </p>
 
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -111,11 +108,11 @@ onUnmounted(() => {
           </div>
           <div class="p-5">
             <span class="text-[11px] font-medium uppercase tracking-[0.12em] text-champagne">
-              {{ entry.category }}
+              {{ $t(entry.category) }}
             </span>
-            <h2 class="font-display text-lg text-bone mt-2">{{ entry.title }}</h2>
-            <p class="text-sm font-light text-bone-dim mt-2 leading-relaxed">{{ entry.excerpt }}</p>
-            <p class="text-xs font-light text-bone-dim/70 mt-4">{{ BYLINE }}</p>
+            <h2 class="font-display text-lg text-bone mt-2">{{ $t(entry.title) }}</h2>
+            <p class="text-sm font-light text-bone-dim mt-2 leading-relaxed">{{ $t(entry.excerpt) }}</p>
+            <p class="text-xs font-light text-bone-dim/70 mt-4">{{ $t('journal.byline') }}</p>
           </div>
         </article>
       </div>

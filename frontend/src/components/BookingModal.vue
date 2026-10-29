@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { CheckCircle2, Loader2, X } from 'lucide-vue-next'
 import DatePicker from './DatePicker.vue'
 import NumberStepper from './NumberStepper.vue'
@@ -30,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; booked: [booking: BookingResponse] }>()
 
 const currency = useCurrencyStore()
+const { t } = useI18n()
 
 const checkIn = ref(todayIso())
 const checkOut = ref(addDaysIso(todayIso(), 2))
@@ -59,16 +61,16 @@ const total = computed(() => (props.room ? nights.value * props.room.pricePerNig
 
 const capacityError = computed(() => {
   if (!props.room) return ''
-  if (guestCount.value < 1) return 'At least one guest.'
+  if (guestCount.value < 1) return t('bookingModal.errorAtLeastOneGuest')
   if (guestCount.value > props.room.capacity)
-    return `This room sleeps ${props.room.capacity}.`
+    return t('bookingModal.errorCapacity', { capacity: props.room.capacity })
   return ''
 })
 
 const dateError = computed(() => {
-  if (!checkIn.value || !checkOut.value) return 'Pick both dates.'
-  if (checkIn.value <= todayIso()) return 'Check-in must be a future date.'
-  if (nights.value < 1) return 'Check-out must be after check-in.'
+  if (!checkIn.value || !checkOut.value) return t('bookingModal.errorPickDates')
+  if (checkIn.value <= todayIso()) return t('bookingModal.errorFutureCheckIn')
+  if (nights.value < 1) return t('bookingModal.errorCheckOutAfter')
   return ''
 })
 
@@ -89,7 +91,7 @@ async function submit() {
     created.value = booking
     emit('booked', booking)
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not complete the booking.')
+    error.value = apiErrorMessage(e, t('bookingModal.submitError'))
   } finally {
     busy.value = false
   }
@@ -119,16 +121,16 @@ async function submit() {
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 id="booking-modal-title" class="font-display text-2xl text-bone">
-                {{ created ? 'Request received' : 'Reserve this room' }}
+                {{ created ? $t('bookingModal.titleReceived') : $t('bookingModal.titleReserve') }}
               </h2>
               <p class="text-xs font-light text-bone-dim mt-1">
-                {{ roomTypeLabel(room.type) }} · Room {{ room.number }} · {{ hotelName }}
+                {{ $t('bookingModal.roomLine', { type: roomTypeLabel(room.type), number: room.number, hotel: hotelName }) }}
               </p>
             </div>
             <button
               type="button"
               class="text-bone-dim hover:text-bone transition-colors"
-              aria-label="Close"
+              :aria-label="$t('common.close')"
               @click="emit('close')"
             >
               <X class="w-5 h-5" />
@@ -142,16 +144,15 @@ async function submit() {
               <CheckCircle2 class="w-6 h-6 text-champagne shrink-0" aria-hidden="true" />
               <div>
                 <p class="text-sm text-bone">
-                  Booking #{{ created.id }} — status
-                  <span class="text-champagne">{{ created.bookingStatus }}</span>
+                  {{ $t('bookingModal.bookingStatus', { id: created.id, status: $t(`bookingStatus.${created.bookingStatus}`) }) }}
                 </p>
                 <p class="text-xs font-light text-bone-dim mt-0.5">
-                  The property still needs to confirm it.
+                  {{ $t('bookingModal.needsConfirmation') }}
                 </p>
               </div>
             </div>
             <div class="flex items-center justify-between text-sm">
-              <span class="font-light text-bone-dim">Total</span>
+              <span class="font-light text-bone-dim">{{ $t('bookingModal.total') }}</span>
               <span class="font-display text-2xl text-bone">{{ currency.format(created.totalPrice) }}</span>
             </div>
             <RouterLink
@@ -159,34 +160,34 @@ async function submit() {
               class="mt-2 text-center rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors"
               @click="emit('close')"
             >
-              View my bookings
+              {{ $t('bookingModal.viewBookings') }}
             </RouterLink>
           </div>
 
           <form v-else class="flex flex-col gap-4" @submit.prevent="submit">
             <div class="grid grid-cols-2 gap-3">
               <label class="flex flex-col gap-1">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check in</span>
-                <DatePicker v-model="checkIn" :min="addDaysIso(todayIso(), 1)" aria-label="Check in" />
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('search.checkInLabel') }}</span>
+                <DatePicker v-model="checkIn" :min="addDaysIso(todayIso(), 1)" :aria-label="$t('search.checkInLabel')" />
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Check out</span>
-                <DatePicker v-model="checkOut" :min="addDaysIso(checkIn, 1)" aria-label="Check out" />
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('search.checkOutLabel') }}</span>
+                <DatePicker v-model="checkOut" :min="addDaysIso(checkIn, 1)" :aria-label="$t('search.checkOutLabel')" />
               </label>
             </div>
             <p v-if="dateError" class="text-xs text-rose-300 -mt-2">{{ dateError }}</p>
 
             <div class="flex items-center justify-between gap-3">
               <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">
-                Guests (sleeps {{ room.capacity }})
+                {{ $t('bookingModal.guestsSleeps', { capacity: room.capacity }) }}
               </span>
-              <NumberStepper v-model="guestCount" :min="1" :max="room.capacity" aria-label="Guests" />
+              <NumberStepper v-model="guestCount" :min="1" :max="room.capacity" :aria-label="$t('bookingModal.guests')" />
             </div>
             <span v-if="capacityError" class="text-xs text-rose-300 -mt-2">{{ capacityError }}</span>
 
             <label class="flex flex-col gap-1">
               <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">
-                Anything we should know? <span class="normal-case tracking-normal">(optional)</span>
+                {{ $t('bookingModal.specialRequest') }} <span class="normal-case tracking-normal">{{ $t('bookingModal.optional') }}</span>
               </span>
               <textarea
                 v-model="specialRequest"
@@ -200,7 +201,7 @@ async function submit() {
               aria-live="polite"
             >
               <span class="text-sm font-light text-bone-dim">
-                {{ nights }} {{ nights === 1 ? 'night' : 'nights' }} ×
+                {{ $t('bookingModal.nights', { n: nights }, nights) }} ×
                 {{ currency.format(room.pricePerNight) }}
               </span>
               <span class="text-right">
@@ -219,7 +220,7 @@ async function submit() {
               class="flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-3 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Loader2 v-if="busy" class="w-4 h-4 animate-spin" aria-hidden="true" />
-              Reserve
+              {{ $t('bookingModal.reserve') }}
             </button>
           </form>
         </div>

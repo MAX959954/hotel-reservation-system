@@ -33,9 +33,15 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
+        // No token at all means the caller never signed in; "session expired" would be
+        // misleading there. Any token that reached this point was rejected by JwtAuthFilter.
+        String message = request.getHeader("Authorization") == null
+                ? "Please sign in to continue."
+                : "Your session has expired. Please sign in again.";
+
         ApiError error = ApiError.builder()
                 .status(HttpStatus.UNAUTHORIZED.value())
-                .message("Your session has expired. Please sign in again.")
+                .message(message)
                 .timestamp(LocalDateTime.now())
                 .errors(null)
                 .build();

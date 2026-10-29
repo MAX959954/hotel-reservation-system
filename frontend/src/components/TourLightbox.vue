@@ -76,7 +76,7 @@ const progressKey = computed(() => `${index.value}-${props.open}`)
         class="fixed inset-0 z-50 bg-ink/95 backdrop-blur-md flex items-center justify-center"
         role="dialog"
         aria-modal="true"
-        aria-label="Take the tour"
+        :aria-label="$t('tour.title')"
         @click.self="emit('close')"
       >
         <!-- Progress bars: one per slide, filling left-to-right in sync with autoplay —
@@ -100,14 +100,14 @@ const progressKey = computed(() => `${index.value}-${props.open}`)
         <button
           type="button"
           class="absolute top-4 right-4 md:top-6 md:right-6 z-10 text-bone-dim hover:text-bone transition-colors"
-          aria-label="Close tour"
+          :aria-label="$t('tourLightbox.close')"
           @click="emit('close')"
         >
           <X class="w-6 h-6" aria-hidden="true" />
         </button>
 
         <div class="absolute top-4 left-4 md:top-6 md:left-6 z-10">
-          <p class="font-display text-lg text-bone">Take the tour</p>
+          <p class="font-display text-lg text-bone">{{ $t('tour.title') }}</p>
           <p class="text-xs font-light text-bone-dim">{{ index + 1 }} / {{ total }}</p>
         </div>
 
@@ -126,7 +126,7 @@ const progressKey = computed(() => `${index.value}-${props.open}`)
         <button
           type="button"
           class="absolute left-3 md:left-6 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-bone/10 hover:bg-bone/20 backdrop-blur-md border border-hairline flex items-center justify-center transition-colors"
-          aria-label="Previous"
+          :aria-label="$t('common.previous')"
           @click="prev"
         >
           <ChevronLeft class="w-5 h-5 text-bone" aria-hidden="true" />
@@ -134,14 +134,14 @@ const progressKey = computed(() => `${index.value}-${props.open}`)
         <button
           type="button"
           class="absolute right-3 md:right-6 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-bone/10 hover:bg-bone/20 backdrop-blur-md border border-hairline flex items-center justify-center transition-colors"
-          aria-label="Next"
+          :aria-label="$t('common.next')"
           @click="next"
         >
           <ChevronRight class="w-5 h-5 text-bone" aria-hidden="true" />
         </button>
 
         <p class="absolute bottom-6 md:bottom-10 inset-x-0 text-center text-sm font-light text-bone-dim px-6">
-          Independently run hotels and apartments across 10 cities.
+          {{ $t('tourLightbox.caption') }}
         </p>
       </div>
     </Transition>

@@ -17,12 +17,13 @@ const auth = useAuthStore()
 
 const modal = useSettingsModalStore()
 const currency = useCurrencyStore()
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
+// label is an i18n key, resolved in the template so it follows a language switch.
 const SECTIONS: { id: SettingsTab; label: string; icon: typeof CircleUser }[] = [
-  { id: 'personal', label: 'Personal info', icon: CircleUser },
-  { id: 'security', label: 'Login & security', icon: ShieldCheck },
-  { id: 'currency', label: 'Languages & currency', icon: Coins },
+  { id: 'personal', label: 'settings.tabPersonal', icon: CircleUser },
+  { id: 'security', label: 'settings.tabSecurity', icon: ShieldCheck },
+  { id: 'currency', label: 'settings.tabCurrency', icon: Coins },
 ]
 
 const profile = ref<UserProfileResponse | null>(null)
@@ -73,7 +74,7 @@ watch(
         phone.value = profile.value.phone ?? ''
         auth.setAvatar(profile.value.avatarUrl)
       } catch (e) {
-        error.value = apiErrorMessage(e, 'Could not load your account.')
+        error.value = apiErrorMessage(e, t('settings.loadError'))
       } finally {
         loading.value = false
       }
@@ -93,7 +94,7 @@ async function saveProfile() {
     })
     saved.value = true
   } catch (e) {
-    error.value = apiErrorMessage(e, 'Could not save your changes.')
+    error.value = apiErrorMessage(e, t('settings.saveError'))
   } finally {
     saving.value = false
   }
@@ -112,7 +113,7 @@ async function onAvatarChange(event: Event) {
     profile.value = await accountApi.uploadAvatar(file)
     auth.setAvatar(profile.value.avatarUrl)
   } catch (e) {
-    avatarError.value = apiErrorMessage(e, 'Could not upload that image.')
+    avatarError.value = apiErrorMessage(e, t('settings.uploadError'))
   } finally {
     avatarUploading.value = false
     ;(event.target as HTMLInputElement).value = ''
@@ -131,7 +132,7 @@ async function savePassword() {
     confirmNewPassword.value = ''
     passwordSaved.value = true
   } catch (e) {
-    passwordError.value = apiErrorMessage(e, 'Could not update your password.')
+    passwordError.value = apiErrorMessage(e, t('settings.passwordError'))
   } finally {
     passwordSaving.value = false
   }
@@ -151,7 +152,7 @@ function memberSince(iso: string | undefined): string {
 }
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return 'Not on file'
+  if (!iso) return t('settings.notOnFile')
   return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso))
 }
 </script>
@@ -178,7 +179,7 @@ function formatDate(iso: string | null | undefined): string {
         >
           <!-- Sidebar -->
           <div class="md:w-52 shrink-0 border-b md:border-b-0 md:border-r border-hairline p-4 md:p-5">
-            <h2 id="settings-modal-title" class="font-display text-xl text-bone px-2 mb-3">Settings</h2>
+            <h2 id="settings-modal-title" class="font-display text-xl text-bone px-2 mb-3">{{ $t('settings.title') }}</h2>
             <nav class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible" role="tablist">
               <button
                 v-for="s in SECTIONS"
@@ -191,7 +192,7 @@ function formatDate(iso: string | null | undefined): string {
                 @click="modal.tab = s.id"
               >
                 <component :is="s.icon" class="w-4 h-4" aria-hidden="true" />
-                {{ s.label }}
+                {{ $t(s.label) }}
               </button>
             </nav>
           </div>
@@ -201,7 +202,7 @@ function formatDate(iso: string | null | undefined): string {
             <button
               type="button"
               class="float-right text-bone-dim hover:text-bone transition-colors"
-              aria-label="Close"
+              :aria-label="$t('common.close')"
               @click="modal.close()"
             >
               <X class="w-5 h-5" />
@@ -209,7 +210,7 @@ function formatDate(iso: string | null | undefined): string {
 
             <!-- Personal info -->
             <div v-if="modal.tab === 'personal'" class="flex flex-col gap-4 max-w-sm">
-              <h3 class="font-display text-2xl text-bone mb-1">Personal info</h3>
+              <h3 class="font-display text-2xl text-bone mb-1">{{ $t('settings.tabPersonal') }}</h3>
 
               <div v-if="loading" class="flex flex-col gap-3">
                 <div class="h-4 w-2/3 rounded animate-pulse bg-bone/5" />
@@ -221,7 +222,7 @@ function formatDate(iso: string | null | undefined): string {
                   <button
                     type="button"
                     class="relative w-16 h-16 rounded-full shrink-0 group"
-                    aria-label="Change profile photo"
+                    :aria-label="$t('settings.changePhotoAria')"
                     @click="pickAvatar"
                   >
                     <img v-if="avatarSrc" :src="avatarSrc" alt="" class="w-16 h-16 rounded-full object-cover" />
@@ -244,9 +245,9 @@ function formatDate(iso: string | null | undefined): string {
                       class="text-sm text-champagne hover:text-champagne-bright transition-colors w-fit"
                       @click="pickAvatar"
                     >
-                      Change photo
+                      {{ $t('settings.changePhoto') }}
                     </button>
-                    <span class="text-[11px] font-light text-bone-dim">JPEG, PNG or WebP, up to 5 MB.</span>
+                    <span class="text-[11px] font-light text-bone-dim">{{ $t('settings.photoHint') }}</span>
                     <p v-if="avatarError" class="text-xs text-rose-300">{{ avatarError }}</p>
                   </div>
                   <input
@@ -260,7 +261,7 @@ function formatDate(iso: string | null | undefined): string {
 
                 <div class="grid grid-cols-2 gap-3">
                   <label class="flex flex-col gap-1">
-                    <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">First name</span>
+                    <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.firstName') }}</span>
                     <input
                       v-model="firstName"
                       type="text"
@@ -268,7 +269,7 @@ function formatDate(iso: string | null | undefined): string {
                     />
                   </label>
                   <label class="flex flex-col gap-1">
-                    <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Last name</span>
+                    <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.lastName') }}</span>
                     <input
                       v-model="lastName"
                       type="text"
@@ -278,11 +279,11 @@ function formatDate(iso: string | null | undefined): string {
                 </div>
 
                 <label class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Phone</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.phone') }}</span>
                   <input
                     v-model="phone"
                     type="tel"
-                    placeholder="Not on file"
+                    :placeholder="$t('settings.notOnFile')"
                     class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone placeholder:text-bone-dim/50 font-light py-1 transition-colors"
                   />
                 </label>
@@ -291,20 +292,20 @@ function formatDate(iso: string | null | undefined): string {
                      different security surface, and date of birth was age-verified at
                      registration — editing it here would be a quiet way around that check. -->
                 <div class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Email</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.email') }}</span>
                   <span class="text-sm font-light text-bone-dim">{{ profile.email }}</span>
                 </div>
                 <div class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Date of birth</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('auth.dateOfBirth') }}</span>
                   <span class="text-sm font-light text-bone-dim">{{ formatDate(profile.dateOfBirth) }}</span>
                 </div>
                 <div class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Member since</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.memberSince') }}</span>
                   <span class="text-sm font-light text-bone-dim">{{ memberSince(profile.createdAt) }}</span>
                 </div>
 
                 <p v-if="error" class="text-xs text-rose-300">{{ error }}</p>
-                <p v-else-if="saved" class="text-xs text-champagne">Saved.</p>
+                <p v-else-if="saved" class="text-xs text-champagne">{{ $t('settings.saved') }}</p>
 
                 <button
                   type="button"
@@ -313,14 +314,14 @@ function formatDate(iso: string | null | undefined): string {
                   @click="saveProfile"
                 >
                   <Loader2 v-if="saving" class="w-4 h-4 animate-spin" aria-hidden="true" />
-                  Save changes
+                  {{ $t('settings.saveChanges') }}
                 </button>
               </template>
             </div>
 
             <!-- Login & security -->
             <div v-else-if="modal.tab === 'security'" class="flex flex-col gap-5 max-w-sm">
-              <h3 class="font-display text-2xl text-bone mb-1">Login & security</h3>
+              <h3 class="font-display text-2xl text-bone mb-1">{{ $t('settings.tabSecurity') }}</h3>
 
               <!-- Real password change. currentPassword can be left blank for an account that
                    has never set one (e.g. signed up via Google) — the server skips proving
@@ -328,24 +329,24 @@ function formatDate(iso: string | null | undefined): string {
               <form class="flex flex-col gap-3 p-4 rounded-[1.25rem] bg-bone/5 border border-hairline" @submit.prevent="savePassword">
                 <div class="flex items-center gap-2">
                   <KeyRound class="w-4 h-4 text-champagne shrink-0" aria-hidden="true" />
-                  <p class="text-sm text-bone">Password</p>
+                  <p class="text-sm text-bone">{{ $t('settings.password') }}</p>
                 </div>
                 <p class="text-xs font-light text-bone-dim -mt-1">
-                  A one-time code is also sent to your email on every sign-in, as a second step.
+                  {{ $t('settings.secondStepNote') }}
                 </p>
 
                 <label class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Current password</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.currentPassword') }}</span>
                   <input
                     v-model="currentPassword"
                     type="password"
                     autocomplete="current-password"
-                    placeholder="Leave blank if you've never set one"
+                    :placeholder="$t('settings.currentPasswordPlaceholder')"
                     class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone placeholder:text-bone-dim/50 font-light py-1 transition-colors"
                   />
                 </label>
                 <label class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">New password</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.newPassword') }}</span>
                   <input
                     v-model="newPassword"
                     type="password"
@@ -355,7 +356,7 @@ function formatDate(iso: string | null | undefined): string {
                   />
                 </label>
                 <label class="flex flex-col gap-1">
-                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Confirm new password</span>
+                  <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.confirmNewPassword') }}</span>
                   <input
                     v-model="confirmNewPassword"
                     type="password"
@@ -363,12 +364,12 @@ function formatDate(iso: string | null | undefined): string {
                     class="bg-transparent border-b border-hairline focus:border-champagne outline-none text-sm text-bone font-light py-1 transition-colors"
                   />
                   <span v-if="confirmNewPassword && newPassword !== confirmNewPassword" class="text-xs text-rose-300">
-                    Passwords don't match.
+                    {{ $t('auth.passwordsMismatch') }}
                   </span>
                 </label>
 
                 <p v-if="passwordError" class="text-xs text-rose-300">{{ passwordError }}</p>
-                <p v-else-if="passwordSaved" class="text-xs text-champagne">Password updated.</p>
+                <p v-else-if="passwordSaved" class="text-xs text-champagne">{{ $t('settings.passwordUpdated') }}</p>
 
                 <button
                   type="submit"
@@ -376,7 +377,7 @@ function formatDate(iso: string | null | undefined): string {
                   class="mt-1 flex items-center justify-center gap-2 rounded-full bg-champagne text-ink px-6 py-2.5 text-sm font-medium hover:bg-champagne-bright transition-colors disabled:opacity-40 disabled:cursor-not-allowed w-fit"
                 >
                   <Loader2 v-if="passwordSaving" class="w-4 h-4 animate-spin" aria-hidden="true" />
-                  Update password
+                  {{ $t('settings.updatePassword') }}
                 </button>
               </form>
 
@@ -384,12 +385,12 @@ function formatDate(iso: string | null | undefined): string {
                 <ShieldCheck class="w-4 h-4 text-champagne shrink-0 mt-0.5" aria-hidden="true" />
                 <div>
                   <p class="text-sm text-bone flex items-center gap-2">
-                    Email verification
+                    {{ $t('settings.emailVerification') }}
                     <span
                       class="text-[10px] font-medium uppercase tracking-wide rounded-full px-2 py-0.5"
                       :class="profile.emailVerified ? 'text-champagne border border-champagne-dim' : 'text-bone-dim border border-hairline'"
                     >
-                      {{ profile.emailVerified ? 'Verified' : 'Not verified' }}
+                      {{ profile.emailVerified ? $t('settings.verified') : $t('settings.notVerified') }}
                     </span>
                   </p>
                   <p class="text-xs font-light text-bone-dim mt-1">{{ profile.email }}</p>
@@ -397,20 +398,20 @@ function formatDate(iso: string | null | undefined): string {
               </div>
 
               <p v-if="profile && profile.accountStatus !== 'APPROVED'" class="text-xs text-amber-300/90">
-                Account status: {{ profile.accountStatus }}
+                {{ $t('settings.accountStatus', { status: $t(`accountStatus.${profile.accountStatus}`) }) }}
               </p>
             </div>
 
             <!-- Languages & currency -->
             <div v-else class="flex flex-col gap-4 max-w-sm">
-              <h3 class="font-display text-2xl text-bone mb-1">Languages & currency</h3>
+              <h3 class="font-display text-2xl text-bone mb-1">{{ $t('settings.tabCurrency') }}</h3>
 
               <div class="flex flex-col gap-1">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Language</span>
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.language') }}</span>
                 <p class="text-xs font-light text-bone-dim leading-relaxed mb-1">
-                  Core pages are translated so far — the rest of Folio still reads in English.
+                  {{ $t('settings.serverMessagesNote') }}
                 </p>
-                <ul class="flex flex-col gap-1" role="radiogroup" aria-label="Display language">
+                <ul class="flex flex-col gap-1" role="radiogroup" :aria-label="$t('settings.languageAria')">
                   <li v-for="l in SUPPORTED_LOCALES" :key="l.code">
                     <button
                       type="button"
@@ -428,14 +429,13 @@ function formatDate(iso: string | null | undefined): string {
               </div>
 
               <div class="flex flex-col gap-1 mt-2">
-                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Currency</span>
+                <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('settings.currency') }}</span>
                 <p class="text-xs font-light text-bone-dim leading-relaxed mb-1">
-                  Every price is charged in EUR — choosing another currency adds an estimated
-                  conversion next to the price, using a fixed rate, not a live market rate.
+                  {{ $t('settings.currencyNote') }}
                 </p>
               </div>
 
-              <ul class="flex flex-col gap-1" role="radiogroup" aria-label="Display currency">
+              <ul class="flex flex-col gap-1" role="radiogroup" :aria-label="$t('settings.currencyAria')">
                 <li v-for="c in CURRENCIES" :key="c.code">
                   <button
                     type="button"

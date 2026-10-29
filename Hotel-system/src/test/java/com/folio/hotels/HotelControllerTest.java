@@ -148,4 +148,38 @@ class HotelControllerTest {
         mockMvc.perform(delete("/api/hotels/{id}", 1L))
                 .andExpect(status().isBadRequest());
     }
+
+    // Malformed requests are rejected by Spring MVC before the controller runs; these
+    // used to come back as 500 from the generic handler.
+
+    @Test
+    void getById_returns400_whenIdNotNumeric() throws Exception {
+        mockMvc.perform(get("/api/hotels/{id}", "search"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'id'"));
+    }
+
+    @Test
+    void create_returns400_whenBodyIsMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/hotels")
+                        .contentType("application/json")
+                        .content("{\"name\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed request body"));
+    }
+
+    @Test
+    void create_returns415_whenContentTypeNotJson() throws Exception {
+        mockMvc.perform(post("/api/hotels")
+                        .contentType("text/plain")
+                        .content("Grand Hotel"))
+                .andExpect(status().isUnsupportedMediaType());
+    }
+
+    @Test
+    void updateStatus_returns400_whenStatusParameterMissing() throws Exception {
+        mockMvc.perform(patch("/api/hotels/{id}/status", 1L))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Missing parameter 'status'"));
+    }
 }

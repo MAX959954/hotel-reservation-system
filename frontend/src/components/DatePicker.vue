@@ -15,7 +15,7 @@ const props = withDefaults(
      *  a real navigation option. Omit it for near-future pickers (search, booking dates). */
     yearRange?: [number, number]
   }>(),
-  { min: undefined, max: undefined, placeholder: 'Select date', ariaLabel: 'Date', yearRange: undefined },
+  { min: undefined, max: undefined, placeholder: undefined, ariaLabel: undefined, yearRange: undefined },
 )
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
 
@@ -153,7 +153,7 @@ function isToday(cell: DayCell) {
   return cell.iso === todayIsoValue
 }
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 // 4 Jan 2026 was a Sunday, matching the grid's Sunday-first weeks.
 const WEEKDAYS = computed(() => {
   const fmt = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
@@ -167,7 +167,7 @@ const monthHeader = computed(() =>
   new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(new Date(viewYear.value, viewMonth.value, 1)),
 )
 const displayLabel = computed(() => {
-  if (!selected.value) return props.placeholder
+  if (!selected.value) return props.placeholder ?? t('common.selectDate')
   return new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short', year: 'numeric' }).format(selected.value)
 })
 
@@ -194,7 +194,7 @@ onUnmounted(() => {
     <button
       type="button"
       class="flex items-center gap-2 w-full text-left"
-      :aria-label="ariaLabel"
+      :aria-label="ariaLabel ?? $t('common.date')"
       aria-haspopup="true"
       :aria-expanded="open"
       @click="toggle"
@@ -220,7 +220,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="w-7 h-7 rounded-full flex items-center justify-center text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors shrink-0"
-            aria-label="Previous month"
+            :aria-label="$t('common.previousMonth')"
             @click="prevMonth"
           >
             <ChevronLeft class="w-4 h-4" aria-hidden="true" />
@@ -247,7 +247,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="w-7 h-7 rounded-full flex items-center justify-center text-bone-dim hover:text-bone hover:bg-bone/5 transition-colors shrink-0"
-            aria-label="Next month"
+            :aria-label="$t('common.nextMonth')"
             @click="nextMonth"
           >
             <ChevronRight class="w-4 h-4" aria-hidden="true" />

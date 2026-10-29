@@ -30,11 +30,26 @@ function loadLocale(): LocaleCode {
   return SUPPORTED_LOCALES.some((l) => l.code === browserLang) ? (browserLang as LocaleCode) : 'en'
 }
 
+// Slovak and Russian have three plural forms ("1 noc / 2 noci / 5 nocí"), which
+// vue-i18n's default two-form rule can't express. The other locales use the default.
+function slovakPlural(choice: number): number {
+  if (choice === 1) return 0
+  return choice >= 2 && choice <= 4 ? 1 : 2
+}
+
+function russianPlural(choice: number): number {
+  const mod10 = choice % 10
+  const mod100 = choice % 100
+  if (mod10 === 1 && mod100 !== 11) return 0
+  return mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 1 : 2
+}
+
 export const i18n = createI18n({
   legacy: false,
   locale: loadLocale(),
   fallbackLocale: 'en',
   messages: { en, sk, ru, es, fr, it, ja },
+  pluralRules: { sk: slovakPlural, ru: russianPlural },
 })
 
 export function setLocale(code: LocaleCode) {

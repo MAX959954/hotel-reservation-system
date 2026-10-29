@@ -5,12 +5,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
@@ -79,11 +84,12 @@ public class GlobalExceptionHandler {
     }
 
     // Thrown by Spring itself before the controller runs, when a multipart upload exceeds
-    // spring.servlet.multipart.max-file-size — without this it falls through to the
-    // generic 500 handler below instead of a message the client can actually show.
+    // spring.servlet.multipart.max-file-size (10 MB, shared by every upload) — without this
+    // it falls through to the generic 500 handler below. The tighter per-type limits
+    // (avatars 5 MB) are checked later by the storage services with their own message.
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
-        return build(HttpStatus.BAD_REQUEST, "Image must be 5 MB or smaller.", null);
+        return build(HttpStatus.BAD_REQUEST, "File must be 10 MB or smaller.", null);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
@@ -91,10 +97,39 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.METHOD_NOT_ALLOWED , ex.getMessage() , null);
     }
 
+    // The client errors below are raised by Spring MVC before the controller runs. Without
+    // these handlers they all reached handleGeneric and came back as 500, e.g. a
+    // non-numeric id in /api/hotels/{id} or a malformed JSON body.
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return build(HttpStatus.BAD_REQUEST , "Invalid value for parameter '" + ex.getName() + "'" , null);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex) {
+        return build(HttpStatus.BAD_REQUEST , "Missing parameter '" + ex.getParameterName() + "'" , null);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiError> handleMissingPart(MissingServletRequestPartException ex) {
+        return build(HttpStatus.BAD_REQUEST , "Missing file '" + ex.getRequestPartName() + "'" , null);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return build(HttpStatus.BAD_REQUEST , "Malformed request body" , null);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiError> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE , "Unsupported content type" , null);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR , "An unexpected error occured" , null);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR , "An unexpected error occurred" , null);
     }
 
     private ResponseEntity<ApiError> build(HttpStatus status , String message , List<String> errors){

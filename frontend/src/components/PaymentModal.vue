@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
                 v-if="step === 'card'"
                 type="button"
                 class="text-bone-dim hover:text-bone transition-colors"
-                aria-label="Back"
+                :aria-label="$t('common.back')"
                 @click="backToMethod"
               >
                 <ArrowLeft class="w-4 h-4" aria-hidden="true" />
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
                 <template v-else>{{ $t('payment.payFor', { hotel: booking.hotelName }) }}</template>
               </h2>
             </div>
-            <button type="button" class="text-bone-dim hover:text-bone transition-colors" aria-label="Close" @click="emit('close')">
+            <button type="button" class="text-bone-dim hover:text-bone transition-colors" :aria-label="$t('common.close')" @click="emit('close')">
               <X class="w-5 h-5" aria-hidden="true" />
             </button>
           </div>

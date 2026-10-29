@@ -10,7 +10,7 @@ const tourOpen = ref(false)
   <button
     type="button"
     class="absolute bottom-0 right-0 p-3 pt-5 pl-8 sm:p-4 sm:pt-6 sm:pl-10 md:p-6 md:pt-8 md:pl-14 bg-ink rounded-tl-[1.5rem] sm:rounded-tl-[2rem] md:rounded-tl-[3.5rem] flex items-center gap-3 sm:gap-4 md:gap-6 text-left group"
-    aria-label="Take the tour — 2 minute film"
+    :aria-label="`${$t('tour.title')} (${$t('tour.duration')})`"
     @click="tourOpen = true"
   >
     <!-- Inverse-radius masks: they paint page-background into the two outer corners so the

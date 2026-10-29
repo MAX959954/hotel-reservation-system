@@ -68,34 +68,34 @@ watch(
         >
           <div class="flex items-start justify-between gap-4 mb-6">
             <div class="flex items-center gap-2">
-              <h2 id="roles-modal-title" class="font-display text-2xl text-bone">Your roles</h2>
+              <h2 id="roles-modal-title" class="font-display text-2xl text-bone">{{ $t('roles.title') }}</h2>
               <Loader2 v-if="refreshing" class="w-4 h-4 text-bone-dim animate-spin" aria-hidden="true" />
             </div>
-            <button type="button" class="text-bone-dim hover:text-bone transition-colors" aria-label="Close" @click="emit('close')">
+            <button type="button" class="text-bone-dim hover:text-bone transition-colors" :aria-label="$t('common.close')" @click="emit('close')">
               <X class="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
 
           <div class="flex flex-col gap-1 mb-6">
-            <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Account</span>
+            <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('roles.account') }}</span>
             <p class="text-sm font-light text-bone">{{ auth.email }}</p>
-            <p v-if="canSeeUserId" class="text-xs font-light text-bone-dim">User ID {{ auth.userId }}</p>
+            <p v-if="canSeeUserId" class="text-xs font-light text-bone-dim">{{ $t('roles.userId', { id: auth.userId }) }}</p>
             <div class="flex flex-wrap gap-2 mt-2">
               <span
                 v-for="role in auth.roles"
                 :key="role"
                 class="px-2.5 py-1 rounded-full text-[11px] font-medium text-champagne bg-champagne/10 border border-champagne/25"
               >
-                {{ role }}
+                {{ $t(`role.${role}`) }}
               </span>
             </div>
           </div>
 
           <div class="flex flex-col gap-1">
-            <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">Company roles</span>
+            <span class="text-[11px] uppercase tracking-[0.12em] text-bone-dim">{{ $t('roles.companyRoles') }}</span>
 
             <p v-if="!company.memberships.length" class="text-sm font-light text-bone-dim mt-2">
-              Not staff on any property yet.
+              {{ $t('roles.noCompanyRoles') }}
             </p>
 
             <ul v-else class="flex flex-col gap-2 mt-2">
@@ -106,15 +106,15 @@ watch(
               >
                 <div class="min-w-0">
                   <p class="text-sm text-bone truncate">{{ member.companyName }}</p>
-                  <p class="text-xs font-light text-bone-dim">Company ID {{ member.companyId }}</p>
+                  <p class="text-xs font-light text-bone-dim">{{ $t('roles.companyId', { id: member.companyId }) }}</p>
                 </div>
                 <div class="flex flex-col items-end gap-1 shrink-0">
-                  <span class="text-xs font-light text-bone-dim">{{ member.companyRole }}</span>
+                  <span class="text-xs font-light text-bone-dim">{{ $t(`companyRole.${member.companyRole}`) }}</span>
                   <span
                     class="px-2 py-0.5 rounded-full text-[10px] font-medium border"
                     :class="STATUS_CLASSES[member.status]"
                   >
-                    {{ member.status }}
+                    {{ $t(`companyUserStatus.${member.status}`) }}
                   </span>
                 </div>
               </li>

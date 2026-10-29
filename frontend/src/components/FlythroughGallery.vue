@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowUpRight, Star } from 'lucide-vue-next'
 import { hotelsApi } from '@/api/hotels'
 import { apiErrorMessage } from '@/api/http'
@@ -11,6 +12,7 @@ import { gsap, ScrollTrigger, prefersReducedMotion, scrollToY } from '@/lib/moti
 import type { HotelResponse } from '@/types/hotel'
 
 const router = useRouter()
+const { t } = useI18n()
 const hotelsStore = useHotelsStore()
 
 const MAX_CARDS = 6
@@ -70,7 +72,7 @@ async function load() {
     const results = await hotelsApi.getByRating(5)
     stays.value = results.slice(0, MAX_CARDS)
   } catch (e) {
-    loadError.value = apiErrorMessage(e, 'Could not load featured stays.')
+    loadError.value = apiErrorMessage(e, t('gallery.loadError'))
     stays.value = []
   } finally {
     loading.value = false
@@ -294,13 +296,13 @@ function step(delta: number) {
   <!-- Grid path: reduced motion, or too few stays to make a stream. Every card is an
        ordinary link, so the same destination is reachable with no motion at all. -->
   <section v-if="useGrid" class="bg-ink py-24 px-6">
-    <h2 class="font-display text-4xl md:text-6xl text-bone text-center mb-4">Five-star stays</h2>
+    <h2 class="font-display text-4xl md:text-6xl text-bone text-center mb-4">{{ $t('gallery.title') }}</h2>
 
     <p v-if="loadError" class="text-sm font-light text-bone-dim text-center mb-10">
       {{ loadError }}
     </p>
     <p v-else-if="!stays.length" class="text-sm font-light text-bone-dim text-center mb-10">
-      No featured stays on the register just now.
+      {{ $t('gallery.empty') }}
     </p>
 
     <div v-if="stays.length" class="max-w-6xl mx-auto grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -326,7 +328,7 @@ function step(delta: number) {
           <span
             class="mt-3 inline-flex items-center gap-1 bg-champagne text-ink rounded-full px-3 py-1.5 text-xs font-medium"
           >
-            View stay
+            {{ $t('gallery.viewStay') }}
             <ArrowUpRight class="w-3.5 h-3.5" aria-hidden="true" />
           </span>
         </div>
@@ -342,14 +344,14 @@ function step(delta: number) {
       <h2
         class="absolute font-display text-[13vw] leading-none text-bone/8 select-none pointer-events-none z-0"
       >
-        STAYS
+        {{ $t('nav.stays').toUpperCase() }}
       </h2>
 
       <p class="sr-only" aria-live="polite">
         <template v-if="activeStay">{{ activeStay.name }}, {{ activeStay.city }}</template>
       </p>
 
-      <div v-if="loading" class="sr-only">Loading featured stays…</div>
+      <div v-if="loading" class="sr-only">{{ $t('gallery.loading') }}</div>
 
       <div role="list" class="contents">
         <article
@@ -400,7 +402,7 @@ function step(delta: number) {
               v-if="activeIndex === i"
               class="mt-3 inline-flex items-center gap-1 bg-champagne text-ink rounded-full px-3 py-1.5 text-xs font-medium"
             >
-              {{ armed ? 'Tap again to open' : 'View stay' }}
+              {{ armed ? $t('gallery.tapToOpen') : $t('gallery.viewStay') }}
               <ArrowUpRight class="w-3.5 h-3.5" aria-hidden="true" />
             </span>
           </div>

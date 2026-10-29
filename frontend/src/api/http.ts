@@ -86,12 +86,12 @@ http.interceptors.response.use(
  * generic "Something went wrong" would be throwing away the only text that tells
  * the user what to actually do.
  */
-export function apiErrorMessage(error: unknown, fallback = 'Something went wrong. Try again.'): string {
+export function apiErrorMessage(error: unknown, fallback = i18n.global.t('common.genericError')): string {
   if (axios.isAxiosError(error)) {
     const body = error.response?.data as ApiError | undefined
     if (body?.errors?.length) return body.errors.join(' ')
     if (body?.message) return body.message
-    if (!error.response) return 'Cannot reach the server. Is the backend running?'
+    if (!error.response) return i18n.global.t('common.networkError')
   }
   return fallback
 }

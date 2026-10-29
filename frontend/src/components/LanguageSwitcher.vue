@@ -46,7 +46,7 @@ onUnmounted(() => {
       class="flex items-center gap-1.5 rounded-full border border-hairline px-3 py-1.5 md:py-2 text-xs md:text-sm font-light text-bone-dim hover:text-bone hover:border-champagne-dim transition-colors"
       aria-haspopup="true"
       :aria-expanded="open"
-      aria-label="Change language"
+      :aria-label="$t('common.changeLanguage')"
       @click="toggle"
     >
       <Globe class="w-3.5 h-3.5 text-champagne" aria-hidden="true" />

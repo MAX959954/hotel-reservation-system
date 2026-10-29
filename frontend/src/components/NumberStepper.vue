@@ -26,7 +26,7 @@ function inc() {
       type="button"
       :disabled="modelValue <= min"
       class="w-6 h-6 shrink-0 rounded-full border border-hairline flex items-center justify-center text-bone-dim hover:text-bone hover:border-champagne-dim transition-colors disabled:opacity-30 disabled:pointer-events-none"
-      aria-label="Decrease"
+      :aria-label="$t('common.decrease')"
       @click="dec"
     >
       <Minus class="w-3 h-3" aria-hidden="true" />
@@ -36,7 +36,7 @@ function inc() {
       type="button"
       :disabled="max != null && modelValue >= max"
       class="w-6 h-6 shrink-0 rounded-full border border-hairline flex items-center justify-center text-bone-dim hover:text-bone hover:border-champagne-dim transition-colors disabled:opacity-30 disabled:pointer-events-none"
-      aria-label="Increase"
+      :aria-label="$t('common.increase')"
       @click="inc"
     >
       <Plus class="w-3 h-3" aria-hidden="true" />
