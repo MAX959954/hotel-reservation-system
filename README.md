@@ -10,9 +10,11 @@ bachelor's thesis.**
 |---|---|
 | **Thesis** | *Development of a Web Application for Hotel Reservation Management* |
 | **Author** | Maksym Veselov |
-| **Supervisor** | Mgr. Dominik Halvoník |
+| **Supervisor** | Mgr. Dominik Halvoník, PhD. |
+| **University** | Univerzita Konštantína Filozofa v Nitre |
 | **Faculty** | Fakulta prírodných vied a informatiky |
 | **Year** | 2026 |
+| **Live demo** | https://hotel-reservation-system-tau-ivory.vercel.app |
 
 Folio works like a small Booking.com: many independent hotel companies list their
 properties in one shared catalogue, guests search and book across all of them, and each
@@ -638,6 +640,21 @@ Production runs the same Docker images with the `prod` profile behind **Caddy**
 from GitHub Actions, or on **your own PC** published through **Tailscale Funnel**
 (`scripts\public-start.ps1`). Step-by-step guide for both:
 **[deploy/README.md](deploy/README.md)**.
+
+The live demo (https://hotel-reservation-system-tau-ivory.vercel.app) is hosted on managed
+services instead, so no server has to be looked after:
+
+| Part | Service |
+|---|---|
+| Frontend (Vue build) | Vercel, built from this repository (`frontend/vercel.json`) |
+| Backend (Spring Boot, `prod` profile) | Google Cloud Run, region `europe-west1`, built from source by Cloud Build |
+| PostgreSQL | Neon, AWS `eu-central-1` (Frankfurt), `sslmode=require` |
+| Redis | Upstash, TLS |
+
+On start-up Flyway applies the migrations and the demo catalogue (`db/migration`,
+`db/seed`); the test accounts from `db/seed-accounts` are not loaded. The frontend gets
+the API address from `VITE_API_BASE_URL` at build time, and the backend allows the Vercel
+address through `CORS_ALLOWED_ORIGINS`.
 
 In production there are no test accounts, e-mail goes through real SMTP (e.g. Gmail), and
 `ProductionSafetyCheck` stops the app at startup if it finds a development setting (dev
