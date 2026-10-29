@@ -22,8 +22,8 @@ company runs its own hotels, bookings and staff through a separate extranet.
 
 **Goal of the work:** a complete, realistic system rather than a prototype. That means
 real sign-in with e-mail verification, a booking lifecycle with rules and automatic
-clean-up, card payments through Stripe with refunds, permissions per company, 425
-automated backend tests (296 unit, 85 web-layer component and 44 integration tests),
+clean-up, card payments through Stripe with refunds, permissions per company, 429
+automated backend tests (296 unit, 89 web-layer component and 44 integration tests),
 and a production deployment.
 
 **Stack:** Spring Boot 3 (Java 17) · PostgreSQL 16 · Redis 7 · Vue 3 + TypeScript + Vite ·
@@ -77,7 +77,7 @@ production compose files.
 **Under the hood**
 - sign-in with password plus an e-mail code, or Google; JWT with rotating refresh tokens
 - scheduled jobs cancel unconfirmed or unpaid bookings and expire abandoned payments
-- 425 automated backend tests (296 unit, 85 web-layer component and 44 integration tests against a real PostgreSQL and Redis), run by CI on every push
+- 429 automated backend tests (296 unit, 89 web-layer component and 44 integration tests against a real PostgreSQL and Redis), run by CI on every push
 - interactive API documentation (Swagger UI)
 
 **A quick look** (more in [Screenshots](#5-screenshots)):
@@ -592,13 +592,13 @@ any future expiry date and any CVC. `.env` files are git-ignored.
 
 ### Tests
 
-The backend has **425 automated tests** in 30 test classes (JUnit 5, Mockito, Spring Boot
+The backend has **429 automated tests** in 30 test classes (JUnit 5, Mockito, Spring Boot
 Test, Testcontainers), split by test level as in Table 5 of the thesis:
 
 | Level | Classes | Tests | What they check |
 |---|---|---|---|
 | Unit tests (Mockito, no Spring context) | 15 | 296 | one class with mocked dependencies: services, scheduled jobs, JWT service and filter, per-company permissions (`CompanyAuthorization`), error handler; e.g. prices, state transitions, refunds, sign-in limits |
-| Component tests of the web layer (`@WebMvcTest`) | 8 | 85 | one controller with mocked services: status codes, request validation, JSON responses and error format |
+| Component tests of the web layer (`@WebMvcTest`) | 8 | 89 | one controller with mocked services: status codes, request validation, malformed requests (bad id, broken JSON, wrong content type), JSON responses and error format |
 | Integration tests, real **PostgreSQL 16** | 5 | 31 | the full application against a throwaway database started by **Testcontainers** with the real Flyway migrations: overlap checks, reviews, company memberships, endpoint security for every role |
 | Integration tests, real **Redis** | 2 | 13 | refresh-token rotation and the token blacklist |
 
@@ -700,6 +700,12 @@ apart, 5 per hour). 5 wrong passwords lock the account for 15 minutes.
   refunds carry an idempotency key, but two runs at the same moment are not guarded
   (bookings have no optimistic locking). Scaling out would call for a lock such as
   ShedLock and a `@Version` column on bookings.
+- **Server texts are in English.** The interface is translated into all seven languages,
+  but messages the server writes (error details, e-mails) are English only.
+- **Sign-up reveals registered addresses.** Sign-in answers the same way for a wrong
+  password, an unknown address and a locked account, but `POST /api/auth/otp/request`
+  (the first sign-up step) says when an address already has an account, and that step
+  has no attempt limit.
 - **Reviews have no screen yet.** Submitting and moderating reviews works through the API
   (Swagger) only.
 - **No general-purpose rate limiting.** Login and sign-in codes are throttled, but the
